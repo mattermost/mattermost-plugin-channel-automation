@@ -17,7 +17,9 @@ import (
 //
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
-type configuration struct{}
+type configuration struct {
+	MaxConcurrentFlows int `json:"max_concurrent_flows"`
+}
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if
 // your configuration has reference types.

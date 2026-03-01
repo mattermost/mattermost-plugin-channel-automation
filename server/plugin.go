@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"sync"
@@ -19,6 +17,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
 
 // Plugin implements the interface expected by the Mattermost server to communicate between the server and plugin processes.
@@ -34,7 +33,8 @@ type Plugin struct {
 	// router is the HTTP router for handling API requests.
 	router *mux.Router
 
-	backgroundJob *cluster.Job
+	workQueueStore *workqueue.Store
+	workerPool     *workqueue.WorkerPool
 
 	botUserID      string
 	registry       *flow.Registry
@@ -77,15 +77,37 @@ func (p *Plugin) OnActivate() error {
 	p.triggerService = flow.NewTriggerService(p.flowStore, p.registry)
 	p.flowExecutor = flow.NewFlowExecutor(p.registry)
 
+	p.router = p.initRouter()
+
+	// Set up persistent work queue.
+	indexMu, err := cluster.NewMutex(p.API, "wq_index_mutex")
+	if err != nil {
+		return fmt.Errorf("failed to create work queue mutex: %w", err)
+	}
+	p.workQueueStore = workqueue.NewStore(p.API, indexMu)
+
+	resetCount, err := p.workQueueStore.ResetRunningToPending()
+	if err != nil {
+		p.API.LogError("Failed to reset running work items", "err", err.Error())
+	} else if resetCount > 0 {
+		p.API.LogInfo("Reset orphaned work items to pending", "count", resetCount)
+	}
+
+	maxWorkers := p.getConfiguration().MaxConcurrentFlows
+	if maxWorkers <= 0 {
+		maxWorkers = 4
+	}
+
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.API, maxWorkers)
+	p.workerPool.Start()
+
 	return nil
 }
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
-	if p.backgroundJob != nil {
-		if err := p.backgroundJob.Close(); err != nil {
-			p.API.LogError("Failed to close background job", "err", err)
-		}
+	if p.workerPool != nil {
+		p.workerPool.Stop()
 	}
 	return nil
 }
@@ -100,7 +122,7 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *mmmodel.CommandArgs) (*
 }
 
 // MessageHasBeenPosted is invoked after a message is posted. It finds matching
-// flows and claims execution using an atomic KV key for HA deduplication.
+// flows and enqueues work items for asynchronous execution.
 func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	// Ignore system messages, bot posts, and webhook posts to prevent
 	// loops and unintended flow triggers.
@@ -131,26 +153,34 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 		return
 	}
 
+	// Build trigger data once before the loop.
+	channel, appErr := p.API.GetChannel(post.ChannelId)
+	if appErr != nil {
+		p.API.LogError("Failed to get channel for trigger", "channel_id", post.ChannelId, "err", appErr.Error())
+		return
+	}
+	user, appErr := p.API.GetUser(post.UserId)
+	if appErr != nil {
+		p.API.LogError("Failed to get user for trigger", "user_id", post.UserId, "err", appErr.Error())
+		return
+	}
+
+	triggerData := model.TriggerData{
+		Post:    model.NewSafePost(post),
+		Channel: model.NewSafeChannel(channel),
+		User:    model.NewSafeUser(user),
+	}
+
 	for _, f := range flows {
-		channel, appErr := p.API.GetChannel(post.ChannelId)
-		if appErr != nil {
-			p.API.LogError("Failed to get channel for trigger", "channel_id", post.ChannelId, "err", appErr.Error())
-			continue
-		}
-		user, appErr := p.API.GetUser(post.UserId)
-		if appErr != nil {
-			p.API.LogError("Failed to get user for trigger", "user_id", post.UserId, "err", appErr.Error())
-			continue
+		item := &model.WorkItem{
+			ID:          mmmodel.NewId(),
+			FlowID:      f.ID,
+			FlowName:    f.Name,
+			TriggerData: triggerData,
 		}
 
-		triggerData := model.TriggerData{
-			Post:    model.NewSafePost(post),
-			Channel: model.NewSafeChannel(channel),
-			User:    model.NewSafeUser(user),
-		}
-
-		if err := p.flowExecutor.Execute(f, triggerData); err != nil {
-			p.API.LogError("Flow execution failed",
+		if err := p.workQueueStore.Enqueue(item); err != nil {
+			p.API.LogError("Failed to enqueue work item",
 				"flow_id", f.ID,
 				"flow_name", f.Name,
 				"post_id", post.Id,
@@ -159,12 +189,15 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 			continue
 		}
 
-		p.API.LogInfo("Flow executed successfully",
+		p.API.LogDebug("Work item enqueued",
+			"work_item_id", item.ID,
 			"flow_id", f.ID,
 			"flow_name", f.Name,
 			"post_id", post.Id,
 		)
 	}
+
+	p.workerPool.Notify()
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

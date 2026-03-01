@@ -1,17 +1,27 @@
-// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
-// See LICENSE.txt for license information.
-
 import manifest from 'manifest';
 import type {Store} from 'redux';
 
 import type {GlobalState} from '@mattermost/types/store';
+
+import HeaderCenter from 'components/header_center';
+import Icon from 'components/icon';
+import MainApp from 'components/main_app';
 
 import type {PluginRegistry} from 'types/mattermost-webapp';
 
 export default class Plugin {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     public async initialize(registry: PluginRegistry, store: Store<GlobalState>) {
-        // @see https://developers.mattermost.com/extend/plugins/webapp/reference/
+        registry.registerProduct(
+            `/plug/${manifest.id}`,
+            Icon,
+            'Channel Automation',
+            `/plug/${manifest.id}`,
+            MainApp,
+            HeaderCenter,
+            undefined,
+            false,
+        );
     }
 }
 

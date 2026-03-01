@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
@@ -11,12 +12,13 @@ import (
 func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
 
-	// Middleware to require that the user is logged in
 	router.Use(p.MattermostAuthorizationRequired)
 
+	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-
-	apiRouter.HandleFunc("/hello", p.HelloWorld).Methods(http.MethodGet)
+	apiRouter.Use(p.SystemAdminRequired)
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.API)
+	flowAPI.RegisterRoutes(apiRouter)
 
 	return router
 }
@@ -25,18 +27,6 @@ func (p *Plugin) initRouter() *mux.Router {
 // The root URL is currently <siteUrl>/plugins/com.mattermost.plugin-starter-template/api/v1/. Replace com.mattermost.plugin-starter-template with the plugin ID.
 func (p *Plugin) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Request) {
 	p.router.ServeHTTP(w, r)
-}
-
-func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("Mattermost-User-ID")
-		if userID == "" {
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (p *Plugin) HelloWorld(w http.ResponseWriter, r *http.Request) {

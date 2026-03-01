@@ -34,9 +34,13 @@ const config = {
         './src/index.tsx',
     ],
     resolve: {
+        alias: {
+            '@': path.resolve(__dirname, 'src'),
+        },
         modules: [
             'src',
             'node_modules',
+            path.resolve(__dirname),
         ],
         extensions: ['*', '.js', '.jsx', '.ts', '.tsx'],
     },
