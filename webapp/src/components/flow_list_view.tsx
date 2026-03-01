@@ -1,12 +1,8 @@
 import {deleteFlow, getFlows, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
+import {useHistory, useRouteMatch} from 'react-router-dom';
 
 import type {Flow} from 'types';
-
-interface Props {
-    onCreateFlow: () => void;
-    onEditFlow: (id: string) => void;
-}
 
 const styles = {
     header: {
@@ -56,7 +52,9 @@ const styles = {
     } as React.CSSProperties,
 };
 
-const FlowListView: React.FC<Props> = ({onCreateFlow, onEditFlow}) => {
+const FlowListView: React.FC = () => {
+    const history = useHistory();
+    const {url} = useRouteMatch();
     const [flows, setFlows] = useState<Flow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -114,7 +112,7 @@ const FlowListView: React.FC<Props> = ({onCreateFlow, onEditFlow}) => {
                 <h2>{'Flows'}</h2>
                 <button
                     style={styles.btnPrimary}
-                    onClick={onCreateFlow}
+                    onClick={() => history.push(`${url}/add`)}
                 >
                     {'Create Flow'}
                 </button>
@@ -138,7 +136,7 @@ const FlowListView: React.FC<Props> = ({onCreateFlow, onEditFlow}) => {
                             <tr
                                 key={flow.id}
                                 style={styles.row}
-                                onClick={() => onEditFlow(flow.id)}
+                                onClick={() => history.push(`${url}/${flow.id}/edit`)}
                             >
                                 <td style={styles.td}>{flow.name}</td>
                                 <td style={styles.td}>{`${flow.trigger.type} on ${flow.trigger.channel_id}`}</td>

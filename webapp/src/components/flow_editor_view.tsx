@@ -1,12 +1,8 @@
 import {createFlow, getAIBots, getFlow, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
+import {useHistory, useParams, useRouteMatch} from 'react-router-dom';
 
 import type {AIBotInfo, Action} from 'types';
-
-interface Props {
-    flowId: string | null;
-    onBack: () => void;
-}
 
 interface ActionForm {
     id: string;
@@ -162,7 +158,14 @@ function actionToForm(a: Action): ActionForm {
     return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, reply_to_post_id: a.reply_to_post_id ?? '', body: a.body, prompt: '', provider_id: ''};
 }
 
-const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
+const FlowEditorView: React.FC = () => {
+    const {id: flowId} = useParams<{id?: string}>();
+    const history = useHistory();
+    const {url} = useRouteMatch();
+
+    // Derive the workflows list URL by stripping the current route suffix
+    const workflowsUrl = url.replace(/\/workflows\/.*$/, '/workflows');
+
     const [name, setName] = useState('');
     const [enabled, setEnabled] = useState(false);
     const [triggerType, setTriggerType] = useState('message_posted');
@@ -270,12 +273,12 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
             } else {
                 await createFlow(data);
             }
-            onBack();
+            history.push(workflowsUrl);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save flow');
             setSaving(false);
         }
-    }, [flowId, name, enabled, triggerType, triggerChannelId, actions, onBack]);
+    }, [flowId, name, enabled, triggerType, triggerChannelId, actions, history, workflowsUrl]);
 
     if (loading) {
         return <p>{'Loading...'}</p>;
@@ -286,7 +289,7 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
             <div style={styles.header}>
                 <button
                     style={styles.btnSecondary}
-                    onClick={onBack}
+                    onClick={() => history.push(workflowsUrl)}
                 >
                     {'\u2190 Back'}
                 </button>
@@ -495,7 +498,7 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                 </button>
                 <button
                     style={styles.btnSecondary}
-                    onClick={onBack}
+                    onClick={() => history.push(workflowsUrl)}
                 >
                     {'Cancel'}
                 </button>

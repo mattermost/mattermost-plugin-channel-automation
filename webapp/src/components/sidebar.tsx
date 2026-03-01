@@ -1,9 +1,11 @@
 import React from 'react';
+import {Link, useRouteMatch} from 'react-router-dom';
 
 interface NavItem {
     id: string;
     label: string;
     icon: React.ReactNode;
+    path: string;
 }
 
 const FlowsIcon = () => (
@@ -22,26 +24,35 @@ const FlowsIcon = () => (
 );
 
 const NAV_ITEMS: NavItem[] = [
-    {id: 'flows', label: 'Flows', icon: <FlowsIcon/>},
+    {id: 'flows', label: 'Flows', icon: <FlowsIcon/>, path: '/workflows'},
 ];
 
 interface SidebarProps {
-    activeItem: string;
-    onItemClick: (id: string) => void;
+    baseUrl: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({activeItem, onItemClick}) => {
+const NavLink: React.FC<{item: NavItem; baseUrl: string}> = ({item, baseUrl}) => {
+    const match = useRouteMatch(`${baseUrl}${item.path}`);
+    return (
+        <Link
+            className={`channel-automation-sidebar__nav-item${match ? ' channel-automation-sidebar__nav-item--active' : ''}`}
+            to={`${baseUrl}${item.path}`}
+        >
+            {item.icon}
+            {item.label}
+        </Link>
+    );
+};
+
+const Sidebar: React.FC<SidebarProps> = ({baseUrl}) => {
     return (
         <nav className='channel-automation-sidebar'>
             {NAV_ITEMS.map((item) => (
-                <button
+                <NavLink
                     key={item.id}
-                    className={`channel-automation-sidebar__nav-item${activeItem === item.id ? ' channel-automation-sidebar__nav-item--active' : ''}`}
-                    onClick={() => onItemClick(item.id)}
-                >
-                    {item.icon}
-                    {item.label}
-                </button>
+                    item={item}
+                    baseUrl={baseUrl}
+                />
             ))}
         </nav>
     );

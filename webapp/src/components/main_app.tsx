@@ -1,12 +1,11 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useEffect} from 'react';
+import {Redirect, Route, Switch, useRouteMatch} from 'react-router-dom';
 
 import FlowEditorView from 'components/flow_editor_view';
 import FlowListView from 'components/flow_list_view';
 import Sidebar from 'components/sidebar';
 
 import './layout.scss';
-
-type View = 'list' | 'editor';
 
 const MainApp: React.FC = () => {
     useEffect(() => {
@@ -16,50 +15,32 @@ const MainApp: React.FC = () => {
             document.body.classList.remove('app__body');
         };
     }, []);
-    const [view, setView] = useState<View>('list');
-    const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
 
-    const handleCreateFlow = useCallback(() => {
-        setEditingFlowId(null);
-        setView('editor');
-    }, []);
-
-    const handleEditFlow = useCallback((id: string) => {
-        setEditingFlowId(id);
-        setView('editor');
-    }, []);
-
-    const handleBack = useCallback(() => {
-        setEditingFlowId(null);
-        setView('list');
-    }, []);
-
-    const handleSidebarItemClick = useCallback((id: string) => {
-        if (id === 'flows') {
-            setEditingFlowId(null);
-            setView('list');
-        }
-    }, []);
+    const {path, url} = useRouteMatch();
 
     return (
         <div className='channel-automation-root'>
-            <Sidebar
-                activeItem='flows'
-                onItemClick={handleSidebarItemClick}
-            />
+            <Sidebar baseUrl={url}/>
             <div className='channel-automation-content'>
                 <div className='channel-automation-content__inner'>
-                    {view === 'list' ? (
-                        <FlowListView
-                            onCreateFlow={handleCreateFlow}
-                            onEditFlow={handleEditFlow}
+                    <Switch>
+                        <Route
+                            exact={true}
+                            path={`${path}/workflows`}
+                            component={FlowListView}
                         />
-                    ) : (
-                        <FlowEditorView
-                            flowId={editingFlowId}
-                            onBack={handleBack}
+                        <Route
+                            exact={true}
+                            path={`${path}/workflows/add`}
+                            component={FlowEditorView}
                         />
-                    )}
+                        <Route
+                            exact={true}
+                            path={`${path}/workflows/:id/edit`}
+                            component={FlowEditorView}
+                        />
+                        <Redirect to={`${url}/workflows`}/>
+                    </Switch>
                 </div>
             </div>
         </div>
