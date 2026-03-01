@@ -1,223 +1,165 @@
-# Plugin Starter Template
+# Channel Automation Plugin for Mattermost
 
 [![Build Status](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/ci.yml)
 [![E2E Status](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/e2e.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/e2e.yml)
 
-This plugin serves as a starting point for writing a Mattermost plugin. Feel free to base your own plugin off this repository.
+A Mattermost plugin that lets system admins build automated workflows triggered by channel events. Define flows that react to messages, post responses, and optionally call AI agents — all configured through a built-in management UI.
 
-To learn more about plugins, see [our plugin documentation](https://developers.mattermost.com/extend/plugins/).
+## Features
 
-This template requires node v16 and npm v8. You can download and install nvm to manage your node versions by following the instructions [here](https://github.com/nvm-sh/nvm). Once you've setup the project simply run `nvm i` within the root folder to use the suggested version of node.
+- **Flow-based automation** — Create named flows with a trigger and a sequence of actions that execute in order.
+- **Go template engine** — Action fields support `text/template` syntax with access to trigger context (post, channel, user) and outputs from previous actions.
+- **Persistent work queue** — Flow executions are durably queued in the KV store with bounded concurrency and automatic crash recovery.
+- **Management UI** — A dedicated webapp section for listing, creating, editing, enabling/disabling, and deleting flows.
+
+### Triggers
+
+- **Message Posted** — Fire a flow when a new message appears in a specific channel. Bot posts, system messages, and webhook posts are automatically excluded.
+
+### Actions
+
+- **Send Message** — Post a message as the plugin bot, with optional threading support.
+- **AI Prompt** — Send a rendered prompt to an AI agent provided by the [Mattermost AI Plugin](https://github.com/mattermost/mattermost-plugin-ai) and capture the response.
 
 ## Getting Started
-Use GitHub's template feature to make a copy of this repository by clicking the "Use this template" button.
 
-Alternatively shallow clone the repository matching your plugin name:
-```
-git clone --depth 1 https://github.com/mattermost/mattermost-plugin-channel-automation com.example.my-plugin
-```
+### Installation
 
-Note that this project uses [Go modules](https://github.com/golang/go/wiki/Modules). Be sure to locate the project outside of `$GOPATH`.
+1. Download the latest release from the [Releases](https://github.com/mattermost/mattermost-plugin-channel-automation/releases) page.
+2. Upload the `.tar.gz` file through **System Console > Plugins > Plugin Management**.
+3. Enable the plugin.
 
-Edit the following files:
-1. `plugin.json` with your `id`, `name`, and `description`:
-```json
-{
-    "id": "com.example.my-plugin",
-    "name": "My Plugin",
-    "description": "A plugin to enhance Mattermost."
-}
-```
+### Creating a Flow
 
-2. `go.mod` with your Go module path, following the `<hosting-site>/<repository>/<module>` convention:
-```
-module github.com/example/my-plugin
-```
+1. Open the **Channel Automation** section from the product menu.
+2. Click **Create Flow**.
+3. Give the flow a name, select a trigger type and channel, then add one or more actions.
+4. Save and enable the flow.
 
-3. Replace all occurrences of `github.com/mattermost/mattermost-plugin-channel-automation` in the codebase with your Go module path:
-```bash
-sed -i '' 's|github.com/mattermost/mattermost-plugin-channel-automation|github.com/example/my-plugin|g' server/*.go
-```
+### Example: Echo Bot
 
-4. Replace `.golangci.yml` `local-prefixes` attribute with your Go module path:
-```yml
-linters-settings:
-  # [...]
-  goimports:
-    local-prefixes: github.com/example/my-plugin
-```
+A simple flow that replies in-thread whenever someone posts in a channel:
 
-5. Build your plugin:
-```
-make
-```
+| Field            | Value                                     |
+| ---------------- | ----------------------------------------- |
+| **Trigger**      | `message_posted` on channel `town-square` |
+| **Action 1**     | `send_message`                            |
+| Channel ID       | `{{.Trigger.Channel.Id}}`                 |
+| Reply To Post ID | `{{.Trigger.Post.Id}}`                    |
+| Body             | `Echo: {{.Trigger.Post.Message}}`         |
 
-This will produce a single plugin file (with support for multiple architectures) for upload to your Mattermost server:
+### Example: AI Triage
 
-```
-dist/com.example.my-plugin.tar.gz
-```
+A flow that asks an AI agent to classify incoming messages and posts the result:
+
+| Field                     | Value                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| **Trigger**               | `message_posted` on a support channel                                                       |
+| **Action 1** (`classify`) | `ai_prompt` — Agent: your-agent, Prompt: `Classify this message: {{.Trigger.Post.Message}}` |
+| **Action 2**              | `send_message` — Body: `Classification: {{(index .Steps "classify").Message}}`              |
+
+## Trigger Types
+
+| Type             | Description                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `message_posted` | Fires when a user posts a message in the configured channel. Bot posts, system messages, and webhook posts are ignored. |
+
+## Action Types
+
+| Type           | Description                                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `send_message` | Posts a message as the plugin bot. Supports `channel_id`, `reply_to_post_id`, and `body` — all templated.                             |
+| `ai_prompt`    | Sends a rendered prompt to an AI agent via the Mattermost AI Plugin. Requires `provider_type` and `provider_id` in the action config. |
+
+## Template Context
+
+All action fields that support templates receive a `FlowContext` with:
+
+| Variable                                   | Description                                         |
+| ------------------------------------------ | --------------------------------------------------- |
+| `{{.Trigger.Post.Id}}`                     | ID of the triggering post                           |
+| `{{.Trigger.Post.Message}}`                | Message text                                        |
+| `{{.Trigger.Post.ChannelId}}`              | Channel where the post was created                  |
+| `{{.Trigger.Channel.Id}}`                  | Channel ID                                          |
+| `{{.Trigger.Channel.Name}}`                | Channel name                                        |
+| `{{.Trigger.Channel.DisplayName}}`         | Channel display name                                |
+| `{{.Trigger.User.Id}}`                     | User ID of the post author                          |
+| `{{.Trigger.User.Username}}`               | Username                                            |
+| `{{.Trigger.User.Nickname}}`               | Nickname                                            |
+| `{{(index .Steps "<action_id>").Message}}` | Output message from a previous action               |
+| `{{(index .Steps "<action_id>").PostID}}`  | Post ID created by a previous `send_message` action |
+
+Sensitive user fields (email, password, auth data) are stripped from the template context.
+
+## Configuration
+
+| Setting                  | Default | Description                                                                                                 |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
+| **Max Concurrent Flows** | `4`     | Maximum flow executions running concurrently per plugin instance. Requires a plugin restart to take effect. |
+
+## API
+
+The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. All endpoints require system admin permissions.
+
+| Method   | Path          | Description       |
+| -------- | ------------- | ----------------- |
+| `GET`    | `/flows`      | List all flows    |
+| `POST`   | `/flows`      | Create a new flow |
+| `GET`    | `/flows/{id}` | Get a flow by ID  |
+| `PUT`    | `/flows/{id}` | Update a flow     |
+| `DELETE` | `/flows/{id}` | Delete a flow     |
+
+See [docs/api.md](docs/api.md) for the full API reference with request/response schemas.
 
 ## Development
 
-To avoid having to manually install your plugin, build and deploy your plugin using one of the following options. In order for the below options to work, you must first enable plugin uploads via your config.json or API and restart Mattermost.
+### Prerequisites
 
-```json
-    "PluginSettings" : {
-        ...
-        "EnableUploads" : true
-    }
-```
+- Go 1.25+
+- Node.js (see `.nvmrc`)
+- Make
 
-### Development guidance
+### Building
 
-1. Fewer packages is better: default to the main package unless there's good reason for a new package.
-
-2. Coupling implies same package: don't jump through hoops to break apart code that's naturally coupled.
-
-3. New package for a new interface: a classic example is the sqlstore with layers for monitoring performance, caching and mocking.
-
-4. New package for upstream integration: a discrete client package for interfacing with a 3rd party is often a great place to break out into a new package
-
-### Modifying the server boilerplate
-
-The server code comes with some boilerplate for creating an api, using slash commands, accessing the kvstore and using the cluster package for jobs.
-
-#### Api
-
-api.go implements the ServeHTTP hook which allows the plugin to implement the http.Handler interface. Requests destined for the `/plugins/{id}` path will be routed to the plugin. This file also contains a sample `HelloWorld` endpoint that is tested in plugin_test.go.
-
-#### Command package
-
-This package contains the boilerplate for adding a slash command and an instance of it is created in the `OnActivate` hook in plugin.go. If you don't need it you can delete the package and remove any reference to `commandClient` in plugin.go. The package also contains an example of how to create a mock for testing.
-
-#### KVStore package
-
-This is a central place for you to access the KVStore methods that are available in the `pluginapi.Client`. The package contains an interface for you to define your methods that will wrap the KVStore methods. An instance of the KVStore is created in the `OnActivate` hook.
-
-### Deploying with Local Mode
-
-If your Mattermost server is running locally, you can enable [local mode](https://docs.mattermost.com/administration/mmctl-cli-tool.html#local-mode) to streamline deploying your plugin. Edit your server configuration as follows:
-
-```json
-{
-    "ServiceSettings": {
-        ...
-        "EnableLocalMode": true,
-        "LocalModeSocketLocation": "/var/tmp/mattermost_local.socket"
-    },
-}
-```
-
-and then deploy your plugin:
-```
-make deploy
-```
-
-You may also customize the Unix socket path:
 ```bash
-export MM_LOCALSOCKETPATH=/var/tmp/alternate_local.socket
+make all        # lint + test + build
+make dist       # build plugin bundle only
+make check-style # run all linters
+make test       # run all tests
+```
+
+### Deploying locally
+
+Enable plugin uploads and optionally [local mode](https://docs.mattermost.com/administration/mmctl-cli-tool.html#local-mode), then:
+
+```bash
 make deploy
 ```
 
-If developing a plugin with a webapp, watch for changes and deploy those automatically:
+Or with credentials:
+
 ```bash
 export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_TOKEN=j44acwd8obn78cdcx7koid4jkr
+export MM_ADMIN_TOKEN=<your-token>
+make deploy
+```
+
+To watch for webapp changes and auto-deploy:
+
+```bash
+export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
+export MM_ADMIN_TOKEN=<your-token>
 make watch
 ```
 
-### Deploying with credentials
+### Releasing
 
-Alternatively, you can authenticate with the server's API with credentials:
+Versions are determined at compile time from git tags. To cut a release:
+
 ```bash
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_USERNAME=admin
-export MM_ADMIN_PASSWORD=password
-make deploy
+make patch       # patch release (e.g. 1.0.1)
+make minor       # minor release (e.g. 1.1.0)
+make major       # major release (e.g. 2.0.0)
 ```
 
-or with a [personal access token](https://docs.mattermost.com/developer/personal-access-tokens.html):
-```bash
-export MM_SERVICESETTINGS_SITEURL=http://localhost:8065
-export MM_ADMIN_TOKEN=j44acwd8obn78cdcx7koid4jkr
-make deploy
-```
-
-### Releasing new versions
-
-The version of a plugin is determined at compile time, automatically populating a `version` field in the [plugin manifest](plugin.json):
-* If the current commit matches a tag, the version will match after stripping any leading `v`, e.g. `1.3.1`.
-* Otherwise, the version will combine the nearest tag with `git rev-parse --short HEAD`, e.g. `1.3.1+d06e53e1`.
-* If there is no version tag, an empty version will be combined with the short hash, e.g. `0.0.0+76081421`.
-
-To disable this behaviour, manually populate and maintain the `version` field.
-
-## How to Release
-
-To trigger a release, follow these steps:
-
-1. **For Patch Release:** Run the following command:
-    ```
-    make patch
-    ```
-   This will release a patch change.
-
-2. **For Minor Release:** Run the following command:
-    ```
-    make minor
-    ```
-   This will release a minor change.
-
-3. **For Major Release:** Run the following command:
-    ```
-    make major
-    ```
-   This will release a major change.
-
-4. **For Patch Release Candidate (RC):** Run the following command:
-    ```
-    make patch-rc
-    ```
-   This will release a patch release candidate.
-
-5. **For Minor Release Candidate (RC):** Run the following command:
-    ```
-    make minor-rc
-    ```
-   This will release a minor release candidate.
-
-6. **For Major Release Candidate (RC):** Run the following command:
-    ```
-    make major-rc
-    ```
-   This will release a major release candidate.
-
-## Q&A
-
-### How do I make a server-only or web app-only plugin?
-
-Simply delete the `server` or `webapp` folders and remove the corresponding sections from `plugin.json`. The build scripts will skip the missing portions automatically.
-
-### How do I include assets in the plugin bundle?
-
-Place them into the `assets` directory. To use an asset at runtime, build the path to your asset and open as a regular file:
-
-```go
-bundlePath, err := p.API.GetBundlePath()
-if err != nil {
-    return errors.Wrap(err, "failed to get bundle path")
-}
-
-profileImage, err := ioutil.ReadFile(filepath.Join(bundlePath, "assets", "profile_image.png"))
-if err != nil {
-    return errors.Wrap(err, "failed to read profile image")
-}
-
-if appErr := p.API.SetProfileImage(userID, profileImage); appErr != nil {
-    return errors.Wrap(err, "failed to set profile image")
-}
-```
-
-### How do I build the plugin with unminified JavaScript?
-Setting the `MM_DEBUG` environment variable will invoke the debug builds. The simplist way to do this is to simply include this variable in your calls to `make` (e.g. `make dist MM_DEBUG=1`).
+Append `-rc` for release candidates (`make patch-rc`, `make minor-rc`, `make major-rc`).
