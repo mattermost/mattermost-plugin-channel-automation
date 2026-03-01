@@ -1,20 +1,21 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 
 import FlowEditorView from 'components/flow_editor_view';
 import FlowListView from 'components/flow_list_view';
+import Sidebar from 'components/sidebar';
+
+import './layout.scss';
 
 type View = 'list' | 'editor';
 
-const containerStyle: React.CSSProperties = {
-    maxWidth: 960,
-    margin: '0 auto',
-    padding: 20,
-    color: 'var(--center-channel-color)',
-    backgroundColor: 'var(--center-channel-bg)',
-    minHeight: '100vh',
-};
-
 const MainApp: React.FC = () => {
+    useEffect(() => {
+        document.body.classList.add('app__body');
+
+        return () => {
+            document.body.classList.remove('app__body');
+        };
+    }, []);
     const [view, setView] = useState<View>('list');
     const [editingFlowId, setEditingFlowId] = useState<string | null>(null);
 
@@ -33,19 +34,34 @@ const MainApp: React.FC = () => {
         setView('list');
     }, []);
 
+    const handleSidebarItemClick = useCallback((id: string) => {
+        if (id === 'flows') {
+            setEditingFlowId(null);
+            setView('list');
+        }
+    }, []);
+
     return (
-        <div style={containerStyle}>
-            {view === 'list' ? (
-                <FlowListView
-                    onCreateFlow={handleCreateFlow}
-                    onEditFlow={handleEditFlow}
-                />
-            ) : (
-                <FlowEditorView
-                    flowId={editingFlowId}
-                    onBack={handleBack}
-                />
-            )}
+        <div className='channel-automation-root'>
+            <Sidebar
+                activeItem='flows'
+                onItemClick={handleSidebarItemClick}
+            />
+            <div className='channel-automation-content'>
+                <div className='channel-automation-content__inner'>
+                    {view === 'list' ? (
+                        <FlowListView
+                            onCreateFlow={handleCreateFlow}
+                            onEditFlow={handleEditFlow}
+                        />
+                    ) : (
+                        <FlowEditorView
+                            flowId={editingFlowId}
+                            onBack={handleBack}
+                        />
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

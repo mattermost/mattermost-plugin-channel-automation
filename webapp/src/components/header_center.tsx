@@ -1,7 +1,7 @@
 import React from 'react';
 
 const HeaderCenter: React.FC = () => {
-    return <span>{'Workflows'}</span>;
+    return null;
 };
 
 export default HeaderCenter;
