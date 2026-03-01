@@ -115,6 +115,24 @@ const styles = {
         fontFamily: 'monospace',
         userSelect: 'all',
     } as React.CSSProperties,
+    details: {
+        marginTop: 8,
+        marginBottom: 12,
+    } as React.CSSProperties,
+    summary: {
+        fontSize: 13,
+        color: 'rgba(var(--center-channel-color-rgb), 0.56)',
+        cursor: 'pointer',
+    } as React.CSSProperties,
+    pre: {
+        fontSize: 12,
+        fontFamily: 'monospace',
+        backgroundColor: 'rgba(var(--center-channel-color-rgb), 0.05)',
+        borderRadius: 4,
+        padding: 8,
+        overflowX: 'auto',
+        margin: '4px 0 0',
+    } as React.CSSProperties,
 };
 
 function newActionForm(): ActionForm {
@@ -270,6 +288,29 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                 </label>
             </div>
             <h3>{'Trigger'}</h3>
+            <details style={styles.details}>
+                <summary style={styles.summary}>{'Available template variables'}</summary>
+                <pre style={styles.pre}>{`{
+  "Trigger": {
+    "Post": {
+      "Id": "string",
+      "ChannelId": "string",
+      "Message": "string"
+    },
+    "Channel": {
+      "Id": "string",
+      "Name": "string",
+      "DisplayName": "string"
+    },
+    "User": {
+      "Id": "string",
+      "Username": "string",
+      "FirstName": "string",
+      "LastName": "string"
+    }
+  }
+}`}</pre>
+            </details>
             <div style={styles.formGroup}>
                 <label style={styles.label}>{'Type'}</label>
                 <select
@@ -348,6 +389,16 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                                     onChange={(e) => handleActionChange(index, 'body', e.target.value)}
                                 />
                             </div>
+                            <details style={styles.details}>
+                                <summary style={styles.summary}>{'Output of this action'}</summary>
+                                <pre style={styles.pre}>{`{
+  "PostID": "string",
+  "ChannelID": "string",
+  "Message": "string"
+}
+
+Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
+                            </details>
                         </>
                     )}
                     {action.type === 'ai_prompt' && (
@@ -381,6 +432,14 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                                     onChange={(e) => handleActionChange(index, 'prompt', e.target.value)}
                                 />
                             </div>
+                            <details style={styles.details}>
+                                <summary style={styles.summary}>{'Output of this action'}</summary>
+                                <pre style={styles.pre}>{`{
+  "Message": "string"
+}
+
+Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
+                            </details>
                         </>
                     )}
                 </div>
