@@ -20,10 +20,11 @@ type Trigger struct {
 
 // Action defines a single step in a flow.
 type Action struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Type      string         `json:"type"`             // "send_message", "ai_prompt"
-	ChannelID string         `json:"channel_id"`       // target channel
-	Body      string         `json:"body"`             // Go text/template string
-	Config    map[string]any `json:"config,omitempty"` // action-type-specific configuration
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Type           string         `json:"type"`                        // "send_message", "ai_prompt"
+	ChannelID      string         `json:"channel_id"`                  // target channel
+	ReplyToPostID  string         `json:"reply_to_post_id,omitempty"`  // post ID to reply to (creates a thread)
+	Body           string         `json:"body"`                        // Go text/template string
+	Config         map[string]any `json:"config,omitempty"`            // action-type-specific configuration
 }

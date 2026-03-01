@@ -13,6 +13,7 @@ interface ActionForm {
     name: string;
     type: string;
     channel_id: string;
+    reply_to_post_id: string;
     body: string;
     prompt: string;
     provider_type: string;
@@ -136,7 +137,7 @@ const styles = {
 };
 
 function newActionForm(): ActionForm {
-    return {id: '', name: '', type: 'send_message', channel_id: '', body: '', prompt: '', provider_type: 'agent', provider_id: ''};
+    return {id: '', name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_type: 'agent', provider_id: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -152,7 +153,7 @@ function actionToForm(a: Action): ActionForm {
             provider_id: a.config?.provider_id ?? '',
         };
     }
-    return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, body: a.body, prompt: '', provider_type: 'agent', provider_id: ''};
+    return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, reply_to_post_id: a.reply_to_post_id ?? '', body: a.body, prompt: '', provider_type: 'agent', provider_id: ''};
 }
 
 const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
@@ -230,13 +231,17 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                         },
                     };
                 }
-                return {
+                const action: Action = {
                     id: a.id,
                     name: a.name,
                     type: a.type,
                     channel_id: a.channel_id,
                     body: a.body,
                 };
+                if (a.reply_to_post_id) {
+                    action.reply_to_post_id = a.reply_to_post_id;
+                }
+                return action;
             }),
         };
         try {
@@ -379,6 +384,16 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                                     type='text'
                                     value={action.channel_id}
                                     onChange={(e) => handleActionChange(index, 'channel_id', e.target.value)}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>{'Reply to Post ID (Go template, optional)'}</label>
+                                <input
+                                    style={styles.input}
+                                    type='text'
+                                    value={action.reply_to_post_id}
+                                    placeholder={'e.g. {{.Trigger.Post.Id}}'}
+                                    onChange={(e) => handleActionChange(index, 'reply_to_post_id', e.target.value)}
                                 />
                             </div>
                             <div style={styles.formGroup}>

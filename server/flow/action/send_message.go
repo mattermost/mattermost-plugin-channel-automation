@@ -23,6 +23,19 @@ func NewSendMessageAction(api plugin.API, botUserID string) *SendMessageAction {
 func (a *SendMessageAction) Type() string { return "send_message" }
 
 func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext) (*model.StepOutput, error) {
+	channelID, err := renderTemplate(action.ChannelID, ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render channel_id template: %w", err)
+	}
+
+	var replyToPostID string
+	if action.ReplyToPostID != "" {
+		replyToPostID, err = renderTemplate(action.ReplyToPostID, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to render reply_to_post_id template: %w", err)
+		}
+	}
+
 	msg, err := renderTemplate(action.Body, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render template: %w", err)
@@ -30,7 +43,8 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 
 	post := &mmmodel.Post{
 		UserId:    a.botUserID,
-		ChannelId: action.ChannelID,
+		ChannelId: channelID,
+		RootId:    replyToPostID,
 		Message:   msg,
 	}
 

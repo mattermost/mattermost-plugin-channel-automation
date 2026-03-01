@@ -114,6 +114,175 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 	}))
 }
 
+func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "new-post-id",
+		ChannelId: "trigger-ch",
+		Message:   "hello",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:        "act1",
+		Type:      "send_message",
+		ChannelID: "{{.Trigger.Channel.Id}}",
+		Body:      "hello",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "trigger-ch"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "trigger-ch", output.ChannelID)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.ChannelId == "trigger-ch"
+	}))
+}
+
+func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "reply-post-id",
+		ChannelId: "ch1",
+		RootId:    "parent-post-id",
+		Message:   "threaded reply",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:            "act1",
+		Type:          "send_message",
+		ChannelID:     "ch1",
+		ReplyToPostID: "parent-post-id",
+		Body:          "threaded reply",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "reply-post-id", output.PostID)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.RootId == "parent-post-id" && p.ChannelId == "ch1"
+	}))
+}
+
+func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "reply-post-id",
+		ChannelId: "ch1",
+		RootId:    "trigger-post-id",
+		Message:   "reply",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:            "act1",
+		Type:          "send_message",
+		ChannelID:     "ch1",
+		ReplyToPostID: "{{.Trigger.Post.Id}}",
+		Body:          "reply",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "trigger-post-id", ChannelId: "ch1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.RootId == "trigger-post-id"
+	}))
+}
+
+func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
+	api := &plugintest.API{}
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:            "act1",
+		Type:          "send_message",
+		ChannelID:     "ch1",
+		ReplyToPostID: "{{.Invalid",
+		Body:          "hello",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to render reply_to_post_id template")
+}
+
+func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "new-post-id",
+		ChannelId: "ch1",
+		Message:   "hello",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:        "act1",
+		Type:      "send_message",
+		ChannelID: "ch1",
+		Body:      "hello",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.RootId == ""
+	}))
+}
+
+func TestSendMessageAction_Execute_BadChannelIDTemplate(t *testing.T) {
+	api := &plugintest.API{}
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID:        "act1",
+		Type:      "send_message",
+		ChannelID: "{{.Invalid",
+		Body:      "hello",
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to render channel_id template")
+}
+
 func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500))

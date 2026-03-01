@@ -8,6 +8,7 @@ export interface Action {
     name: string;
     type: string;
     channel_id: string;
+    reply_to_post_id?: string;
     body: string;
     config?: Record<string, string>;
 }
