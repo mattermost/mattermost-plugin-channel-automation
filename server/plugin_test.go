@@ -1,30 +1,41 @@
 package main
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestServeHTTP(t *testing.T) {
-	assert := assert.New(t)
-	plugin := Plugin{}
-	plugin.router = plugin.initRouter()
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
-	r.Header.Set("Mattermost-User-ID", "test-user-id")
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		plugin := Plugin{}
+		router := mux.NewRouter()
+		router.Use(plugin.MattermostAuthorizationRequired)
+		router.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		plugin.router = router
 
-	plugin.ServeHTTP(nil, w, r)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/test", nil)
 
-	result := w.Result()
-	assert.NotNil(result)
-	defer func() { _ = result.Body.Close() }()
-	bodyBytes, err := io.ReadAll(result.Body)
-	assert.Nil(err)
-	bodyString := string(bodyBytes)
+		plugin.ServeHTTP(nil, w, r)
 
-	assert.Equal("Hello, world!", bodyString)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("unknown route returns 404", func(t *testing.T) {
+		plugin := Plugin{}
+		plugin.router = mux.NewRouter()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/nonexistent", nil)
+
+		plugin.ServeHTTP(nil, w, r)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
 }

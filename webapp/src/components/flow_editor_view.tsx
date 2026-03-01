@@ -150,6 +150,7 @@ function actionToForm(a: Action): ActionForm {
             name: a.name,
             type: a.type,
             channel_id: '',
+            reply_to_post_id: '',
             body: '',
             prompt: a.config?.prompt ?? '',
             provider_id: a.config?.provider_id ?? '',
