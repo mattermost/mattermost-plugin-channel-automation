@@ -13,6 +13,12 @@ export interface Action {
     config?: Record<string, string>;
 }
 
+export interface AIBotInfo {
+    id: string;
+    displayName: string;
+    username: string;
+}
+
 export interface Flow {
     id: string;
     name: string;

@@ -1,6 +1,6 @@
 import {Client4} from '@mattermost/client';
 
-import type {Flow} from 'types';
+import type {AIBotInfo, Flow} from 'types';
 
 const BASE_URL = '/plugins/com.mattermost.channel-automation/api/v1';
 
@@ -58,4 +58,9 @@ export async function deleteFlow(id: string): Promise<void> {
     await doFetch<void>(`${BASE_URL}/flows/${id}`, {
         method: 'DELETE',
     });
+}
+
+export async function getAIBots(): Promise<AIBotInfo[]> {
+    const resp = await doFetch<{bots: AIBotInfo[]}>('/plugins/mattermost-ai/ai_bots');
+    return resp.bots ?? [];
 }

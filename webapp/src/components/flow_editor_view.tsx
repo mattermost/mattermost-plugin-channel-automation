@@ -1,7 +1,7 @@
-import {createFlow, getFlow, updateFlow} from 'client';
+import {createFlow, getAIBots, getFlow, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 
-import type {Action} from 'types';
+import type {AIBotInfo, Action} from 'types';
 
 interface Props {
     flowId: string | null;
@@ -16,7 +16,6 @@ interface ActionForm {
     reply_to_post_id: string;
     body: string;
     prompt: string;
-    provider_type: string;
     provider_id: string;
 }
 
@@ -137,7 +136,7 @@ const styles = {
 };
 
 function newActionForm(): ActionForm {
-    return {id: '', name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_type: 'agent', provider_id: ''};
+    return {id: '', name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -149,11 +148,10 @@ function actionToForm(a: Action): ActionForm {
             channel_id: '',
             body: '',
             prompt: a.config?.prompt ?? '',
-            provider_type: a.config?.provider_type ?? 'agent',
             provider_id: a.config?.provider_id ?? '',
         };
     }
-    return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, reply_to_post_id: a.reply_to_post_id ?? '', body: a.body, prompt: '', provider_type: 'agent', provider_id: ''};
+    return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, reply_to_post_id: a.reply_to_post_id ?? '', body: a.body, prompt: '', provider_id: ''};
 }
 
 const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
@@ -162,9 +160,14 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
     const [triggerType, setTriggerType] = useState('message_posted');
     const [triggerChannelId, setTriggerChannelId] = useState('');
     const [actions, setActions] = useState<ActionForm[]>([]);
+    const [agents, setAgents] = useState<AIBotInfo[]>([]);
     const [loading, setLoading] = useState(Boolean(flowId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        getAIBots().then(setAgents).catch(() => setAgents([]));
+    }, []);
 
     useEffect(() => {
         if (!flowId) {
@@ -226,7 +229,7 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
                         body: '',
                         config: {
                             prompt: a.prompt,
-                            provider_type: a.provider_type,
+                            provider_type: 'agent',
                             provider_id: a.provider_id,
                         },
                     };
@@ -419,25 +422,22 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                     {action.type === 'ai_prompt' && (
                         <>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Provider Type'}</label>
+                                <label style={styles.label}>{'Agent'}</label>
                                 <select
                                     style={styles.select}
-                                    value={action.provider_type}
-                                    onChange={(e) => handleActionChange(index, 'provider_type', e.target.value)}
-                                >
-                                    <option value='agent'>{'agent'}</option>
-                                    <option value='service'>{'service'}</option>
-                                </select>
-                            </div>
-                            <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Provider ID'}</label>
-                                <input
-                                    style={styles.input}
-                                    type='text'
-                                    placeholder={action.provider_type === 'agent' ? 'Bot username' : 'Service name'}
                                     value={action.provider_id}
                                     onChange={(e) => handleActionChange(index, 'provider_id', e.target.value)}
-                                />
+                                >
+                                    <option value=''>{'Select an agent...'}</option>
+                                    {agents.map((bot) => (
+                                        <option
+                                            key={bot.id}
+                                            value={bot.id}
+                                        >
+                                            {`${bot.displayName} (@${bot.username})`}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div style={styles.formGroup}>
                                 <label style={styles.label}>{'Prompt (Go template)'}</label>
