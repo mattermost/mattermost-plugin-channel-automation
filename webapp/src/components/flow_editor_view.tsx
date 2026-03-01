@@ -103,6 +103,14 @@ const styles = {
         color: 'var(--error-text)',
         marginBottom: 12,
     } as React.CSSProperties,
+    warning: {
+        padding: '8px 12px',
+        borderRadius: 4,
+        backgroundColor: 'rgba(var(--error-text-color-rgb, 210, 75, 78), 0.08)',
+        color: 'var(--error-text)',
+        fontSize: 13,
+        marginBottom: 12,
+    } as React.CSSProperties,
     header: {
         display: 'flex',
         alignItems: 'center',
@@ -161,12 +169,21 @@ const FlowEditorView: React.FC<Props> = ({flowId, onBack}) => {
     const [triggerChannelId, setTriggerChannelId] = useState('');
     const [actions, setActions] = useState<ActionForm[]>([]);
     const [agents, setAgents] = useState<AIBotInfo[]>([]);
+    const [agentsError, setAgentsError] = useState<string | null>(null);
     const [loading, setLoading] = useState(Boolean(flowId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        getAIBots().then(setAgents).catch(() => setAgents([]));
+        getAIBots().then((bots) => {
+            setAgents(bots);
+            if (bots.length === 0) {
+                setAgentsError('No AI agents found. Please configure agents in the AI plugin.');
+            }
+        }).catch(() => {
+            setAgents([]);
+            setAgentsError('Could not reach the AI plugin. Make sure the Mattermost AI plugin is installed and enabled.');
+        });
     }, []);
 
     useEffect(() => {
@@ -421,6 +438,7 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                     )}
                     {action.type === 'ai_prompt' && (
                         <>
+                            {agentsError && <p style={styles.warning}>{agentsError}</p>}
                             <div style={styles.formGroup}>
                                 <label style={styles.label}>{'Agent'}</label>
                                 <select
