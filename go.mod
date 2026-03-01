@@ -4,7 +4,8 @@ go 1.25
 
 require (
 	github.com/gorilla/mux v1.8.1
-	github.com/mattermost/mattermost/server/public v0.1.21
+	github.com/mattermost/mattermost-plugin-ai v1.9.0
+	github.com/mattermost/mattermost/server/public v0.1.22-0.20251105210629-8bf4a00724e2
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0
@@ -19,6 +20,7 @@ require (
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/google/jsonschema-go v0.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
