@@ -435,7 +435,7 @@ const FlowEditorView: React.FC = () => {
                                     style={styles.input}
                                     type='text'
                                     value={action.reply_to_post_id}
-                                    placeholder={'e.g. {{.Trigger.Post.Id}}'}
+                                    placeholder={'e.g. {{.Trigger.Post.ThreadId}}'}
                                     onChange={(e) => handleActionChange(index, 'reply_to_post_id', e.target.value)}
                                 />
                             </div>
