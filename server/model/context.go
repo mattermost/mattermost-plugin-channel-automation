@@ -4,8 +4,9 @@ import mmmodel "github.com/mattermost/mattermost/server/public/model"
 
 // FlowContext is the runtime context built up during flow execution.
 type FlowContext struct {
-	Trigger TriggerData           `json:"trigger"`
-	Steps   map[string]StepOutput `json:"steps"`
+	CreatedBy string                `json:"created_by"`
+	Trigger   TriggerData           `json:"trigger"`
+	Steps     map[string]StepOutput `json:"steps"`
 }
 
 // TriggerData holds the data from the event that triggered the flow.
@@ -29,6 +30,7 @@ type ScheduleInfo struct {
 type SafePost struct {
 	Id        string `json:"id"`
 	ChannelId string `json:"channel_id"`
+	ThreadId  string `json:"thread_id"`
 	Message   string `json:"message"`
 }
 
@@ -53,9 +55,14 @@ func NewSafePost(p *mmmodel.Post) *SafePost {
 	if p == nil {
 		return nil
 	}
+	threadId := p.RootId
+	if threadId == "" {
+		threadId = p.Id
+	}
 	return &SafePost{
 		Id:        p.Id,
 		ChannelId: p.ChannelId,
+		ThreadId:  threadId,
 		Message:   p.Message,
 	}
 }

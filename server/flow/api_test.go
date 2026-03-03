@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,23 +17,26 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-func setupAPI(t *testing.T) (*mux.Router, model.Store) {
+func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	t.Helper()
 
 	store, _ := setupStore(t)
 
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	).Maybe()
 
 	handler := NewAPIHandler(store, api, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
-	return router, store
+	return router, store, api
 }
 
 func TestAPI_CreateFlow(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	body := `{
 		"name": "Test Flow",
@@ -70,7 +74,7 @@ func TestAPI_CreateFlow(t *testing.T) {
 }
 
 func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString("not json"))
@@ -81,7 +85,7 @@ func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
 }
 
 func TestAPI_GetFlow(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
@@ -103,7 +107,7 @@ func TestAPI_GetFlow(t *testing.T) {
 }
 
 func TestAPI_GetFlow_NotFound(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows/nonexistent", nil)
@@ -113,7 +117,7 @@ func TestAPI_GetFlow_NotFound(t *testing.T) {
 }
 
 func TestAPI_ListFlows(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
@@ -132,7 +136,7 @@ func TestAPI_ListFlows(t *testing.T) {
 }
 
 func TestAPI_ListFlows_Empty(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
@@ -147,7 +151,7 @@ func TestAPI_ListFlows_Empty(t *testing.T) {
 }
 
 func TestAPI_UpdateFlow(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	original := &model.Flow{
 		ID:        "f1",
@@ -187,7 +191,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 }
 
 func TestAPI_UpdateFlow_NotFound(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/nonexistent", bytes.NewBufferString(`{"name":"x"}`))
@@ -197,7 +201,7 @@ func TestAPI_UpdateFlow_NotFound(t *testing.T) {
 }
 
 func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
@@ -209,7 +213,7 @@ func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
 }
 
 func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	body := `{
 		"name": "Schedule Flow",
@@ -228,7 +232,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 }
 
 func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	body := `{
 		"name": "Schedule Flow",
@@ -247,7 +251,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 }
 
 func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
-	router, _ := setupAPI(t)
+	router, _, _ := setupAPI(t)
 
 	body := `{
 		"name": "Bad Trigger",
@@ -265,7 +269,7 @@ func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
 }
 
 func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
@@ -287,7 +291,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 }
 
 func TestAPI_DeleteFlow(t *testing.T) {
-	router, store := setupAPI(t)
+	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
@@ -301,4 +305,155 @@ func TestAPI_DeleteFlow(t *testing.T) {
 	got, err := store.Get("f1")
 	require.NoError(t, err)
 	assert.Nil(t, got)
+}
+
+// setupAPIWithCustomMock creates an API handler with a custom plugintest.API
+// so callers can set their own GetChannelMember expectations.
+func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, model.Store) {
+	t.Helper()
+
+	store, _ := setupStore(t)
+
+	handler := NewAPIHandler(store, api, nil)
+	router := mux.NewRouter()
+	handler.RegisterRoutes(router)
+
+	return router, store
+}
+
+func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "ch1")
+}
+
+func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	)
+	api.On("GetChannelMember", "ch2", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "ch2")
+}
+
+func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		nil, mmmodel.NewAppError("GetChannelMember", "not_found", nil, "", http.StatusNotFound),
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "ch1")
+}
+
+func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("GetChannelMember", "ch-new", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+
+	router, store := setupAPIWithCustomMock(t, api)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch-new"}},
+		"actions": []
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "ch-new")
+}
+
+func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	// Only the trigger channel should be checked; the templated action channel is skipped.
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Reply", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "echo"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// Verify GetChannelMember was only called for ch1.
+	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
 }

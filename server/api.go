@@ -17,7 +17,6 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	apiRouter.Use(p.SystemAdminRequired)
 	flowAPI := flow.NewAPIHandler(p.flowStore, p.API, p.scheduleManager)
 	flowAPI.RegisterRoutes(apiRouter)
 

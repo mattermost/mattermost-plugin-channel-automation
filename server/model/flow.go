@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`
@@ -71,4 +73,34 @@ func (a *Action) Type() string {
 		return "ai_prompt"
 	}
 	return ""
+}
+
+// CollectChannelIDs returns all unique, literal (non-template) channel IDs
+// referenced in the flow's trigger and actions.
+func CollectChannelIDs(f *Flow) []string {
+	seen := make(map[string]struct{})
+	var ids []string
+
+	add := func(id string) {
+		if id == "" || strings.Contains(id, "{{") {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	if f.Trigger.MessagePosted != nil {
+		add(f.Trigger.MessagePosted.ChannelID)
+	}
+
+	for i := range f.Actions {
+		if f.Actions[i].SendMessage != nil {
+			add(f.Actions[i].SendMessage.ChannelID)
+		}
+	}
+
+	return ids
 }

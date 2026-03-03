@@ -33,6 +33,13 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 		return nil, fmt.Errorf("failed to render channel_id template: %w", err)
 	}
 
+	if ctx.CreatedBy == "" {
+		return nil, fmt.Errorf("flow has no creator; cannot verify channel permissions")
+	}
+	if !a.api.HasPermissionToChannel(ctx.CreatedBy, channelID, mmmodel.PermissionManageChannelRoles) {
+		return nil, fmt.Errorf("user %q does not have permission to manage channel %q", ctx.CreatedBy, channelID)
+	}
+
 	var replyToPostID string
 	if cfg.ReplyToPostID != "" {
 		replyToPostID, err = renderTemplate(cfg.ReplyToPostID, ctx)

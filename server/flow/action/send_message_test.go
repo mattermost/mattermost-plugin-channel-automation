@@ -82,6 +82,7 @@ func TestSendMessageAction_Type(t *testing.T) {
 
 func TestSendMessageAction_Execute_Success(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "ch2",
@@ -97,6 +98,7 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			User: &model.SafeUser{Username: "alice"},
 		},
@@ -117,6 +119,7 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 
 func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "trigger-ch", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "trigger-ch",
@@ -132,6 +135,7 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{Id: "trigger-ch"},
 		},
@@ -150,6 +154,7 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 
 func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -167,8 +172,9 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	output, err := a.Execute(act, ctx)
@@ -183,6 +189,7 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 
 func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -200,6 +207,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Post: &model.SafePost{Id: "trigger-post-id", ChannelId: "ch1"},
 		},
@@ -217,6 +225,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 
 func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -228,8 +237,9 @@ func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	output, err := a.Execute(act, ctx)
@@ -240,6 +250,7 @@ func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 
 func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "ch1",
@@ -255,8 +266,9 @@ func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
 		},
 	}
 	ctx := &model.FlowContext{
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	output, err := a.Execute(act, ctx)
@@ -292,7 +304,80 @@ func TestSendMessageAction_Execute_BadChannelIDTemplate(t *testing.T) {
 
 func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500))
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "Hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to create post")
+}
+
+func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "{{.Invalid",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to render template")
+}
+
+func TestSendMessageAction_Execute_PermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(false)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "Hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestSendMessageAction_Execute_EmptyCreatedBy(t *testing.T) {
+	api := &plugintest.API{}
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -310,27 +395,34 @@ func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
 	assert.Nil(t, output)
-	assert.Contains(t, err.Error(), "failed to create post")
+	assert.Contains(t, err.Error(), "flow has no creator")
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
-func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
+func TestSendMessageAction_Execute_PermissionDenied_TemplatedChannel(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "resolved-ch", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
 		ID: "act1",
 		SendMessage: &model.SendMessageActionConfig{
-			ChannelID: "ch2",
-			Body:      "{{.Invalid",
+			ChannelID: "{{.Trigger.Channel.Id}}",
+			Body:      "hello",
 		},
 	}
 	ctx := &model.FlowContext{
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: "creator-id",
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "resolved-ch"},
+		},
+		Steps: make(map[string]model.StepOutput),
 	}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
 	assert.Nil(t, output)
-	assert.Contains(t, err.Error(), "failed to render template")
+	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }

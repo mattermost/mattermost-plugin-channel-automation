@@ -2,6 +2,7 @@ package flow
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -33,6 +34,19 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/flows/{id}", h.handleGetFlow).Methods(http.MethodGet)
 	r.HandleFunc("/flows/{id}", h.handleUpdateFlow).Methods(http.MethodPut)
 	r.HandleFunc("/flows/{id}", h.handleDeleteFlow).Methods(http.MethodDelete)
+}
+
+// checkChannelAdmin verifies that userID is a channel admin (SchemeAdmin) on
+// every literal channel referenced in the flow. It returns the first failing
+// channel ID and false when the check fails.
+func (h *APIHandler) checkChannelAdmin(userID string, f *model.Flow) (string, bool) {
+	for _, chID := range model.CollectChannelIDs(f) {
+		member, appErr := h.api.GetChannelMember(chID, userID)
+		if appErr != nil || !member.SchemeAdmin {
+			return chID, false
+		}
+	}
+	return "", true
 }
 
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +85,11 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := model.ValidateTrigger(&f.Trigger); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if chID, ok := h.checkChannelAdmin(f.CreatedBy, &f); !ok {
+		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
 	}
 
@@ -147,6 +166,12 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := model.ValidateTrigger(&f.Trigger); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID := r.Header.Get("Mattermost-User-ID")
+	if chID, ok := h.checkChannelAdmin(userID, &f); !ok {
+		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
 	}
 

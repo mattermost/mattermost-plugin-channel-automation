@@ -32,6 +32,7 @@ func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.Completi
 
 func TestFlowExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "p1",
 		ChannelId: "ch2",
@@ -44,8 +45,9 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 	executor := NewFlowExecutor(registry)
 
 	f := &model.Flow{
-		ID:   "flow1",
-		Name: "Test",
+		ID:        "flow1",
+		Name:      "Test",
+		CreatedBy: "creator1",
 		Actions: []model.Action{
 			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "Hello {{.Trigger.User.Username}}"}},
 		},
@@ -63,6 +65,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 
 func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "p1",
 		ChannelId: "ch2",
@@ -80,8 +83,9 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	executor := NewFlowExecutor(registry)
 
 	f := &model.Flow{
-		ID:   "flow1",
-		Name: "Test",
+		ID:        "flow1",
+		Name:      "Test",
+		CreatedBy: "creator1",
 		Actions: []model.Action{
 			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "msg1"}},
 			{ID: "act2", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch3", Body: "msg2"}},
@@ -99,6 +103,7 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 
 func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500)).Once()
 
 	registry := NewRegistry()
@@ -107,8 +112,9 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	executor := NewFlowExecutor(registry)
 
 	f := &model.Flow{
-		ID:   "flow1",
-		Name: "Test",
+		ID:        "flow1",
+		Name:      "Test",
+		CreatedBy: "creator1",
 		Actions: []model.Action{
 			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "msg1"}},
 			{ID: "act2", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch3", Body: "msg2"}},
@@ -128,6 +134,7 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 
 func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
 		return p.Message == "AI said: hello from AI"
 	})).Return(&mmmodel.Post{
@@ -148,8 +155,9 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	executor := NewFlowExecutor(registry)
 
 	f := &model.Flow{
-		ID:   "flow1",
-		Name: "Chained AI Test",
+		ID:        "flow1",
+		Name:      "Chained AI Test",
+		CreatedBy: "creator1",
 		Actions: []model.Action{
 			{
 				ID: "ai_step",
@@ -198,4 +206,32 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 	err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown action type")
+}
+
+func TestFlowExecutor_PermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(false)
+
+	registry := NewRegistry()
+	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
+
+	executor := NewFlowExecutor(registry)
+
+	f := &model.Flow{
+		ID:        "flow1",
+		Name:      "Test",
+		CreatedBy: "creator1",
+		Actions: []model.Action{
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "msg"}},
+		},
+	}
+	triggerData := model.TriggerData{
+		Post: &model.SafePost{Id: "post1", ChannelId: "ch1"},
+		User: &model.SafeUser{Id: "user1"},
+	}
+
+	err := executor.Execute(f, triggerData)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }

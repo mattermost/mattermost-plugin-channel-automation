@@ -60,10 +60,17 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
 	)
 
+	var channelID string
+	if ctx.Trigger.Channel != nil {
+		channelID = ctx.Trigger.Channel.Id
+	}
+
 	req := bridgeclient.CompletionRequest{
 		Posts: []bridgeclient.Post{
 			{Role: "user", Message: rendered},
 		},
+		UserID:    ctx.CreatedBy,
+		ChannelID: channelID,
 	}
 
 	var response string

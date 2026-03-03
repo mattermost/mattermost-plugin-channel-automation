@@ -20,8 +20,9 @@ func NewFlowExecutor(registry *Registry) *FlowExecutor {
 // Returns an error on the first failure or if an action type is unknown.
 func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) error {
 	ctx := &model.FlowContext{
-		Trigger: triggerData,
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: f.CreatedBy,
+		Trigger:   triggerData,
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	for _, action := range f.Actions {

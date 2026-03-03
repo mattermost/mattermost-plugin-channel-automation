@@ -10,6 +10,7 @@ const templateVariables = `{
     "Post": {
       "Id": "string",
       "ChannelId": "string",
+      "ThreadId": "string",
       "Message": "string"
     },
     "Channel": {
