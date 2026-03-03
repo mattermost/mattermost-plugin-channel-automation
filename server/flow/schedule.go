@@ -64,7 +64,7 @@ func (sm *ScheduleManager) Start() error {
 	}
 
 	for _, f := range flows {
-		if f.Trigger.Type != "schedule" || !f.Enabled {
+		if f.Trigger.Schedule == nil || !f.Enabled {
 			continue
 		}
 		if err := sm.startJob(f); err != nil {
@@ -96,14 +96,14 @@ func (sm *ScheduleManager) Stop() {
 // only restarts the cluster job when the schedule-relevant fields
 // (Trigger.Type, Enabled, Interval, StartAt) actually changed.
 func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) {
-	oldIsActive := existing != nil && existing.Trigger.Type == "schedule" && existing.Enabled
-	newIsActive := f.Trigger.Type == "schedule" && f.Enabled
+	oldIsActive := existing != nil && existing.Trigger.Schedule != nil && existing.Enabled
+	newIsActive := f.Trigger.Schedule != nil && f.Enabled
 
 	// Determine whether the schedule parameters changed.
 	scheduleChanged := true // default true for create (no existing)
 	if oldIsActive && newIsActive {
-		scheduleChanged = existing.Trigger.Interval != f.Trigger.Interval ||
-			existing.Trigger.StartAt != f.Trigger.StartAt
+		scheduleChanged = existing.Trigger.Schedule.Interval != f.Trigger.Schedule.Interval ||
+			existing.Trigger.Schedule.StartAt != f.Trigger.Schedule.StartAt
 	}
 
 	// Stop the old job if it was active and either no longer active or params changed.
@@ -129,16 +129,16 @@ func (sm *ScheduleManager) RemoveFlow(flowID string) {
 }
 
 func (sm *ScheduleManager) startJob(f *model.Flow) error {
-	interval, err := time.ParseDuration(f.Trigger.Interval)
+	interval, err := time.ParseDuration(f.Trigger.Schedule.Interval)
 	if err != nil {
 		return err
 	}
 
 	key := scheduleJobKeyPrefix + f.ID
-	waitFn := makeScheduleWaitInterval(interval, f.Trigger.StartAt)
+	waitFn := makeScheduleWaitInterval(interval, f.Trigger.Schedule.StartAt)
 	flowID := f.ID
 	flowName := f.Name
-	intervalStr := f.Trigger.Interval
+	intervalStr := f.Trigger.Schedule.Interval
 
 	job, err := sm.scheduleFn(sm.api, key, waitFn, func() {
 		sm.fireSchedule(flowID, flowName, intervalStr)
@@ -151,7 +151,7 @@ func (sm *ScheduleManager) startJob(f *model.Flow) error {
 	sm.jobs[f.ID] = job
 	sm.mu.Unlock()
 
-	sm.api.LogInfo("Schedule job started", "flow_id", f.ID, "flow_name", f.Name, "interval", f.Trigger.Interval)
+	sm.api.LogInfo("Schedule job started", "flow_id", f.ID, "flow_name", f.Name, "interval", f.Trigger.Schedule.Interval)
 	return nil
 }
 

@@ -24,21 +24,21 @@ const scheduleTrigger: TriggerConfig = {
 
     fromTrigger(trigger: Trigger): TriggerFormState {
         return {
-            interval: trigger.interval ?? '',
-            start_at: trigger.start_at ? new Date(trigger.start_at).toISOString().slice(0, 16) : '',
+            interval: trigger.schedule?.interval ?? '',
+            start_at: trigger.schedule?.start_at ? new Date(trigger.schedule.start_at).toISOString().slice(0, 16) : '',
         };
     },
 
     toTrigger(state: TriggerFormState): Trigger {
-        const trigger: Trigger = {type: 'schedule', interval: state.interval};
+        const params: {interval: string; start_at?: number} = {interval: state.interval};
         if (state.start_at) {
-            trigger.start_at = new Date(state.start_at).getTime();
+            params.start_at = new Date(state.start_at).getTime();
         }
-        return trigger;
+        return {schedule: params};
     },
 
     formatSummary(trigger: Trigger): string {
-        return `every ${trigger.interval ?? '?'}`;
+        return `every ${trigger.schedule?.interval ?? '?'}`;
     },
 
     templateVariables,

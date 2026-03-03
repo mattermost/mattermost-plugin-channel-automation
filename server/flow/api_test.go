@@ -37,8 +37,8 @@ func TestAPI_CreateFlow(t *testing.T) {
 	body := `{
 		"name": "Test Flow",
 		"enabled": true,
-		"trigger": {"type": "message_posted", "channel_id": "ch1"},
-		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -59,7 +59,8 @@ func TestAPI_CreateFlow(t *testing.T) {
 	assert.Equal(t, created.CreatedAt, created.UpdatedAt)
 	require.Len(t, created.Actions, 1)
 	assert.NotEmpty(t, created.Actions[0].ID)
-	assert.Equal(t, "hello", created.Actions[0].Body)
+	require.NotNil(t, created.Actions[0].SendMessage)
+	assert.Equal(t, "hello", created.Actions[0].SendMessage.Body)
 
 	// Verify it was persisted.
 	got, err := store.Get(created.ID)
@@ -85,7 +86,7 @@ func TestAPI_GetFlow(t *testing.T) {
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
 		Name:    "Flow 1",
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	w := httptest.NewRecorder()
@@ -114,8 +115,8 @@ func TestAPI_GetFlow_NotFound(t *testing.T) {
 func TestAPI_ListFlows(t *testing.T) {
 	router, store := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch2"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
@@ -153,15 +154,15 @@ func TestAPI_UpdateFlow(t *testing.T) {
 		Name:      "Original",
 		CreatedAt: 1000,
 		CreatedBy: "original-user",
-		Trigger:   model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}
 	require.NoError(t, store.Save(original))
 
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"type": "message_posted", "channel_id": "ch2"},
-		"actions": [{"name": "New Action", "type": "send_message", "channel_id": "ch3", "body": "updated"}]
+		"trigger": {"message_posted": {"channel_id": "ch2"}},
+		"actions": [{"name": "New Action", "send_message": {"channel_id": "ch3", "body": "updated"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -198,7 +199,7 @@ func TestAPI_UpdateFlow_NotFound(t *testing.T) {
 func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
 	router, store := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString("not json"))
@@ -213,8 +214,8 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"type": "schedule"},
-		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+		"trigger": {"schedule": {}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -232,8 +233,8 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"type": "schedule", "interval": "1m"},
-		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+		"trigger": {"schedule": {"interval": "1m"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -251,8 +252,8 @@ func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
 	body := `{
 		"name": "Bad Trigger",
 		"enabled": true,
-		"trigger": {"type": "unknown_type"},
-		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+		"trigger": {},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -268,13 +269,13 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"type": "schedule", "interval": "2m"}
+		"trigger": {"schedule": {"interval": "2m"}}
 	}`
 
 	w := httptest.NewRecorder()
@@ -288,7 +289,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 func TestAPI_DeleteFlow(t *testing.T) {
 	router, store := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)

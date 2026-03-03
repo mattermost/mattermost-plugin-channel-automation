@@ -25,9 +25,9 @@ func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) err
 	}
 
 	for _, action := range f.Actions {
-		handler, ok := e.registry.GetAction(action.Type)
+		handler, ok := e.registry.GetAction(action.Type())
 		if !ok {
-			return fmt.Errorf("unknown action type %q for action %q", action.Type, action.ID)
+			return fmt.Errorf("unknown action type %q for action %q", action.Type(), action.ID)
 		}
 
 		output, err := handler.Execute(&action, ctx)

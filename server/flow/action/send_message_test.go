@@ -90,10 +90,11 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "ch2",
-		Body:      "Hello {{.Trigger.User.Username}}",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "Hello {{.Trigger.User.Username}}",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
@@ -124,10 +125,11 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "{{.Trigger.Channel.Id}}",
-		Body:      "hello",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "{{.Trigger.Channel.Id}}",
+			Body:      "hello",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
@@ -157,11 +159,12 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:            "act1",
-		Type:          "send_message",
-		ChannelID:     "ch1",
-		ReplyToPostID: "parent-post-id",
-		Body:          "threaded reply",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "parent-post-id",
+			Body:          "threaded reply",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},
@@ -189,11 +192,12 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:            "act1",
-		Type:          "send_message",
-		ChannelID:     "ch1",
-		ReplyToPostID: "{{.Trigger.Post.Id}}",
-		Body:          "reply",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "{{.Trigger.Post.Id}}",
+			Body:          "reply",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
@@ -216,11 +220,12 @@ func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:            "act1",
-		Type:          "send_message",
-		ChannelID:     "ch1",
-		ReplyToPostID: "{{.Invalid",
-		Body:          "hello",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "{{.Invalid",
+			Body:          "hello",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},
@@ -243,10 +248,11 @@ func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "ch1",
-		Body:      "hello",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch1",
+			Body:      "hello",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},
@@ -267,10 +273,11 @@ func TestSendMessageAction_Execute_BadChannelIDTemplate(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "{{.Invalid",
-		Body:      "hello",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "{{.Invalid",
+			Body:      "hello",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},
@@ -289,10 +296,11 @@ func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "ch2",
-		Body:      "Hello",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "Hello",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},
@@ -310,10 +318,11 @@ func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
-		ID:        "act1",
-		Type:      "send_message",
-		ChannelID: "ch2",
-		Body:      "{{.Invalid",
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch2",
+			Body:      "{{.Invalid",
+		},
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{},

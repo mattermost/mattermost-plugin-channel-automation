@@ -70,9 +70,9 @@ func TestStore_SaveAndGet(t *testing.T) {
 		ID:      "flow1",
 		Name:    "Test Flow",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{
-			{ID: "act1", Name: "Send", Type: "send_message", ChannelID: "ch2", Body: "hello"},
+			{ID: "act1", Name: "Send", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "hello"}},
 		},
 	}
 
@@ -84,10 +84,12 @@ func TestStore_SaveAndGet(t *testing.T) {
 	assert.Equal(t, "flow1", got.ID)
 	assert.Equal(t, "Test Flow", got.Name)
 	assert.True(t, got.Enabled)
-	assert.Equal(t, "message_posted", got.Trigger.Type)
-	assert.Equal(t, "ch1", got.Trigger.ChannelID)
+	assert.Equal(t, "message_posted", got.Trigger.Type())
+	require.NotNil(t, got.Trigger.MessagePosted)
+	assert.Equal(t, "ch1", got.Trigger.MessagePosted.ChannelID)
 	require.Len(t, got.Actions, 1)
-	assert.Equal(t, "hello", got.Actions[0].Body)
+	require.NotNil(t, got.Actions[0].SendMessage)
+	assert.Equal(t, "hello", got.Actions[0].SendMessage.Body)
 }
 
 func TestStore_GetNonExistent(t *testing.T) {
@@ -105,8 +107,8 @@ func TestStore_List(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, flows)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch2"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	flows, err = store.List()
 	require.NoError(t, err)
@@ -118,7 +120,7 @@ func TestStore_List(t *testing.T) {
 func TestStore_Delete(t *testing.T) {
 	store, _ := setupStore(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	got, err := store.Get("f1")
 	require.NoError(t, err)
@@ -144,8 +146,8 @@ func TestStore_TriggerIndex(t *testing.T) {
 	store, kv := setupStore(t)
 	kvStore := store.(*KVStore)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	ids, err := kvStore.GetFlowIDsForChannel("ch1")
 	require.NoError(t, err)
@@ -172,14 +174,14 @@ func TestStore_TriggerIndex_UpdateChannel(t *testing.T) {
 	store, _ := setupStore(t)
 	kvStore := store.(*KVStore)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	ids, err := kvStore.GetFlowIDsForChannel("ch1")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"f1"}, ids)
 
 	// Update flow to watch ch2.
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch2"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	ids, err = kvStore.GetFlowIDsForChannel("ch1")
 	require.NoError(t, err)
@@ -195,8 +197,8 @@ func TestStore_TriggerIndex_NoDuplicates(t *testing.T) {
 	kvStore := store.(*KVStore)
 
 	// Save the same flow twice (simulating update with same channel).
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	ids, err := kvStore.GetFlowIDsForChannel("ch1")
 	require.NoError(t, err)
@@ -206,9 +208,9 @@ func TestStore_TriggerIndex_NoDuplicates(t *testing.T) {
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch2"}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f3", Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f3", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 	require.NoError(t, store.Delete("f2"))
 
 	kv.mu.Lock()

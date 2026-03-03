@@ -17,7 +17,7 @@ func TestMessagePostedTrigger_Type(t *testing.T) {
 
 func TestMessagePostedTrigger_Matches_CorrectChannel(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
-	trig := &model.Trigger{ChannelID: "ch1"}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
 	event := &model.Event{
 		Type: "message_posted",
 		Post: &mmmodel.Post{ChannelId: "ch1"},
@@ -28,7 +28,7 @@ func TestMessagePostedTrigger_Matches_CorrectChannel(t *testing.T) {
 
 func TestMessagePostedTrigger_Matches_WrongChannel(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
-	trig := &model.Trigger{ChannelID: "ch1"}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
 	event := &model.Event{
 		Type: "message_posted",
 		Post: &mmmodel.Post{ChannelId: "ch2"},
@@ -39,7 +39,7 @@ func TestMessagePostedTrigger_Matches_WrongChannel(t *testing.T) {
 
 func TestMessagePostedTrigger_Matches_NilPost(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
-	trig := &model.Trigger{ChannelID: "ch1"}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
 	event := &model.Event{
 		Type: "message_posted",
 		Post: nil,

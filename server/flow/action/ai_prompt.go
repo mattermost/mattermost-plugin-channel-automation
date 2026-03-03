@@ -33,29 +33,30 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		return nil, fmt.Errorf("agents plugin is not installed or active")
 	}
 
-	prompt, _ := action.Config["prompt"].(string)
-	providerType, _ := action.Config["provider_type"].(string)
-	providerID, _ := action.Config["provider_id"].(string)
+	cfg := action.AIPrompt
+	if cfg == nil {
+		return nil, fmt.Errorf("ai_prompt action has no ai_prompt config")
+	}
 
-	if prompt == "" {
+	if cfg.Prompt == "" {
 		return nil, fmt.Errorf("missing required config key %q", "prompt")
 	}
-	if providerType == "" {
+	if cfg.ProviderType == "" {
 		return nil, fmt.Errorf("missing required config key %q", "provider_type")
 	}
-	if providerID == "" {
+	if cfg.ProviderID == "" {
 		return nil, fmt.Errorf("missing required config key %q", "provider_id")
 	}
 
-	rendered, err := renderTemplate(prompt, ctx)
+	rendered, err := renderTemplate(cfg.Prompt, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render template: %w", err)
 	}
 
 	a.api.LogDebug("AI prompt action: rendered prompt",
 		"action_id", action.ID,
-		"provider_type", providerType,
-		"provider_id", providerID,
+		"provider_type", cfg.ProviderType,
+		"provider_id", cfg.ProviderID,
 		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
 	)
 
@@ -66,13 +67,13 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 
 	var response string
-	switch providerType {
+	switch cfg.ProviderType {
 	case "agent":
-		response, err = a.bridgeClient.AgentCompletion(providerID, req)
+		response, err = a.bridgeClient.AgentCompletion(cfg.ProviderID, req)
 	case "service":
-		response, err = a.bridgeClient.ServiceCompletion(providerID, req)
+		response, err = a.bridgeClient.ServiceCompletion(cfg.ProviderID, req)
 	default:
-		return nil, fmt.Errorf("unsupported provider_type %q, must be \"agent\" or \"service\"", providerType)
+		return nil, fmt.Errorf("unsupported provider_type %q, must be \"agent\" or \"service\"", cfg.ProviderType)
 	}
 	if err != nil {
 		a.api.LogDebug("AI prompt action: completion failed",

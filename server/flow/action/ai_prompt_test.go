@@ -56,12 +56,11 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "Summarize: {{.Trigger.Post.Message}}",
-			"provider_type": "agent",
-			"provider_id":   "ai-bot",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Summarize: {{.Trigger.Post.Message}}",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
 		},
 	}
 	ctx := &model.FlowContext{
@@ -85,12 +84,11 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "Tell me about {{.Trigger.User.Username}}",
-			"provider_type": "service",
-			"provider_id":   "openai",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Tell me about {{.Trigger.User.Username}}",
+			ProviderType: "service",
+			ProviderID:   "openai",
 		},
 	}
 	ctx := &model.FlowContext{
@@ -114,12 +112,11 @@ func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai2",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        `Refine: {{(index .Steps "step1").Message}}`,
-			"provider_type": "agent",
-			"provider_id":   "ai-bot",
+		ID: "ai2",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       `Refine: {{(index .Steps "step1").Message}}`,
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
 		},
 	}
 	ctx := &model.FlowContext{
@@ -142,35 +139,35 @@ func TestAIPromptAction_Execute_MissingConfig(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	tests := []struct {
-		name   string
-		config map[string]any
-		errMsg string
+		name     string
+		aiPrompt *model.AIPromptActionConfig
+		errMsg   string
 	}{
 		{
-			name:   "missing prompt",
-			config: map[string]any{"provider_type": "agent", "provider_id": "bot"},
-			errMsg: `missing required config key "prompt"`,
+			name:     "missing prompt",
+			aiPrompt: &model.AIPromptActionConfig{ProviderType: "agent", ProviderID: "bot"},
+			errMsg:   `missing required config key "prompt"`,
 		},
 		{
-			name:   "missing provider_type",
-			config: map[string]any{"prompt": "hello", "provider_id": "bot"},
-			errMsg: `missing required config key "provider_type"`,
+			name:     "missing provider_type",
+			aiPrompt: &model.AIPromptActionConfig{Prompt: "hello", ProviderID: "bot"},
+			errMsg:   `missing required config key "provider_type"`,
 		},
 		{
-			name:   "missing provider_id",
-			config: map[string]any{"prompt": "hello", "provider_type": "agent"},
-			errMsg: `missing required config key "provider_id"`,
+			name:     "missing provider_id",
+			aiPrompt: &model.AIPromptActionConfig{Prompt: "hello", ProviderType: "agent"},
+			errMsg:   `missing required config key "provider_id"`,
 		},
 		{
-			name:   "nil config",
-			config: nil,
-			errMsg: `missing required config key "prompt"`,
+			name:     "nil config",
+			aiPrompt: nil,
+			errMsg:   `ai_prompt action has no ai_prompt config`,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			act := &model.Action{ID: "ai1", Type: "ai_prompt", Config: tc.config}
+			act := &model.Action{ID: "ai1", AIPrompt: tc.aiPrompt}
 			ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 			output, err := a.Execute(act, ctx)
@@ -186,12 +183,11 @@ func TestAIPromptAction_Execute_NilBridgeClient(t *testing.T) {
 	a := NewAIPromptAction(api, nil)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "hello",
-			"provider_type": "agent",
-			"provider_id":   "bot",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "bot",
 		},
 	}
 	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
@@ -208,12 +204,11 @@ func TestAIPromptAction_Execute_BridgeClientError(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "hello",
-			"provider_type": "agent",
-			"provider_id":   "bot",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "bot",
 		},
 	}
 	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
@@ -231,12 +226,11 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "{{.Invalid",
-			"provider_type": "agent",
-			"provider_id":   "bot",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "{{.Invalid",
+			ProviderType: "agent",
+			ProviderID:   "bot",
 		},
 	}
 	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
@@ -253,12 +247,11 @@ func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
-		ID:   "ai1",
-		Type: "ai_prompt",
-		Config: map[string]any{
-			"prompt":        "hello",
-			"provider_type": "unknown",
-			"provider_id":   "bot",
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "unknown",
+			ProviderID:   "bot",
 		},
 	}
 	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}

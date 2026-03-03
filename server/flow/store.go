@@ -85,13 +85,13 @@ func (s *KVStore) Save(f *model.Flow) error {
 	}
 
 	// Update trigger index: remove old entry, add new entry.
-	if old != nil && old.Trigger.ChannelID != "" {
-		if err := s.removeTriggerIndex(old.Trigger.ChannelID, f.ID); err != nil {
+	if old != nil && old.Trigger.MessagePosted != nil && old.Trigger.MessagePosted.ChannelID != "" {
+		if err := s.removeTriggerIndex(old.Trigger.MessagePosted.ChannelID, f.ID); err != nil {
 			return err
 		}
 	}
-	if f.Trigger.ChannelID != "" {
-		if err := s.addTriggerIndex(f.Trigger.ChannelID, f.ID); err != nil {
+	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
+		if err := s.addTriggerIndex(f.Trigger.MessagePosted.ChannelID, f.ID); err != nil {
 			return err
 		}
 	}
@@ -116,8 +116,8 @@ func (s *KVStore) Delete(id string) error {
 		return err
 	}
 
-	if f.Trigger.ChannelID != "" {
-		if err := s.removeTriggerIndex(f.Trigger.ChannelID, id); err != nil {
+	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
+		if err := s.removeTriggerIndex(f.Trigger.MessagePosted.ChannelID, id); err != nil {
 			return err
 		}
 	}

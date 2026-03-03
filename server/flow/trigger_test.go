@@ -41,13 +41,13 @@ func TestTriggerService_FindMatchingFlows_ReturnsEnabledFlows(t *testing.T) {
 		ID:      "f1",
 		Name:    "Enabled Flow",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Also Enabled",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
@@ -65,13 +65,13 @@ func TestTriggerService_FindMatchingFlows_FiltersDisabled(t *testing.T) {
 		ID:      "f1",
 		Name:    "Enabled",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Disabled",
 		Enabled: false,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
@@ -88,13 +88,13 @@ func TestTriggerService_FindMatchingFlows_AllDisabled(t *testing.T) {
 		ID:      "f1",
 		Name:    "Disabled 1",
 		Enabled: false,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Disabled 2",
 		Enabled: false,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
@@ -110,13 +110,13 @@ func TestTriggerService_FindMatchingFlows_DifferentChannels(t *testing.T) {
 		ID:      "f1",
 		Name:    "Channel 1 Flow",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Channel 2 Flow",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch2"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
 	}))
 
 	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
@@ -138,13 +138,13 @@ func TestTriggerService_FindMatchingFlows_DeletedFlowSkipped(t *testing.T) {
 		ID:      "f1",
 		Name:    "Will Delete",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Stays",
 		Enabled: true,
-		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	require.NoError(t, store.Delete("f1"))

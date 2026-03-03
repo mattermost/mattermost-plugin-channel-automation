@@ -12,21 +12,63 @@ type Flow struct {
 	CreatedBy string   `json:"created_by"`
 }
 
-// Trigger defines when a flow should fire.
-type Trigger struct {
-	Type      string `json:"type"`                 // "message_posted", "schedule"
-	ChannelID string `json:"channel_id,omitempty"` // channel to watch (message_posted)
-	Interval  string `json:"interval,omitempty"`   // Go duration string, e.g. "5m", "1h" (schedule)
-	StartAt   int64  `json:"start_at,omitempty"`   // Unix ms, 0 = start immediately (schedule)
+// MessagePostedConfig holds trigger config for the message_posted trigger type.
+type MessagePostedConfig struct {
+	ChannelID string `json:"channel_id"`
 }
 
-// Action defines a single step in a flow.
+// ScheduleConfig holds trigger config for the schedule trigger type.
+type ScheduleConfig struct {
+	Interval string `json:"interval"`
+	StartAt  int64  `json:"start_at,omitempty"`
+}
+
+// Trigger defines when a flow should fire. Exactly one config pointer should be set.
+type Trigger struct {
+	MessagePosted *MessagePostedConfig `json:"message_posted,omitempty"`
+	Schedule      *ScheduleConfig      `json:"schedule,omitempty"`
+}
+
+// Type returns the trigger type based on which config is present.
+func (t *Trigger) Type() string {
+	if t.MessagePosted != nil {
+		return "message_posted"
+	}
+	if t.Schedule != nil {
+		return "schedule"
+	}
+	return ""
+}
+
+// SendMessageActionConfig holds config for the send_message action type.
+type SendMessageActionConfig struct {
+	ChannelID     string `json:"channel_id"`
+	ReplyToPostID string `json:"reply_to_post_id,omitempty"`
+	Body          string `json:"body"`
+}
+
+// AIPromptActionConfig holds config for the ai_prompt action type.
+type AIPromptActionConfig struct {
+	Prompt       string `json:"prompt"`
+	ProviderType string `json:"provider_type"`
+	ProviderID   string `json:"provider_id"`
+}
+
+// Action defines a single step in a flow. Exactly one config pointer should be set.
 type Action struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	Type          string         `json:"type"`                       // "send_message", "ai_prompt"
-	ChannelID     string         `json:"channel_id"`                 // target channel
-	ReplyToPostID string         `json:"reply_to_post_id,omitempty"` // post ID to reply to (creates a thread)
-	Body          string         `json:"body"`                       // Go text/template string
-	Config        map[string]any `json:"config,omitempty"`           // action-type-specific configuration
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name"`
+	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
+	AIPrompt    *AIPromptActionConfig    `json:"ai_prompt,omitempty"`
+}
+
+// Type returns the action type based on which config is present.
+func (a *Action) Type() string {
+	if a.SendMessage != nil {
+		return "send_message"
+	}
+	if a.AIPrompt != nil {
+		return "ai_prompt"
+	}
+	return ""
 }

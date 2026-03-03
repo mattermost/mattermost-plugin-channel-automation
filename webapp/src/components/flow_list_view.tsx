@@ -6,6 +6,7 @@ import {getTriggerConfig} from 'triggers';
 import 'triggers/message_posted';
 import 'triggers/schedule';
 import type {Flow} from 'types';
+import {getTriggerType} from 'types';
 
 const styles = {
     header: {
@@ -56,11 +57,12 @@ const styles = {
 };
 
 function formatTrigger(flow: Flow): string {
-    const config = getTriggerConfig(flow.trigger.type);
+    const tt = getTriggerType(flow.trigger);
+    const config = getTriggerConfig(tt);
     if (config) {
         return `${config.label} ${config.formatSummary(flow.trigger)}`;
     }
-    return flow.trigger.type;
+    return tt;
 }
 
 const FlowListView: React.FC = () => {

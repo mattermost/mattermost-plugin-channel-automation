@@ -47,7 +47,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		ID:   "flow1",
 		Name: "Test",
 		Actions: []model.Action{
-			{ID: "act1", Type: "send_message", ChannelID: "ch2", Body: "Hello {{.Trigger.User.Username}}"},
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "Hello {{.Trigger.User.Username}}"}},
 		},
 	}
 	triggerData := model.TriggerData{
@@ -83,8 +83,8 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 		ID:   "flow1",
 		Name: "Test",
 		Actions: []model.Action{
-			{ID: "act1", Type: "send_message", ChannelID: "ch2", Body: "msg1"},
-			{ID: "act2", Type: "send_message", ChannelID: "ch3", Body: "msg2"},
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "msg1"}},
+			{ID: "act2", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch3", Body: "msg2"}},
 		},
 	}
 	triggerData := model.TriggerData{
@@ -110,8 +110,8 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 		ID:   "flow1",
 		Name: "Test",
 		Actions: []model.Action{
-			{ID: "act1", Type: "send_message", ChannelID: "ch2", Body: "msg1"},
-			{ID: "act2", Type: "send_message", ChannelID: "ch3", Body: "msg2"},
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "msg1"}},
+			{ID: "act2", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch3", Body: "msg2"}},
 		},
 	}
 	triggerData := model.TriggerData{
@@ -152,19 +152,19 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 		Name: "Chained AI Test",
 		Actions: []model.Action{
 			{
-				ID:   "ai_step",
-				Type: "ai_prompt",
-				Config: map[string]any{
-					"prompt":        "Summarize: {{.Trigger.Post.Message}}",
-					"provider_type": "agent",
-					"provider_id":   "ai-bot",
+				ID: "ai_step",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "Summarize: {{.Trigger.Post.Message}}",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
 				},
 			},
 			{
-				ID:        "send_step",
-				Type:      "send_message",
-				ChannelID: "ch2",
-				Body:      `AI said: {{(index .Steps "ai_step").Message}}`,
+				ID: "send_step",
+				SendMessage: &model.SendMessageActionConfig{
+					ChannelID: "ch2",
+					Body:      `AI said: {{(index .Steps "ai_step").Message}}`,
+				},
 			},
 		},
 	}
@@ -188,7 +188,7 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 		ID:   "flow1",
 		Name: "Test",
 		Actions: []model.Action{
-			{ID: "act1", Type: "nonexistent", ChannelID: "ch2", Body: "msg"},
+			{ID: "act1"},
 		},
 	}
 	triggerData := model.TriggerData{
@@ -197,5 +197,5 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 
 	err := executor.Execute(f, triggerData)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown action type "nonexistent"`)
+	assert.Contains(t, err.Error(), "unknown action type")
 }

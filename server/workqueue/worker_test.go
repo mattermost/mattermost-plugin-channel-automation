@@ -25,7 +25,7 @@ type testAction struct {
 	maxSeen   atomic.Int32
 }
 
-func (a *testAction) Type() string { return "test_action" }
+func (a *testAction) Type() string { return "send_message" }
 
 func (a *testAction) Execute(_ *model.Action, _ *model.FlowContext) (*model.StepOutput, error) {
 	cur := a.running.Add(1)
@@ -129,7 +129,7 @@ func TestWorkerPool_ProcessesItems(t *testing.T) {
 	act := &testAction{}
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 3 {
 		item := &model.WorkItem{
@@ -170,7 +170,7 @@ func TestWorkerPool_ConcurrencyLimit(t *testing.T) {
 
 	wp, store, flowStore := setupWorkerPool(t, 2, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 5 {
 		item := &model.WorkItem{
@@ -218,7 +218,7 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
@@ -259,7 +259,7 @@ func TestWorkerPool_NotifyWakesDispatcher(t *testing.T) {
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
 	wp.pollInterval = 10 * time.Minute // very long poll interval
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	wp.Start()
 	defer wp.Stop()
@@ -284,7 +284,7 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
@@ -337,7 +337,7 @@ func TestWorkerPool_DisabledFlow(t *testing.T) {
 	act := &testAction{}
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: false, Actions: []model.Action{{ID: "a1", Type: "test_action"}}})
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: false, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))

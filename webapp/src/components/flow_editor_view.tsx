@@ -7,6 +7,7 @@ import {getAllTriggerConfigs, getTriggerConfig} from 'triggers';
 import 'triggers/message_posted';
 import 'triggers/schedule';
 import type {AIBotInfo, Action} from 'types';
+import {getTriggerType} from 'types';
 
 interface ActionForm {
     id: string;
@@ -151,19 +152,31 @@ function newActionForm(): ActionForm {
 }
 
 function actionToForm(a: Action): ActionForm {
-    if (a.type === 'ai_prompt') {
+    if (a.ai_prompt) {
         return {
             id: a.id,
             name: a.name,
-            type: a.type,
+            type: 'ai_prompt',
             channel_id: '',
             reply_to_post_id: '',
             body: '',
-            prompt: a.config?.prompt ?? '',
-            provider_id: a.config?.provider_id ?? '',
+            prompt: a.ai_prompt.prompt ?? '',
+            provider_id: a.ai_prompt.provider_id ?? '',
         };
     }
-    return {id: a.id, name: a.name, type: a.type, channel_id: a.channel_id, reply_to_post_id: a.reply_to_post_id ?? '', body: a.body, prompt: '', provider_id: ''};
+    if (a.send_message) {
+        return {
+            id: a.id,
+            name: a.name,
+            type: 'send_message',
+            channel_id: a.send_message.channel_id,
+            reply_to_post_id: a.send_message.reply_to_post_id ?? '',
+            body: a.send_message.body,
+            prompt: '',
+            provider_id: '',
+        };
+    }
+    return {id: a.id, name: a.name, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
 
 const FlowEditorView: React.FC = () => {
@@ -214,8 +227,9 @@ const FlowEditorView: React.FC = () => {
                 }
                 setName(flow.name);
                 setEnabled(flow.enabled);
-                setTriggerType(flow.trigger.type);
-                const config = getTriggerConfig(flow.trigger.type);
+                const tt = getTriggerType(flow.trigger);
+                setTriggerType(tt);
+                const config = getTriggerConfig(tt);
                 setTriggerState(config?.fromTrigger(flow.trigger) ?? {});
                 setActions((flow.actions ?? []).map(actionToForm));
             } catch (err: unknown) {
@@ -259,21 +273,18 @@ const FlowEditorView: React.FC = () => {
         setSaving(true);
         setError(null);
 
-        const trigger = triggerConfig?.toTrigger(triggerState) ?? {type: triggerType};
+        const trigger = triggerConfig?.toTrigger(triggerState) ?? {};
 
         const data = {
             name,
             enabled,
             trigger,
-            actions: actions.map((a) => {
+            actions: actions.map((a): Action => {
                 if (a.type === 'ai_prompt') {
                     return {
                         id: a.id,
                         name: a.name,
-                        type: a.type,
-                        channel_id: '',
-                        body: '',
-                        config: {
+                        ai_prompt: {
                             prompt: a.prompt,
                             provider_type: 'agent',
                             provider_id: a.provider_id,
@@ -283,12 +294,13 @@ const FlowEditorView: React.FC = () => {
                 const action: Action = {
                     id: a.id,
                     name: a.name,
-                    type: a.type,
-                    channel_id: a.channel_id,
-                    body: a.body,
+                    send_message: {
+                        channel_id: a.channel_id,
+                        body: a.body,
+                    },
                 };
-                if (a.reply_to_post_id) {
-                    action.reply_to_post_id = a.reply_to_post_id;
+                if (a.reply_to_post_id && action.send_message) {
+                    action.send_message.reply_to_post_id = a.reply_to_post_id;
                 }
                 return action;
             }),

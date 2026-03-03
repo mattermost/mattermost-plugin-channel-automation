@@ -35,15 +35,15 @@ const messagePostedTrigger: TriggerConfig = {
     },
 
     fromTrigger(trigger: Trigger): TriggerFormState {
-        return {channel_id: trigger.channel_id ?? ''};
+        return {channel_id: trigger.message_posted?.channel_id ?? ''};
     },
 
     toTrigger(state: TriggerFormState): Trigger {
-        return {type: 'message_posted', channel_id: state.channel_id};
+        return {message_posted: {channel_id: state.channel_id}};
     },
 
     formatSummary(trigger: Trigger): string {
-        return `on ${trigger.channel_id ?? ''}`;
+        return `on ${trigger.message_posted?.channel_id ?? ''}`;
     },
 
     templateVariables,

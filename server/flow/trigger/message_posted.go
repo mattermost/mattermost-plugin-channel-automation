@@ -13,5 +13,8 @@ func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Even
 	if event.Post == nil {
 		return false
 	}
-	return trigger.ChannelID == event.Post.ChannelId
+	if trigger.MessagePosted == nil {
+		return false
+	}
+	return trigger.MessagePosted.ChannelID == event.Post.ChannelId
 }
