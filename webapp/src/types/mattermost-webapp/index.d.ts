@@ -909,7 +909,7 @@ export interface PluginRegistry {
     registerProduct(
         ...args: [
             baseURL: string,
-            switcherIcon: string,
+            switcherIcon: ReactResolvable,
             switcherText: string,
             switcherLinkURL: string,
             mainComponent: ReactResolvable,

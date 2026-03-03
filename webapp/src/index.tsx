@@ -4,7 +4,7 @@ import type {Store} from 'redux';
 import type {GlobalState} from '@mattermost/types/store';
 
 import HeaderCenter from 'components/header_center';
-import {iconSVG} from 'components/icon';
+import {Icon} from 'components/icon';
 import MainApp from 'components/main_app';
 
 import type {PluginRegistry} from 'types/mattermost-webapp';
@@ -14,7 +14,7 @@ export default class Plugin {
     public async initialize(registry: PluginRegistry, store: Store<GlobalState>) {
         registry.registerProduct(
             `/plug/${manifest.id}`,
-            iconSVG,
+            Icon,
             'Channel Automation',
             `/plug/${manifest.id}`,
             MainApp,
