@@ -14,8 +14,10 @@ type Flow struct {
 
 // Trigger defines when a flow should fire.
 type Trigger struct {
-	Type      string `json:"type"`       // "message_posted"
-	ChannelID string `json:"channel_id"` // channel to watch
+	Type      string `json:"type"`                 // "message_posted", "schedule"
+	ChannelID string `json:"channel_id,omitempty"` // channel to watch (message_posted)
+	Interval  string `json:"interval,omitempty"`   // Go duration string, e.g. "5m", "1h" (schedule)
+	StartAt   int64  `json:"start_at,omitempty"`   // Unix ms, 0 = start immediately (schedule)
 }
 
 // Action defines a single step in a flow.

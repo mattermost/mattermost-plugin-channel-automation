@@ -1,7 +1,11 @@
 import {createFlow, getAIBots, getFlow, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 import {useHistory, useParams, useRouteMatch} from 'react-router-dom';
+import type {TriggerFormState} from 'triggers';
+import {getAllTriggerConfigs, getTriggerConfig} from 'triggers';
 
+import 'triggers/message_posted';
+import 'triggers/schedule';
 import type {AIBotInfo, Action} from 'types';
 
 interface ActionForm {
@@ -139,6 +143,9 @@ const styles = {
     } as React.CSSProperties,
 };
 
+const allTriggers = getAllTriggerConfigs();
+const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
+
 function newActionForm(): ActionForm {
     return {id: '', name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
@@ -169,14 +176,18 @@ const FlowEditorView: React.FC = () => {
 
     const [name, setName] = useState('');
     const [enabled, setEnabled] = useState(false);
-    const [triggerType, setTriggerType] = useState('message_posted');
-    const [triggerChannelId, setTriggerChannelId] = useState('');
+    const [triggerType, setTriggerType] = useState(defaultTriggerType);
+    const [triggerState, setTriggerState] = useState<TriggerFormState>(
+        () => getTriggerConfig(defaultTriggerType)?.defaultFormState() ?? {},
+    );
     const [actions, setActions] = useState<ActionForm[]>([]);
     const [agents, setAgents] = useState<AIBotInfo[]>([]);
     const [agentsError, setAgentsError] = useState<string | null>(null);
     const [loading, setLoading] = useState(Boolean(flowId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const triggerConfig = getTriggerConfig(triggerType);
 
     useEffect(() => {
         getAIBots().then((bots) => {
@@ -204,7 +215,8 @@ const FlowEditorView: React.FC = () => {
                 setName(flow.name);
                 setEnabled(flow.enabled);
                 setTriggerType(flow.trigger.type);
-                setTriggerChannelId(flow.trigger.channel_id);
+                const config = getTriggerConfig(flow.trigger.type);
+                setTriggerState(config?.fromTrigger(flow.trigger) ?? {});
                 setActions((flow.actions ?? []).map(actionToForm));
             } catch (err: unknown) {
                 if (!cancelled) {
@@ -221,6 +233,16 @@ const FlowEditorView: React.FC = () => {
         };
     }, [flowId]);
 
+    const handleTriggerTypeChange = useCallback((newType: string) => {
+        setTriggerType(newType);
+        const config = getTriggerConfig(newType);
+        setTriggerState(config?.defaultFormState() ?? {});
+    }, []);
+
+    const handleTriggerFieldChange = useCallback((field: string, value: string) => {
+        setTriggerState((prev) => ({...prev, [field]: value}));
+    }, []);
+
     const handleAddAction = useCallback(() => {
         setActions((prev) => [...prev, newActionForm()]);
     }, []);
@@ -236,10 +258,13 @@ const FlowEditorView: React.FC = () => {
     const handleSave = useCallback(async () => {
         setSaving(true);
         setError(null);
+
+        const trigger = triggerConfig?.toTrigger(triggerState) ?? {type: triggerType};
+
         const data = {
             name,
             enabled,
-            trigger: {type: triggerType, channel_id: triggerChannelId},
+            trigger,
             actions: actions.map((a) => {
                 if (a.type === 'ai_prompt') {
                     return {
@@ -279,7 +304,7 @@ const FlowEditorView: React.FC = () => {
             setError(err instanceof Error ? err.message : 'Failed to save flow');
             setSaving(false);
         }
-    }, [flowId, name, enabled, triggerType, triggerChannelId, actions, history, workflowsUrl]);
+    }, [flowId, name, enabled, triggerType, triggerState, triggerConfig, actions, history, workflowsUrl]);
 
     if (loading) {
         return <p>{'Loading...'}</p>;
@@ -317,48 +342,30 @@ const FlowEditorView: React.FC = () => {
                 </label>
             </div>
             <h3>{'Trigger'}</h3>
-            <details style={styles.details}>
-                <summary style={styles.summary}>{'Available template variables'}</summary>
-                <pre style={styles.pre}>{`{
-  "Trigger": {
-    "Post": {
-      "Id": "string",
-      "ChannelId": "string",
-      "Message": "string"
-    },
-    "Channel": {
-      "Id": "string",
-      "Name": "string",
-      "DisplayName": "string"
-    },
-    "User": {
-      "Id": "string",
-      "Username": "string",
-      "FirstName": "string",
-      "LastName": "string"
-    }
-  }
-}`}</pre>
-            </details>
+            {triggerConfig && (
+                <details style={styles.details}>
+                    <summary style={styles.summary}>{'Available template variables'}</summary>
+                    <pre style={styles.pre}>{triggerConfig.templateVariables}</pre>
+                </details>
+            )}
             <div style={styles.formGroup}>
                 <label style={styles.label}>{'Type'}</label>
                 <select
                     style={styles.select}
                     value={triggerType}
-                    onChange={(e) => setTriggerType(e.target.value)}
+                    onChange={(e) => handleTriggerTypeChange(e.target.value)}
                 >
-                    <option value='message_posted'>{'message_posted'}</option>
+                    {allTriggers.map((t) => (
+                        <option
+                            key={t.type}
+                            value={t.type}
+                        >
+                            {t.label}
+                        </option>
+                    ))}
                 </select>
             </div>
-            <div style={styles.formGroup}>
-                <label style={styles.label}>{'Channel ID'}</label>
-                <input
-                    style={styles.input}
-                    type='text'
-                    value={triggerChannelId}
-                    onChange={(e) => setTriggerChannelId(e.target.value)}
-                />
-            </div>
+            {triggerConfig?.renderFields(triggerState, handleTriggerFieldChange, styles)}
             <h3>{'Actions'}</h3>
             {actions.map((action, index) => (
                 <div

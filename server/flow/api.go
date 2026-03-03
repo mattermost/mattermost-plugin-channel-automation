@@ -16,13 +16,14 @@ const maxRequestBodySize = 1 << 20 // 1 MB
 
 // APIHandler provides HTTP handlers for flow CRUD operations.
 type APIHandler struct {
-	store model.Store
-	api   plugin.API
+	store           model.Store
+	api             plugin.API
+	scheduleManager *ScheduleManager
 }
 
 // NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
-	return &APIHandler{store: store, api: api}
+func NewAPIHandler(store model.Store, api plugin.API, scheduleManager *ScheduleManager) *APIHandler {
+	return &APIHandler{store: store, api: api, scheduleManager: scheduleManager}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -68,10 +69,19 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := model.ValidateTrigger(&f.Trigger); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to create flow", "error", err.Error())
 		http.Error(w, "failed to create flow", http.StatusInternalServerError)
 		return
+	}
+
+	if h.scheduleManager != nil {
+		h.scheduleManager.SyncFlow(nil, &f)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -135,10 +145,19 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := model.ValidateTrigger(&f.Trigger); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to update flow", "error", err.Error())
 		http.Error(w, "failed to update flow", http.StatusInternalServerError)
 		return
+	}
+
+	if h.scheduleManager != nil {
+		h.scheduleManager.SyncFlow(existing, &f)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -154,6 +173,10 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		h.api.LogError("Failed to delete flow", "error", err.Error())
 		http.Error(w, "failed to delete flow", http.StatusInternalServerError)
 		return
+	}
+
+	if h.scheduleManager != nil {
+		h.scheduleManager.RemoveFlow(id)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

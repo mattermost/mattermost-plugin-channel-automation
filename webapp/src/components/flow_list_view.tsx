@@ -1,7 +1,10 @@
 import {deleteFlow, getFlows, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 import {useHistory, useRouteMatch} from 'react-router-dom';
+import {getTriggerConfig} from 'triggers';
 
+import 'triggers/message_posted';
+import 'triggers/schedule';
 import type {Flow} from 'types';
 
 const styles = {
@@ -51,6 +54,14 @@ const styles = {
         marginBottom: 12,
     } as React.CSSProperties,
 };
+
+function formatTrigger(flow: Flow): string {
+    const config = getTriggerConfig(flow.trigger.type);
+    if (config) {
+        return `${config.label} ${config.formatSummary(flow.trigger)}`;
+    }
+    return flow.trigger.type;
+}
 
 const FlowListView: React.FC = () => {
     const history = useHistory();
@@ -139,7 +150,7 @@ const FlowListView: React.FC = () => {
                                 onClick={() => history.push(`${url}/${flow.id}/edit`)}
                             >
                                 <td style={styles.td}>{flow.name}</td>
-                                <td style={styles.td}>{`${flow.trigger.type} on ${flow.trigger.channel_id}`}</td>
+                                <td style={styles.td}>{formatTrigger(flow)}</td>
                                 <td style={styles.td}>
                                     <input
                                         type='checkbox'

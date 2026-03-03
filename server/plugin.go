@@ -36,11 +36,12 @@ type Plugin struct {
 	workQueueStore *workqueue.Store
 	workerPool     *workqueue.WorkerPool
 
-	botUserID      string
-	registry       *flow.Registry
-	flowStore      model.Store
-	triggerService *flow.TriggerService
-	flowExecutor   *flow.FlowExecutor
+	botUserID       string
+	registry        *flow.Registry
+	flowStore       model.Store
+	triggerService  *flow.TriggerService
+	flowExecutor    *flow.FlowExecutor
+	scheduleManager *flow.ScheduleManager
 
 	// configurationLock synchronizes access to the configuration.
 	configurationLock sync.RWMutex
@@ -70,14 +71,13 @@ func (p *Plugin) OnActivate() error {
 
 	p.registry = flow.NewRegistry()
 	p.registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
+	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
 	p.flowStore = flow.NewStore(p.API)
 	p.triggerService = flow.NewTriggerService(p.flowStore, p.registry)
 	p.flowExecutor = flow.NewFlowExecutor(p.registry)
-
-	p.router = p.initRouter()
 
 	// Set up persistent work queue.
 	indexMu, err := cluster.NewMutex(p.API, "wq_index_mutex")
@@ -101,11 +101,24 @@ func (p *Plugin) OnActivate() error {
 	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.API, maxWorkers)
 	p.workerPool.Start()
 
+	// Start schedule manager after worker pool so scheduled items can be processed.
+	p.scheduleManager = flow.NewScheduleManager(p.API, p.flowStore, p.workQueueStore, p.workerPool)
+	if err := p.scheduleManager.Start(); err != nil {
+		p.API.LogError("Failed to start schedule manager", "err", err.Error())
+	}
+
+	// Initialize router last — it depends on scheduleManager.
+	p.router = p.initRouter()
+
 	return nil
 }
 
 // OnDeactivate is invoked when the plugin is deactivated.
 func (p *Plugin) OnDeactivate() error {
+	// Stop schedule manager first — it may be enqueuing items.
+	if p.scheduleManager != nil {
+		p.scheduleManager.Stop()
+	}
 	if p.workerPool != nil {
 		p.workerPool.Stop()
 	}

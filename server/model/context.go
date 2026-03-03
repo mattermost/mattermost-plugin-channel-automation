@@ -13,9 +13,16 @@ type FlowContext struct {
 // templates, preventing PII leakage and blocking method calls on
 // live model objects.
 type TriggerData struct {
-	Post    *SafePost    `json:"post,omitempty"`
-	Channel *SafeChannel `json:"channel,omitempty"`
-	User    *SafeUser    `json:"user,omitempty"`
+	Post     *SafePost     `json:"post,omitempty"`
+	Channel  *SafeChannel  `json:"channel,omitempty"`
+	User     *SafeUser     `json:"user,omitempty"`
+	Schedule *ScheduleInfo `json:"schedule,omitempty"`
+}
+
+// ScheduleInfo contains metadata about a schedule trigger firing.
+type ScheduleInfo struct {
+	FiredAt  int64  `json:"fired_at"` // Unix ms when schedule fired
+	Interval string `json:"interval"` // configured interval
 }
 
 // SafePost contains only the post fields needed for template rendering.

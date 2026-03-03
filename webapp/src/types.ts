@@ -1,6 +1,8 @@
 export interface Trigger {
     type: string;
-    channel_id: string;
+    channel_id?: string;
+    interval?: string;
+    start_at?: number;
 }
 
 export interface Action {

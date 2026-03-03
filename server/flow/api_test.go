@@ -24,7 +24,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
 
-	handler := NewAPIHandler(store, api)
+	handler := NewAPIHandler(store, api, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -205,6 +205,84 @@ func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
+	router, _ := setupAPI(t)
+
+	body := `{
+		"name": "Schedule Flow",
+		"enabled": true,
+		"trigger": {"type": "schedule"},
+		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "interval")
+}
+
+func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
+	router, _ := setupAPI(t)
+
+	body := `{
+		"name": "Schedule Flow",
+		"enabled": true,
+		"trigger": {"type": "schedule", "interval": "1m"},
+		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "at least")
+}
+
+func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
+	router, _ := setupAPI(t)
+
+	body := `{
+		"name": "Bad Trigger",
+		"enabled": true,
+		"trigger": {"type": "unknown_type"},
+		"actions": [{"name": "Send", "type": "send_message", "channel_id": "ch2", "body": "hello"}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
+	router, store := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{Type: "message_posted", ChannelID: "ch1"},
+	}))
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"type": "schedule", "interval": "2m"}
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "at least")
 }
 
 func TestAPI_DeleteFlow(t *testing.T) {
