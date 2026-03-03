@@ -1,5 +1,10 @@
 # Agent Instructions
 
+## On each session
+
+- Remember to update the documentation
+- Add/Update unit tests
+
 ## Build Commands
 
 - `make all` — Check style, run tests, and build the plugin bundle

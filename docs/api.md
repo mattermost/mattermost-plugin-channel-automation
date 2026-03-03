@@ -4,10 +4,9 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 ## Authentication
 
-All endpoints require two layers of authentication, enforced via middleware:
+All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-1. **Mattermost session** — The `Mattermost-User-ID` header must be present (set automatically by the Mattermost server for authenticated plugin requests). Returns `401 Unauthorized` if missing.
-2. **System Admin role** — The authenticated user must have the `manage_system` permission. Returns `403 Forbidden` otherwise.
+Write operations (create, update) additionally require the authenticated user to be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with the failing channel ID otherwise.
 
 ## Endpoints
 
@@ -23,35 +22,37 @@ Returns all flows.
 
 ```json
 [
-  {
-    "id": "abc123...",
-    "name": "Notify on new posts",
-    "enabled": true,
-    "trigger": {
-      "type": "message_posted",
-      "channel_id": "channel-id-1"
-    },
-    "actions": [
-      {
-        "id": "def456...",
-        "name": "Send notification",
-        "type": "send_message",
-        "channel_id": "channel-id-2",
-        "body": "New post by {{.Trigger.User.Username}}"
-      }
-    ],
-    "created_at": 1735689600000,
-    "updated_at": 1735689600000,
-    "created_by": "user-id"
-  }
+    {
+        "id": "abc123...",
+        "name": "Notify on new posts",
+        "enabled": true,
+        "trigger": {
+            "message_posted": {
+                "channel_id": "channel-id-1"
+            }
+        },
+        "actions": [
+            {
+                "id": "def456...",
+                "name": "Send notification",
+                "send_message": {
+                    "channel_id": "channel-id-2",
+                    "body": "New post by {{.Trigger.User.Username}}"
+                }
+            }
+        ],
+        "created_at": 1735689600000,
+        "updated_at": 1735689600000,
+        "created_by": "user-id"
+    }
 ]
 ```
 
 **Errors:**
 
-| Status | Body |
-|--------|------|
-| 500 | `failed to list flows` |
+| Status | Body                   |
+| ------ | ---------------------- |
+| 500    | `failed to list flows` |
 
 ---
 
@@ -67,20 +68,22 @@ Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `cr
 
 ```json
 {
-  "name": "Notify on new posts",
-  "enabled": true,
-  "trigger": {
-    "type": "message_posted",
-    "channel_id": "channel-id-1"
-  },
-  "actions": [
-    {
-      "name": "Send notification",
-      "type": "send_message",
-      "channel_id": "channel-id-2",
-      "body": "New post by {{.Trigger.User.Username}}"
-    }
-  ]
+    "name": "Notify on new posts",
+    "enabled": true,
+    "trigger": {
+        "message_posted": {
+            "channel_id": "channel-id-1"
+        }
+    },
+    "actions": [
+        {
+            "name": "Send notification",
+            "send_message": {
+                "channel_id": "channel-id-2",
+                "body": "New post by {{.Trigger.User.Username}}"
+            }
+        }
+    ]
 }
 ```
 
@@ -90,10 +93,11 @@ The created flow object with all server-assigned fields populated.
 
 **Errors:**
 
-| Status | Body |
-|--------|------|
-| 400 | `invalid request body` |
-| 500 | `failed to create flow` |
+| Status | Body                                                        |
+| ------ | ----------------------------------------------------------- |
+| 400    | `invalid request body`                                      |
+| 403    | `you do not have channel admin permissions on channel <id>` |
+| 500    | `failed to create flow`                                     |
 
 ---
 
@@ -111,10 +115,10 @@ The flow object.
 
 **Errors:**
 
-| Status | Body |
-|--------|------|
-| 404 | `flow not found` |
-| 500 | `failed to get flow` |
+| Status | Body                 |
+| ------ | -------------------- |
+| 404    | `flow not found`     |
+| 500    | `failed to get flow` |
 
 ---
 
@@ -130,20 +134,22 @@ Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `cre
 
 ```json
 {
-  "name": "Updated name",
-  "enabled": false,
-  "trigger": {
-    "type": "message_posted",
-    "channel_id": "channel-id-2"
-  },
-  "actions": [
-    {
-      "name": "New Action",
-      "type": "send_message",
-      "channel_id": "channel-id-3",
-      "body": "updated message"
-    }
-  ]
+    "name": "Updated name",
+    "enabled": false,
+    "trigger": {
+        "message_posted": {
+            "channel_id": "channel-id-2"
+        }
+    },
+    "actions": [
+        {
+            "name": "New Action",
+            "send_message": {
+                "channel_id": "channel-id-3",
+                "body": "updated message"
+            }
+        }
+    ]
 }
 ```
 
@@ -153,11 +159,12 @@ The updated flow object.
 
 **Errors:**
 
-| Status | Body |
-|--------|------|
-| 400 | `invalid request body` |
-| 404 | `flow not found` |
-| 500 | `failed to update flow` |
+| Status | Body                                                        |
+| ------ | ----------------------------------------------------------- |
+| 400    | `invalid request body`                                      |
+| 403    | `you do not have channel admin permissions on channel <id>` |
+| 404    | `flow not found`                                            |
+| 500    | `failed to update flow`                                     |
 
 ---
 
@@ -173,9 +180,9 @@ Deletes a flow. Returns success even if the flow doesn't exist.
 
 **Errors:**
 
-| Status | Body |
-|--------|------|
-| 500 | `failed to delete flow` |
+| Status | Body                    |
+| ------ | ----------------------- |
+| 500    | `failed to delete flow` |
 
 ---
 
@@ -183,35 +190,67 @@ Deletes a flow. Returns success even if the flow doesn't exist.
 
 ### Flow
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | 26-character unique ID (server-assigned) |
-| `name` | string | Display name |
-| `enabled` | boolean | Whether the flow is active |
-| `trigger` | [Trigger](#trigger) | When the flow fires |
-| `actions` | [Action](#action)[] | Steps to execute |
-| `created_at` | integer | Creation time in milliseconds since epoch (server-assigned) |
-| `updated_at` | integer | Last update time in milliseconds since epoch (server-assigned) |
-| `created_by` | string | User ID of the creator (server-assigned) |
+| Field        | Type                | Description                                                    |
+| ------------ | ------------------- | -------------------------------------------------------------- |
+| `id`         | string              | 26-character unique ID (server-assigned)                       |
+| `name`       | string              | Display name                                                   |
+| `enabled`    | boolean             | Whether the flow is active                                     |
+| `trigger`    | [Trigger](#trigger) | When the flow fires                                            |
+| `actions`    | [Action](#action)[] | Steps to execute                                               |
+| `created_at` | integer             | Creation time in milliseconds since epoch (server-assigned)    |
+| `updated_at` | integer             | Last update time in milliseconds since epoch (server-assigned) |
+| `created_by` | string              | User ID of the creator (server-assigned)                       |
 
 ### Trigger
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | string | Trigger type (see [Trigger types](#trigger-types)) |
-| `channel_id` | string | Channel to watch |
+Exactly one key should be set, indicating the trigger type:
+
+| Field            | Type                                        | Description                                     |
+| ---------------- | ------------------------------------------- | ----------------------------------------------- |
+| `message_posted` | [MessagePostedConfig](#messagepostedconfig) | _(optional)_ Fires on new messages in a channel |
+| `schedule`       | [ScheduleConfig](#scheduleconfig)           | _(optional)_ Fires on a recurring schedule      |
+
+#### MessagePostedConfig
+
+| Field        | Type   | Description                 |
+| ------------ | ------ | --------------------------- |
+| `channel_id` | string | Channel to watch (required) |
+
+#### ScheduleConfig
+
+| Field      | Type    | Description                                                                          |
+| ---------- | ------- | ------------------------------------------------------------------------------------ |
+| `interval` | string  | Go duration string, e.g. `"1h"`, `"30m"` (required, minimum 5m)                      |
+| `start_at` | integer | _(optional)_ Start time in milliseconds since epoch. Defaults to flow creation time. |
 
 ### Action
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique ID (auto-generated if omitted) |
-| `name` | string | Display name |
-| `type` | string | Action type (see [Action types](#action-types)) |
-| `channel_id` | string | Target channel ID. Supports Go templates. |
-| `reply_to_post_id` | string | *(optional)* Post ID to reply to, creating a thread. Supports Go templates. |
-| `body` | string | Message body as a Go `text/template` string |
-| `config` | object | *(optional)* Action-type-specific configuration |
+Exactly one type-specific config key should be set alongside `id` and `name`:
+
+| Field          | Type                                                | Description                                  |
+| -------------- | --------------------------------------------------- | -------------------------------------------- |
+| `id`           | string                                              | Unique ID (auto-generated if omitted)        |
+| `name`         | string                                              | Display name                                 |
+| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                 |
+| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service |
+
+#### SendMessageActionConfig
+
+| Field              | Type   | Description                                                                 |
+| ------------------ | ------ | --------------------------------------------------------------------------- |
+| `channel_id`       | string | Target channel ID. Supports Go templates.                                   |
+| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates. |
+| `body`             | string | Message body as a Go `text/template` string                                 |
+
+#### AIPromptActionConfig
+
+| Field           | Type   | Description                                     |
+| --------------- | ------ | ----------------------------------------------- |
+| `prompt`        | string | The prompt template (Go `text/template` syntax) |
+| `provider_type` | string | Either `"agent"` or `"service"`                 |
+| `provider_id`   | string | ID of the agent or service to use               |
+
+Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ---
 
@@ -220,6 +259,12 @@ Deletes a flow. Returns success even if the flow doesn't exist.
 ### `message_posted`
 
 Fires when a new message is posted in the specified channel.
+
+### `schedule`
+
+Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDuration` string (e.g. `"5m"`, `"1h"`, `"24h"`). The minimum interval is 5 minutes.
+
+If `start_at` is provided, the first execution is scheduled at that time. Otherwise, the schedule starts from the flow's creation time.
 
 ---
 
@@ -237,14 +282,6 @@ Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin b
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
-**Required `config` keys:**
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `prompt` | string | The prompt template (Go `text/template` syntax) |
-| `provider_type` | string | Either `"agent"` or `"service"` |
-| `provider_id` | string | ID of the agent or service to use |
-
 ---
 
 ## Template context
@@ -252,46 +289,55 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 Action templates receive a `FlowContext` object with the following structure:
 
 ```
-{{.Trigger}}        — trigger event data
-{{.Trigger.Post}}   — the post that triggered the flow
-{{.Trigger.Channel}} — the channel where the event occurred
-{{.Trigger.User}}   — the user who triggered the event
+{{.Trigger}}           — trigger event data
+{{.Trigger.Post}}      — the post that triggered the flow (message_posted only)
+{{.Trigger.Channel}}   — the channel where the event occurred (message_posted only)
+{{.Trigger.User}}      — the user who triggered the event (message_posted only)
+{{.Trigger.Schedule}}  — schedule metadata (schedule only)
 {{.Steps.<action_id>}} — output from a previous action step
 ```
 
 ### Trigger data fields
 
-**Post:**
+**Post** _(message_posted trigger only):_
 
-| Field | Access |
-|-------|--------|
-| ID | `{{.Trigger.Post.Id}}` |
+| Field      | Access                        |
+| ---------- | ----------------------------- |
+| ID         | `{{.Trigger.Post.Id}}`        |
 | Channel ID | `{{.Trigger.Post.ChannelId}}` |
-| Message | `{{.Trigger.Post.Message}}` |
+| Thread ID  | `{{.Trigger.Post.ThreadId}}`  |
+| Message    | `{{.Trigger.Post.Message}}`   |
 
-**Channel:**
+**Channel** _(message_posted trigger only):_
 
-| Field | Access |
-|-------|--------|
-| ID | `{{.Trigger.Channel.Id}}` |
-| Name | `{{.Trigger.Channel.Name}}` |
+| Field        | Access                             |
+| ------------ | ---------------------------------- |
+| ID           | `{{.Trigger.Channel.Id}}`          |
+| Name         | `{{.Trigger.Channel.Name}}`        |
 | Display Name | `{{.Trigger.Channel.DisplayName}}` |
 
-**User:**
+**User** _(message_posted trigger only):_
 
-| Field | Access |
-|-------|--------|
-| ID | `{{.Trigger.User.Id}}` |
-| Username | `{{.Trigger.User.Username}}` |
+| Field      | Access                        |
+| ---------- | ----------------------------- |
+| ID         | `{{.Trigger.User.Id}}`        |
+| Username   | `{{.Trigger.User.Username}}`  |
 | First Name | `{{.Trigger.User.FirstName}}` |
-| Last Name | `{{.Trigger.User.LastName}}` |
+| Last Name  | `{{.Trigger.User.LastName}}`  |
+
+**Schedule** _(schedule trigger only):_
+
+| Field    | Access                           |
+| -------- | -------------------------------- |
+| Fired At | `{{.Trigger.Schedule.FiredAt}}`  |
+| Interval | `{{.Trigger.Schedule.Interval}}` |
 
 ### Step output fields
 
 Previous action outputs are available via `{{.Steps.<action_id>}}`:
 
-| Field | Access |
-|-------|--------|
-| Post ID | `{{.Steps.<action_id>.PostID}}` |
+| Field      | Access                             |
+| ---------- | ---------------------------------- |
+| Post ID    | `{{.Steps.<action_id>.PostID}}`    |
 | Channel ID | `{{.Steps.<action_id>.ChannelID}}` |
-| Message | `{{.Steps.<action_id>.Message}}` |
+| Message    | `{{.Steps.<action_id>.Message}}`   |
