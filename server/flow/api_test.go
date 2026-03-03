@@ -24,6 +24,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
 	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
@@ -324,6 +325,7 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
@@ -349,6 +351,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	)
@@ -377,6 +380,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		nil, mmmodel.NewAppError("GetChannelMember", "not_found", nil, "", http.StatusNotFound),
 	)
@@ -402,6 +406,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
@@ -430,9 +435,66 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "ch-new")
 }
 
+func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+	// No GetChannelMember expectation — system admin should skip channel checks.
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Admin Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	// Verify GetChannelMember was never called.
+	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+}
+
+func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+
+	router, store := setupAPIWithCustomMock(t, api)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Updated by admin",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch-new"}},
+		"actions": [{"name": "Send", "send_message": {"channel_id": "ch3", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+}
+
 func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Only the trigger channel should be checked; the templated action channel is skipped.
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,

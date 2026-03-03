@@ -36,10 +36,14 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/flows/{id}", h.handleDeleteFlow).Methods(http.MethodDelete)
 }
 
-// checkChannelAdmin verifies that userID is a channel admin (SchemeAdmin) on
-// every literal channel referenced in the flow. It returns the first failing
-// channel ID and false when the check fails.
-func (h *APIHandler) checkChannelAdmin(userID string, f *model.Flow) (string, bool) {
+// checkFlowPermissions verifies that userID has permission to manage the flow.
+// System admins are always allowed. Otherwise the user must be a channel admin
+// (SchemeAdmin) on every literal channel referenced in the flow. It returns the
+// first failing channel ID and false when the check fails.
+func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) (string, bool) {
+	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
+		return "", true
+	}
 	for _, chID := range model.CollectChannelIDs(f) {
 		member, appErr := h.api.GetChannelMember(chID, userID)
 		if appErr != nil || !member.SchemeAdmin {
@@ -88,7 +92,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if chID, ok := h.checkChannelAdmin(f.CreatedBy, &f); !ok {
+	if chID, ok := h.checkFlowPermissions(f.CreatedBy, &f); !ok {
 		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
 	}
@@ -170,7 +174,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
-	if chID, ok := h.checkChannelAdmin(userID, &f); !ok {
+	if chID, ok := h.checkFlowPermissions(userID, &f); !ok {
 		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
 	}
