@@ -6,7 +6,7 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-Write operations (create, update) additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with the failing channel ID if neither condition is met.
+All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with the failing channel ID if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
 
 ## Endpoints
 
@@ -16,7 +16,7 @@ Write operations (create, update) additionally check permissions: **System Admin
 GET /flows
 ```
 
-Returns all flows.
+Returns all flows visible to the requesting user. System admins see all flows; other users only see flows where they have channel admin permissions on all referenced channels.
 
 **Response:** `200 OK`
 
@@ -96,6 +96,7 @@ The created flow object with all server-assigned fields populated.
 | ------ | ----------------------------------------------------------- |
 | 400    | `invalid request body`                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)      |
+| 400    | Trigger validation error (missing/invalid fields)           |
 | 403    | `you do not have channel admin permissions on channel <id>` |
 | 500    | `failed to create flow`                                     |
 
@@ -115,10 +116,11 @@ The flow object.
 
 **Errors:**
 
-| Status | Body                 |
-| ------ | -------------------- |
-| 404    | `flow not found`     |
-| 500    | `failed to get flow` |
+| Status | Body                                                        |
+| ------ | ----------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on channel <id>` |
+| 404    | `flow not found`                                            |
+| 500    | `failed to get flow`                                        |
 
 ---
 
@@ -163,6 +165,7 @@ The updated flow object.
 | ------ | ----------------------------------------------------------- |
 | 400    | `invalid request body`                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)      |
+| 400    | Trigger validation error (missing/invalid fields)           |
 | 403    | `you do not have channel admin permissions on channel <id>` |
 | 404    | `flow not found`                                            |
 | 500    | `failed to update flow`                                     |
@@ -175,15 +178,17 @@ The updated flow object.
 DELETE /flows/{id}
 ```
 
-Deletes a flow. Returns success even if the flow doesn't exist.
+Deletes a flow by ID.
 
 **Response:** `204 No Content`
 
 **Errors:**
 
-| Status | Body                    |
-| ------ | ----------------------- |
-| 500    | `failed to delete flow` |
+| Status | Body                                                        |
+| ------ | ----------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on channel <id>` |
+| 404    | `flow not found`                                            |
+| 500    | `failed to delete flow`                                     |
 
 ---
 
@@ -219,10 +224,11 @@ Exactly one key should be set, indicating the trigger type:
 
 #### ScheduleConfig
 
-| Field      | Type    | Description                                                                          |
-| ---------- | ------- | ------------------------------------------------------------------------------------ |
-| `interval` | string  | Go duration string, e.g. `"1h"`, `"30m"` (required, minimum 5m)                      |
-| `start_at` | integer | _(optional)_ Start time in milliseconds since epoch. Defaults to flow creation time. |
+| Field        | Type    | Description                                                                          |
+| ------------ | ------- | ------------------------------------------------------------------------------------ |
+| `channel_id` | string  | Channel associated with the schedule (required)                                      |
+| `interval`   | string  | Go duration string, e.g. `"1h"`, `"30m"` (required, minimum 5m)                     |
+| `start_at`   | integer | _(optional)_ Start time in milliseconds since epoch. Defaults to flow creation time. |
 
 ### Action
 
