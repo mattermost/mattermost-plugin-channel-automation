@@ -59,15 +59,14 @@ func (s *Store) Enqueue(item *model.WorkItem) error {
 		return fmt.Errorf("failed to marshal work item %s: %w", item.ID, err)
 	}
 
-	if err := s.appendToIndex(pendingIndexKey, item.ID); err != nil {
-		return fmt.Errorf("failed to add work item %s to pending index: %w", item.ID, err)
+	if appErr := s.api.KVSet(workItemKeyPrefix+item.ID, data); appErr != nil {
+		return fmt.Errorf("failed to save work item %s: %w", item.ID, appErr)
 	}
 
-	if appErr := s.api.KVSet(workItemKeyPrefix+item.ID, data); appErr != nil {
-		// Best-effort rollback. If this also fails, we have a stale index
-		// entry which ClaimNext safely skips.
-		_ = s.removeFromIndex(pendingIndexKey, item.ID)
-		return fmt.Errorf("failed to save work item %s: %w", item.ID, appErr)
+	if err := s.appendToIndex(pendingIndexKey, item.ID); err != nil {
+		// Data is saved but not indexed. Caller can retry, and the item
+		// will be overwritten. Orphaned data is harmless.
+		return fmt.Errorf("failed to add work item %s to pending index: %w", item.ID, err)
 	}
 
 	return nil

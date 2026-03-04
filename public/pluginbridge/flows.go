@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -60,7 +61,7 @@ func (c *Client) ListFlows(userID string) ([]*Flow, error) {
 
 // GetFlow returns a single flow by ID.
 func (c *Client) GetFlow(userID, flowID string) (*Flow, error) {
-	req, err := c.newRequest(http.MethodGet, "/flows/"+flowID, userID, nil)
+	req, err := c.newRequest(http.MethodGet, "/flows/"+url.PathEscape(flowID), userID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -84,6 +85,9 @@ func (c *Client) GetFlow(userID, flowID string) (*Flow, error) {
 
 // CreateFlow creates a new flow and returns the created flow with server-assigned fields.
 func (c *Client) CreateFlow(userID string, flow *Flow) (*Flow, error) {
+	if flow == nil {
+		return nil, fmt.Errorf("flow must not be nil")
+	}
 	body, err := json.Marshal(flow)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request: %w", err)
@@ -113,6 +117,9 @@ func (c *Client) CreateFlow(userID string, flow *Flow) (*Flow, error) {
 
 // UpdateFlow updates an existing flow. The flow's ID field must be set.
 func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
+	if flow == nil {
+		return nil, fmt.Errorf("flow must not be nil")
+	}
 	if flow.ID == "" {
 		return nil, fmt.Errorf("flow ID must be set for update")
 	}
@@ -122,7 +129,7 @@ func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.newRequest(http.MethodPut, "/flows/"+flow.ID, userID, bytes.NewReader(body))
+	req, err := c.newRequest(http.MethodPut, "/flows/"+url.PathEscape(flow.ID), userID, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -146,7 +153,7 @@ func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
 
 // DeleteFlow deletes a flow by ID.
 func (c *Client) DeleteFlow(userID, flowID string) error {
-	req, err := c.newRequest(http.MethodDelete, "/flows/"+flowID, userID, nil)
+	req, err := c.newRequest(http.MethodDelete, "/flows/"+url.PathEscape(flowID), userID, nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}

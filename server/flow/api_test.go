@@ -156,6 +156,7 @@ func TestAPI_GetFlow(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows/f1", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
@@ -172,6 +173,7 @@ func TestAPI_GetFlow_NotFound(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows/nonexistent", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -185,6 +187,7 @@ func TestAPI_ListFlows(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
@@ -201,6 +204,7 @@ func TestAPI_ListFlows_Empty(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
@@ -256,6 +260,7 @@ func TestAPI_UpdateFlow_NotFound(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/nonexistent", bytes.NewBufferString(`{"name":"x"}`))
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -268,6 +273,7 @@ func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString("not json"))
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -345,6 +351,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)

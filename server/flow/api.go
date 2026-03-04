@@ -54,11 +54,29 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) (string,
 }
 
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		return
+	}
+
 	flows, err := h.store.List()
 	if err != nil {
 		h.api.LogError("Failed to list flows", "error", err.Error())
 		http.Error(w, "failed to list flows", http.StatusInternalServerError)
 		return
+	}
+
+	// Filter flows to only those the user has permission to view.
+	isAdmin := h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem)
+	if !isAdmin {
+		visible := make([]*model.Flow, 0, len(flows))
+		for _, f := range flows {
+			if _, ok := h.checkFlowPermissions(userID, f); ok {
+				visible = append(visible, f)
+			}
+		}
+		flows = visible
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -79,6 +97,10 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	f.CreatedAt = time.Now().UnixMilli()
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
+	if f.CreatedBy == "" {
+		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		return
+	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -123,6 +145,17 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	}
 	if f == nil {
 		http.Error(w, "flow not found", http.StatusNotFound)
+		return
+	}
+
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		return
+	}
+
+	if chID, ok := h.checkFlowPermissions(userID, f); !ok {
+		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
 	}
 
