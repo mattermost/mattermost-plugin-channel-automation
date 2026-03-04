@@ -60,7 +60,6 @@ type AIPromptActionConfig struct {
 // Action defines a single step in a flow. Exactly one config pointer should be set.
 type Action struct {
 	ID          string                   `json:"id"`
-	Name        string                   `json:"name"`
 	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
 	AIPrompt    *AIPromptActionConfig    `json:"ai_prompt,omitempty"`
 }

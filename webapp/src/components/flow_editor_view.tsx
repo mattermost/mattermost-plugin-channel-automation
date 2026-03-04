@@ -11,7 +11,6 @@ import {getTriggerType} from 'types';
 
 interface ActionForm {
     id: string;
-    name: string;
     type: string;
     channel_id: string;
     reply_to_post_id: string;
@@ -148,14 +147,13 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: crypto.randomUUID(), name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
     if (a.ai_prompt) {
         return {
             id: a.id,
-            name: a.name,
             type: 'ai_prompt',
             channel_id: '',
             reply_to_post_id: '',
@@ -167,7 +165,6 @@ function actionToForm(a: Action): ActionForm {
     if (a.send_message) {
         return {
             id: a.id,
-            name: a.name,
             type: 'send_message',
             channel_id: a.send_message.channel_id,
             reply_to_post_id: a.send_message.reply_to_post_id ?? '',
@@ -176,7 +173,7 @@ function actionToForm(a: Action): ActionForm {
             provider_id: '',
         };
     }
-    return {id: a.id, name: a.name, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
 
 const FlowEditorView: React.FC = () => {
@@ -293,7 +290,6 @@ const FlowEditorView: React.FC = () => {
                 if (a.type === 'ai_prompt') {
                     return {
                         id: a.id,
-                        name: a.name,
                         ai_prompt: {
                             prompt: a.prompt,
                             provider_type: 'agent',
@@ -303,7 +299,6 @@ const FlowEditorView: React.FC = () => {
                 }
                 const action: Action = {
                     id: a.id,
-                    name: a.name,
                     send_message: {
                         channel_id: a.channel_id,
                         body: a.body,
@@ -399,16 +394,11 @@ const FlowEditorView: React.FC = () => {
             <h3>{'Actions'}</h3>
             {actions.map((action, index) => (
                 <div
-                    key={action.id}
+                    key={index}
                     style={styles.actionItem}
                 >
                     <div style={styles.actionHeader}>
-                        <div>
-                            <strong>{`Action ${index + 1}`}</strong>
-                            {action.id && (
-                                <span style={styles.actionId}>{` ID: ${action.id}`}</span>
-                            )}
-                        </div>
+                        <strong>{`Action ${index + 1}`}</strong>
                         <button
                             style={styles.btnDanger}
                             onClick={() => handleRemoveAction(index)}
@@ -418,24 +408,25 @@ const FlowEditorView: React.FC = () => {
                     </div>
                     <div style={styles.formGroup}>
                         <label
-                            htmlFor={`${action.id}-name`}
+                            htmlFor={`action-${index}-id`}
                             style={styles.label}
-                        >{'Name'}</label>
+                        >{'ID'}</label>
                         <input
-                            id={`${action.id}-name`}
+                            id={`action-${index}-id`}
                             style={styles.input}
                             type='text'
-                            value={action.name}
-                            onChange={(e) => handleActionChange(index, 'name', e.target.value)}
+                            placeholder='e.g. send-greeting'
+                            value={action.id}
+                            onChange={(e) => handleActionChange(index, 'id', e.target.value)}
                         />
                     </div>
                     <div style={styles.formGroup}>
                         <label
-                            htmlFor={`${action.id}-type`}
+                            htmlFor={`action-${index}-type`}
                             style={styles.label}
                         >{'Type'}</label>
                         <select
-                            id={`${action.id}-type`}
+                            id={`action-${index}-type`}
                             style={styles.select}
                             value={action.type}
                             onChange={(e) => handleActionChange(index, 'type', e.target.value)}
@@ -448,11 +439,11 @@ const FlowEditorView: React.FC = () => {
                         <>
                             <div style={styles.formGroup}>
                                 <label
-                                    htmlFor={`${action.id}-channel-id`}
+                                    htmlFor={`action-${index}-channel-id`}
                                     style={styles.label}
                                 >{'Channel ID'}</label>
                                 <input
-                                    id={`${action.id}-channel-id`}
+                                    id={`action-${index}-channel-id`}
                                     style={styles.input}
                                     type='text'
                                     value={action.channel_id}
@@ -461,11 +452,11 @@ const FlowEditorView: React.FC = () => {
                             </div>
                             <div style={styles.formGroup}>
                                 <label
-                                    htmlFor={`${action.id}-reply-to-post-id`}
+                                    htmlFor={`action-${index}-reply-to-post-id`}
                                     style={styles.label}
                                 >{'Reply to Post ID (Go template, optional)'}</label>
                                 <input
-                                    id={`${action.id}-reply-to-post-id`}
+                                    id={`action-${index}-reply-to-post-id`}
                                     style={styles.input}
                                     type='text'
                                     value={action.reply_to_post_id}
@@ -475,11 +466,11 @@ const FlowEditorView: React.FC = () => {
                             </div>
                             <div style={styles.formGroup}>
                                 <label
-                                    htmlFor={`${action.id}-body`}
+                                    htmlFor={`action-${index}-body`}
                                     style={styles.label}
                                 >{'Body (Go template)'}</label>
                                 <textarea
-                                    id={`${action.id}-body`}
+                                    id={`action-${index}-body`}
                                     style={styles.textarea}
                                     value={action.body}
                                     onChange={(e) => handleActionChange(index, 'body', e.target.value)}
@@ -502,11 +493,11 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                             {agentsError && <p style={styles.warning}>{agentsError}</p>}
                             <div style={styles.formGroup}>
                                 <label
-                                    htmlFor={`${action.id}-agent`}
+                                    htmlFor={`action-${index}-agent`}
                                     style={styles.label}
                                 >{'Agent'}</label>
                                 <select
-                                    id={`${action.id}-agent`}
+                                    id={`action-${index}-agent`}
                                     style={styles.select}
                                     value={action.provider_id}
                                     onChange={(e) => handleActionChange(index, 'provider_id', e.target.value)}
@@ -524,11 +515,11 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                             </div>
                             <div style={styles.formGroup}>
                                 <label
-                                    htmlFor={`${action.id}-prompt`}
+                                    htmlFor={`action-${index}-prompt`}
                                     style={styles.label}
                                 >{'Prompt (Go template)'}</label>
                                 <textarea
-                                    id={`${action.id}-prompt`}
+                                    id={`action-${index}-prompt`}
                                     style={styles.textarea}
                                     value={action.prompt}
                                     onChange={(e) => handleActionChange(index, 'prompt', e.target.value)}

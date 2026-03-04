@@ -2,10 +2,13 @@ package model
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
 const minScheduleInterval = 5 * time.Minute
+
+var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // ValidateTrigger validates a trigger configuration based on its type.
 func ValidateTrigger(t *Trigger) error {
@@ -33,6 +36,29 @@ func ValidateTrigger(t *Trigger) error {
 		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
+	}
+	return nil
+}
+
+// ValidateActions validates a list of actions.
+// Each action must have a unique, non-empty ID matching the slug pattern
+// (lowercase alphanumeric + hyphens) and at least one action config set.
+func ValidateActions(actions []Action) error {
+	seen := make(map[string]struct{}, len(actions))
+	for i, a := range actions {
+		if a.ID == "" {
+			return fmt.Errorf("action %d: id is required", i)
+		}
+		if !actionIDPattern.MatchString(a.ID) {
+			return fmt.Errorf("action %d: id %q is invalid (must be lowercase alphanumeric with hyphens, e.g. \"send-greeting\")", i, a.ID)
+		}
+		if _, ok := seen[a.ID]; ok {
+			return fmt.Errorf("action %d: duplicate id %q", i, a.ID)
+		}
+		seen[a.ID] = struct{}{}
+		if a.Type() == "" {
+			return fmt.Errorf("action %d: exactly one action config must be set", i)
+		}
 	}
 	return nil
 }

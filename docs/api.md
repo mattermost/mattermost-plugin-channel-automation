@@ -33,8 +33,7 @@ Returns all flows.
         },
         "actions": [
             {
-                "id": "def456...",
-                "name": "Send notification",
+                "id": "send-notification",
                 "send_message": {
                     "channel_id": "channel-id-2",
                     "body": "New post by {{.Trigger.User.Username}}"
@@ -62,7 +61,7 @@ Returns all flows.
 POST /flows
 ```
 
-Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Action IDs are auto-generated for actions that omit them.
+Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
 **Request body** (max 1 MB):
 
@@ -77,7 +76,7 @@ Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `cr
     },
     "actions": [
         {
-            "name": "Send notification",
+            "id": "send-notification",
             "send_message": {
                 "channel_id": "channel-id-2",
                 "body": "New post by {{.Trigger.User.Username}}"
@@ -96,6 +95,7 @@ The created flow object with all server-assigned fields populated.
 | Status | Body                                                        |
 | ------ | ----------------------------------------------------------- |
 | 400    | `invalid request body`                                      |
+| 400    | Action validation error (missing/invalid/duplicate ID)      |
 | 403    | `you do not have channel admin permissions on channel <id>` |
 | 500    | `failed to create flow`                                     |
 
@@ -128,7 +128,7 @@ The flow object.
 PUT /flows/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Action IDs are auto-generated for actions that omit them.
+Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format).
 
 **Request body** (max 1 MB):
 
@@ -143,7 +143,7 @@ Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `cre
     },
     "actions": [
         {
-            "name": "New Action",
+            "id": "new-action",
             "send_message": {
                 "channel_id": "channel-id-3",
                 "body": "updated message"
@@ -162,6 +162,7 @@ The updated flow object.
 | Status | Body                                                        |
 | ------ | ----------------------------------------------------------- |
 | 400    | `invalid request body`                                      |
+| 400    | Action validation error (missing/invalid/duplicate ID)      |
 | 403    | `you do not have channel admin permissions on channel <id>` |
 | 404    | `flow not found`                                            |
 | 500    | `failed to update flow`                                     |
@@ -225,14 +226,13 @@ Exactly one key should be set, indicating the trigger type:
 
 ### Action
 
-Exactly one type-specific config key should be set alongside `id` and `name`:
+Exactly one type-specific config key should be set alongside `id`:
 
-| Field          | Type                                                | Description                                  |
-| -------------- | --------------------------------------------------- | -------------------------------------------- |
-| `id`           | string                                              | Unique ID (auto-generated if omitted)        |
-| `name`         | string                                              | Display name                                 |
-| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                 |
-| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service |
+| Field          | Type                                                | Description                                                                                                                        |
+| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow.   |
+| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                       |
+| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                       |
 
 #### SendMessageActionConfig
 

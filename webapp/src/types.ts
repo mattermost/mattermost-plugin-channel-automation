@@ -37,7 +37,6 @@ export interface AIPromptActionParams {
 
 export interface Action {
     id: string;
-    name: string;
     send_message?: SendMessageActionParams;
     ai_prompt?: AIPromptActionParams;
 }

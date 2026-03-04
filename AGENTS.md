@@ -2,7 +2,7 @@
 
 ## On each session
 
-- Remember to update the documentation and API
+- Update documentation
 - Update webapp on backend changes
 - Add/Update unit tests
 - Run `/coderabbit:review`
@@ -22,5 +22,4 @@
 
 - `make check-style` — Run all linters (Go + webapp)
 - `make test` — Run all tests (Go + webapp)
-- `make server` — Compile the server binary
-- `make webapp` — Build the webapp
+- `make dist` — Build all assets

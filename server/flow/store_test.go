@@ -72,7 +72,7 @@ func TestStore_SaveAndGet(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{
-			{ID: "act1", Name: "Send", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "hello"}},
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "hello"}},
 		},
 	}
 

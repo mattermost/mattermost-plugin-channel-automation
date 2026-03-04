@@ -67,3 +67,57 @@ func TestValidateTrigger_UnknownType(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown trigger type")
 }
+
+func TestValidateActions(t *testing.T) {
+	validAction := func(id string) Action {
+		return Action{ID: id, SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}
+	}
+
+	t.Run("valid single action", func(t *testing.T) {
+		err := ValidateActions([]Action{validAction("send-greeting")})
+		require.NoError(t, err)
+	})
+
+	t.Run("valid multiple actions", func(t *testing.T) {
+		err := ValidateActions([]Action{validAction("step-1"), validAction("step-2")})
+		require.NoError(t, err)
+	})
+
+	t.Run("valid id patterns", func(t *testing.T) {
+		for _, id := range []string{"a", "abc", "a1", "send-message", "step-1-done", "x0-y1-z2"} {
+			err := ValidateActions([]Action{validAction(id)})
+			require.NoError(t, err, "expected valid: %s", id)
+		}
+	})
+
+	t.Run("empty id", func(t *testing.T) {
+		err := ValidateActions([]Action{{ID: "", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "id is required")
+	})
+
+	t.Run("invalid id patterns", func(t *testing.T) {
+		for _, id := range []string{"Send", "UPPER", "has space", "trailing-", "-leading", "double--hyphen", "123", "1abc", "has_underscore", "has.dot"} {
+			err := ValidateActions([]Action{{ID: id, SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}})
+			require.Error(t, err, "expected invalid: %s", id)
+			assert.Contains(t, err.Error(), "invalid")
+		}
+	})
+
+	t.Run("duplicate ids", func(t *testing.T) {
+		err := ValidateActions([]Action{validAction("send-msg"), validAction("send-msg")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate")
+	})
+
+	t.Run("missing action config", func(t *testing.T) {
+		err := ValidateActions([]Action{{ID: "no-config"}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "action config must be set")
+	})
+
+	t.Run("empty list is valid", func(t *testing.T) {
+		err := ValidateActions([]Action{})
+		require.NoError(t, err)
+	})
+}

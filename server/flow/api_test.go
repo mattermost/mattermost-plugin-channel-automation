@@ -43,7 +43,7 @@ func TestAPI_CreateFlow(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -63,7 +63,7 @@ func TestAPI_CreateFlow(t *testing.T) {
 	assert.NotZero(t, created.CreatedAt)
 	assert.Equal(t, created.CreatedAt, created.UpdatedAt)
 	require.Len(t, created.Actions, 1)
-	assert.NotEmpty(t, created.Actions[0].ID)
+	assert.Equal(t, "send-message", created.Actions[0].ID)
 	require.NotNil(t, created.Actions[0].SendMessage)
 	assert.Equal(t, "hello", created.Actions[0].SendMessage.Body)
 
@@ -83,6 +83,66 @@ func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "BAD ID", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "invalid")
+}
+
+func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "id is required")
+}
+
+func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [
+			{"id": "send-msg", "send_message": {"channel_id": "ch2", "body": "hello"}},
+			{"id": "send-msg", "send_message": {"channel_id": "ch3", "body": "world"}}
+		]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "duplicate")
 }
 
 func TestAPI_GetFlow(t *testing.T) {
@@ -167,7 +227,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 		"name": "Updated",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch2"}},
-		"actions": [{"name": "New Action", "send_message": {"channel_id": "ch3", "body": "updated"}}]
+		"actions": [{"id": "new-action", "send_message": {"channel_id": "ch3", "body": "updated"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -188,7 +248,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 	assert.Equal(t, "original-user", updated.CreatedBy)
 	assert.Greater(t, updated.UpdatedAt, updated.CreatedAt)
 	require.Len(t, updated.Actions, 1)
-	assert.NotEmpty(t, updated.Actions[0].ID)
+	assert.Equal(t, "new-action", updated.Actions[0].ID)
 }
 
 func TestAPI_UpdateFlow_NotFound(t *testing.T) {
@@ -220,7 +280,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 		"name": "Schedule Flow",
 		"enabled": true,
 		"trigger": {"schedule": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -239,7 +299,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 		"name": "Schedule Flow",
 		"enabled": true,
 		"trigger": {"schedule": {"channel_id": "ch1", "interval": "1m"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -258,7 +318,7 @@ func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
 		"name": "Bad Trigger",
 		"enabled": true,
 		"trigger": {},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -363,7 +423,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -392,7 +452,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -418,7 +478,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -479,7 +539,7 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 		"name": "Admin Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -510,7 +570,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 		"name": "Updated by admin",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch-new"}},
-		"actions": [{"name": "Send", "send_message": {"channel_id": "ch3", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch3", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -538,7 +598,7 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"name": "Reply", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "echo"}}]
+		"actions": [{"id": "reply-echo", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "echo"}}]
 	}`
 
 	w := httptest.NewRecorder()

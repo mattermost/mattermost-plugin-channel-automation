@@ -80,11 +80,9 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
 
-	// Assign IDs to actions that don't have one.
-	for i := range f.Actions {
-		if f.Actions[i].ID == "" {
-			f.Actions[i].ID = mmmodel.NewId()
-		}
+	if err := model.ValidateActions(f.Actions); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger); err != nil {
@@ -161,11 +159,9 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.CreatedBy = existing.CreatedBy
 	f.UpdatedAt = time.Now().UnixMilli()
 
-	// Assign IDs to actions that don't have one.
-	for i := range f.Actions {
-		if f.Actions[i].ID == "" {
-			f.Actions[i].ID = mmmodel.NewId()
-		}
+	if err := model.ValidateActions(f.Actions); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger); err != nil {
