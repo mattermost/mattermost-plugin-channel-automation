@@ -60,7 +60,7 @@ func setupStore(t *testing.T) (model.Store, *inMemoryKV) {
 		},
 	)
 
-	return NewStore(api), kv
+	return NewStore(api, &sync.Mutex{}), kv
 }
 
 func TestStore_SaveAndGet(t *testing.T) {

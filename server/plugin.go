@@ -75,7 +75,11 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
-	p.flowStore = flow.NewStore(p.API)
+	flowIndexMu, err := cluster.NewMutex(p.API, "flow_index_mutex")
+	if err != nil {
+		return fmt.Errorf("failed to create flow index mutex: %w", err)
+	}
+	p.flowStore = flow.NewStore(p.API, flowIndexMu)
 	p.triggerService = flow.NewTriggerService(p.flowStore, p.registry)
 	p.flowExecutor = flow.NewFlowExecutor(p.registry)
 

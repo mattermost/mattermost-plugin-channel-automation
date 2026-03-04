@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
 
@@ -17,13 +18,18 @@ const (
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
+// Index mutations are serialized via indexMu to prevent lost updates
+// when multiple goroutines operate on the same store.
 type KVStore struct {
-	api plugin.API
+	api     plugin.API
+	indexMu sync.Locker
 }
 
-// NewStore creates a new KV-backed flow store.
-func NewStore(api plugin.API) model.Store {
-	return &KVStore{api: api}
+// NewStore creates a new KV-backed flow store. The caller must supply
+// a cluster-safe mutex (e.g. cluster.Mutex) to protect index
+// read-modify-write cycles across plugin instances.
+func NewStore(api plugin.API, indexMu sync.Locker) model.Store {
+	return &KVStore{api: api, indexMu: indexMu}
 }
 
 func (s *KVStore) Get(id string) (*model.Flow, error) {
@@ -160,15 +166,24 @@ func (s *KVStore) setIndex(ids []string) error {
 }
 
 func (s *KVStore) addToIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	ids, err := s.getIndex()
 	if err != nil {
 		return err
+	}
+	if slices.Contains(ids, id) {
+		return nil
 	}
 	ids = append(ids, id)
 	return s.setIndex(ids)
 }
 
 func (s *KVStore) removeFromIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	ids, err := s.getIndex()
 	if err != nil {
 		return err
@@ -222,6 +237,9 @@ func (s *KVStore) setTriggerIndex(channelID string, ids []string) error {
 }
 
 func (s *KVStore) addTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	ids, err := s.getTriggerIndex(channelID)
 	if err != nil {
 		return err
@@ -234,6 +252,9 @@ func (s *KVStore) addTriggerIndex(channelID, flowID string) error {
 }
 
 func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
 	ids, err := s.getTriggerIndex(channelID)
 	if err != nil {
 		return err
