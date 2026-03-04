@@ -112,12 +112,27 @@ func (s *Store) ClaimNext() (*model.WorkItem, error) {
 			return nil, fmt.Errorf("failed to update work item %s: %w", id, appErr)
 		}
 
-		// Append to running index.
+		// Append to running index. If this fails, roll back to avoid
+		// losing the item (it would be in neither index).
 		runningIDs, err := s.getIndex(runningIndexKey)
 		if err != nil {
+			// Roll back: re-add to pending and reset status.
+			item.Status = model.WorkItemStatusPending
+			item.StartedAt = 0
+			if rbData, rbErr := json.Marshal(item); rbErr == nil {
+				_ = s.api.KVSet(workItemKeyPrefix+id, rbData)
+			}
+			_ = s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...))
 			return nil, err
 		}
 		if err := s.setIndex(runningIndexKey, append(runningIDs, id)); err != nil {
+			// Roll back: re-add to pending and reset status.
+			item.Status = model.WorkItemStatusPending
+			item.StartedAt = 0
+			if rbData, rbErr := json.Marshal(item); rbErr == nil {
+				_ = s.api.KVSet(workItemKeyPrefix+id, rbData)
+			}
+			_ = s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...))
 			return nil, err
 		}
 
