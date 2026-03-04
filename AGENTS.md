@@ -2,8 +2,10 @@
 
 ## On each session
 
-- Remember to update the documentation
+- Remember to update the documentation and API
+- Update webapp on backend changes
 - Add/Update unit tests
+- Run `/coderabbit:review`
 
 ## Build Commands
 
