@@ -23,6 +23,8 @@ type WorkerPool struct {
 	notify       chan struct{}
 	stop         chan struct{}
 	wg           sync.WaitGroup
+	startOnce    sync.Once
+	stopOnce     sync.Once
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
@@ -39,16 +41,21 @@ func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.St
 	}
 }
 
-// Start launches the dispatcher goroutine.
+// Start launches the dispatcher goroutine. Safe to call multiple times;
+// only the first call starts the loop.
 func (wp *WorkerPool) Start() {
-	wp.wg.Add(1)
-	go wp.dispatchLoop()
+	wp.startOnce.Do(func() {
+		wp.wg.Add(1)
+		go wp.dispatchLoop()
+	})
 }
 
 // Stop signals the dispatcher to shut down and waits for all in-flight
-// workers to finish.
+// workers to finish. Safe to call multiple times.
 func (wp *WorkerPool) Stop() {
-	close(wp.stop)
+	wp.stopOnce.Do(func() {
+		close(wp.stop)
+	})
 	wp.wg.Wait()
 }
 

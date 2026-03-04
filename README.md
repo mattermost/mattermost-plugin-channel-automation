@@ -115,7 +115,7 @@ See [docs/api.md](docs/api.md) for the full API reference with request/response 
 
 ### Prerequisites
 
-- Go 1.25+
+- Go
 - Node.js (see `.nvmrc`)
 - Make
 

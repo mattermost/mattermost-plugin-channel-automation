@@ -33,7 +33,10 @@ const scheduleTrigger: TriggerConfig = {
     toTrigger(state: TriggerFormState): Trigger {
         const params: {channel_id: string; interval: string; start_at?: number} = {channel_id: state.channel_id, interval: state.interval};
         if (state.start_at) {
-            params.start_at = new Date(state.start_at).getTime();
+            const timestamp = new Date(state.start_at).getTime();
+            if (!Number.isNaN(timestamp)) {
+                params.start_at = timestamp;
+            }
         }
         return {schedule: params};
     },

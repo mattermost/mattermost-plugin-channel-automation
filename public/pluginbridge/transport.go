@@ -11,6 +11,9 @@ type pluginAPIRoundTripper struct {
 }
 
 func (t *pluginAPIRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
 	resp := t.api.PluginHTTP(req)
 	if resp == nil {
 		return nil, fmt.Errorf("PluginHTTP returned nil response for %s %s", req.Method, req.URL.Path)
