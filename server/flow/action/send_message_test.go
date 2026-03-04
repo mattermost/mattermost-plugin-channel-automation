@@ -82,7 +82,7 @@ func TestSendMessageAction_Type(t *testing.T) {
 
 func TestSendMessageAction_Execute_Success(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "ch2",
@@ -119,7 +119,7 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 
 func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "trigger-ch", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "trigger-ch", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "trigger-ch",
@@ -154,7 +154,7 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 
 func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -189,7 +189,7 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 
 func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -225,7 +225,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 
 func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -250,7 +250,7 @@ func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 
 func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "new-post-id",
 		ChannelId: "ch1",
@@ -304,7 +304,7 @@ func TestSendMessageAction_Execute_BadChannelIDTemplate(t *testing.T) {
 
 func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500))
 
 	a := NewSendMessageAction(api, "bot-id")
@@ -329,7 +329,7 @@ func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 
 func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionCreatePost).Return(true)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -353,7 +353,7 @@ func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
 
 func TestSendMessageAction_Execute_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionManageChannelRoles).Return(false)
+	api.On("HasPermissionToChannel", "creator-id", "ch2", mmmodel.PermissionCreatePost).Return(false)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -372,7 +372,7 @@ func TestSendMessageAction_Execute_PermissionDenied(t *testing.T) {
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
 	assert.Nil(t, output)
-	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	assert.Contains(t, err.Error(), "does not have permission to post in channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
@@ -402,7 +402,7 @@ func TestSendMessageAction_Execute_EmptyCreatedBy(t *testing.T) {
 
 func TestSendMessageAction_Execute_PermissionDenied_TemplatedChannel(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator-id", "resolved-ch", mmmodel.PermissionManageChannelRoles).Return(false)
+	api.On("HasPermissionToChannel", "creator-id", "resolved-ch", mmmodel.PermissionCreatePost).Return(false)
 
 	a := NewSendMessageAction(api, "bot-id")
 	act := &model.Action{
@@ -423,6 +423,6 @@ func TestSendMessageAction_Execute_PermissionDenied_TemplatedChannel(t *testing.
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
 	assert.Nil(t, output)
-	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	assert.Contains(t, err.Error(), "does not have permission to post in channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }

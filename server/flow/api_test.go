@@ -309,6 +309,32 @@ func TestAPI_DeleteFlow(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestAPI_DeleteFlow_Unauthorized(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)
+	// Deliberately omit Mattermost-User-ID header.
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAPI_UpdateFlow_Unauthorized(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(`{"name":"x","trigger":{"message_posted":{"channel_id":"ch1"}}}`))
+	// Deliberately omit Mattermost-User-ID header.
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
 // setupAPIWithCustomMock creates an API handler with a custom plugintest.API
 // so callers can set their own GetChannelMember expectations.
 func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, model.Store) {

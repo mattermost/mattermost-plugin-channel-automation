@@ -52,8 +52,12 @@ const scheduleTrigger: TriggerConfig = {
         return (
             <>
                 <div style={styles.formGroup}>
-                    <label style={styles.label}>{'Channel ID'}</label>
+                    <label
+                        htmlFor='trigger-schedule-channel-id'
+                        style={styles.label}
+                    >{'Channel ID'}</label>
                     <input
+                        id='trigger-schedule-channel-id'
                         style={styles.input}
                         type='text'
                         value={state.channel_id}
@@ -61,8 +65,12 @@ const scheduleTrigger: TriggerConfig = {
                     />
                 </div>
                 <div style={styles.formGroup}>
-                    <label style={styles.label}>{'Interval (Go duration, e.g. 5m, 1h, 24h)'}</label>
+                    <label
+                        htmlFor='trigger-schedule-interval'
+                        style={styles.label}
+                    >{'Interval (Go duration, e.g. 5m, 1h, 24h)'}</label>
                     <input
+                        id='trigger-schedule-interval'
                         style={styles.input}
                         type='text'
                         value={state.interval}
@@ -71,8 +79,12 @@ const scheduleTrigger: TriggerConfig = {
                     />
                 </div>
                 <div style={styles.formGroup}>
-                    <label style={styles.label}>{'Start at (optional, leave empty to start immediately)'}</label>
+                    <label
+                        htmlFor='trigger-schedule-start-at'
+                        style={styles.label}
+                    >{'Start at (optional, leave empty to start immediately)'}</label>
                     <input
+                        id='trigger-schedule-start-at'
                         style={styles.input}
                         type='datetime-local'
                         value={state.start_at}

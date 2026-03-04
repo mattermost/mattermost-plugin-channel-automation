@@ -56,8 +56,12 @@ const messagePostedTrigger: TriggerConfig = {
     ): React.ReactNode {
         return (
             <div style={styles.formGroup}>
-                <label style={styles.label}>{'Channel ID'}</label>
+                <label
+                    htmlFor='trigger-message-posted-channel-id'
+                    style={styles.label}
+                >{'Channel ID'}</label>
                 <input
+                    id='trigger-message-posted-channel-id'
                     style={styles.input}
                     type='text'
                     value={state.channel_id}

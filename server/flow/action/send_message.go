@@ -36,8 +36,8 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 	if ctx.CreatedBy == "" {
 		return nil, fmt.Errorf("flow has no creator; cannot verify channel permissions")
 	}
-	if !a.api.HasPermissionToChannel(ctx.CreatedBy, channelID, mmmodel.PermissionManageChannelRoles) {
-		return nil, fmt.Errorf("user %q does not have permission to manage channel %q", ctx.CreatedBy, channelID)
+	if !a.api.HasPermissionToChannel(ctx.CreatedBy, channelID, mmmodel.PermissionCreatePost) {
+		return nil, fmt.Errorf("user %q does not have permission to post in channel %q", ctx.CreatedBy, channelID)
 	}
 
 	var replyToPostID string

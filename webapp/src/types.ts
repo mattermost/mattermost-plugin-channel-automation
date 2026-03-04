@@ -44,7 +44,7 @@ export interface Action {
 
 export interface AIBotInfo {
     id: string;
-    displayName: string;
+    display_name: string;
     username: string;
 }
 

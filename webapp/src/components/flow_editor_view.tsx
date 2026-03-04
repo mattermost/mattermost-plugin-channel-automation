@@ -148,7 +148,7 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
+    return {id: crypto.randomUUID(), name: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -203,15 +203,25 @@ const FlowEditorView: React.FC = () => {
     const triggerConfig = getTriggerConfig(triggerType);
 
     useEffect(() => {
+        let cancelled = false;
         getAIBots().then((bots) => {
+            if (cancelled) {
+                return;
+            }
             setAgents(bots);
             if (bots.length === 0) {
                 setAgentsError('No AI agents found. Please configure agents in the AI plugin.');
             }
         }).catch(() => {
+            if (cancelled) {
+                return;
+            }
             setAgents([]);
             setAgentsError('Could not reach the AI plugin. Make sure the Mattermost AI plugin is installed and enabled.');
         });
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -335,8 +345,12 @@ const FlowEditorView: React.FC = () => {
             </div>
             {error && <p style={styles.error}>{error}</p>}
             <div style={styles.formGroup}>
-                <label style={styles.label}>{'Name'}</label>
+                <label
+                    htmlFor='flow-name'
+                    style={styles.label}
+                >{'Name'}</label>
                 <input
+                    id='flow-name'
                     style={styles.input}
                     type='text'
                     value={name}
@@ -361,8 +375,12 @@ const FlowEditorView: React.FC = () => {
                 </details>
             )}
             <div style={styles.formGroup}>
-                <label style={styles.label}>{'Type'}</label>
+                <label
+                    htmlFor='trigger-type'
+                    style={styles.label}
+                >{'Type'}</label>
                 <select
+                    id='trigger-type'
                     style={styles.select}
                     value={triggerType}
                     onChange={(e) => handleTriggerTypeChange(e.target.value)}
@@ -381,7 +399,7 @@ const FlowEditorView: React.FC = () => {
             <h3>{'Actions'}</h3>
             {actions.map((action, index) => (
                 <div
-                    key={index}
+                    key={action.id}
                     style={styles.actionItem}
                 >
                     <div style={styles.actionHeader}>
@@ -399,8 +417,12 @@ const FlowEditorView: React.FC = () => {
                         </button>
                     </div>
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>{'Name'}</label>
+                        <label
+                            htmlFor={`${action.id}-name`}
+                            style={styles.label}
+                        >{'Name'}</label>
                         <input
+                            id={`${action.id}-name`}
                             style={styles.input}
                             type='text'
                             value={action.name}
@@ -408,8 +430,12 @@ const FlowEditorView: React.FC = () => {
                         />
                     </div>
                     <div style={styles.formGroup}>
-                        <label style={styles.label}>{'Type'}</label>
+                        <label
+                            htmlFor={`${action.id}-type`}
+                            style={styles.label}
+                        >{'Type'}</label>
                         <select
+                            id={`${action.id}-type`}
                             style={styles.select}
                             value={action.type}
                             onChange={(e) => handleActionChange(index, 'type', e.target.value)}
@@ -421,8 +447,12 @@ const FlowEditorView: React.FC = () => {
                     {action.type === 'send_message' && (
                         <>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Channel ID'}</label>
+                                <label
+                                    htmlFor={`${action.id}-channel-id`}
+                                    style={styles.label}
+                                >{'Channel ID'}</label>
                                 <input
+                                    id={`${action.id}-channel-id`}
                                     style={styles.input}
                                     type='text'
                                     value={action.channel_id}
@@ -430,8 +460,12 @@ const FlowEditorView: React.FC = () => {
                                 />
                             </div>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Reply to Post ID (Go template, optional)'}</label>
+                                <label
+                                    htmlFor={`${action.id}-reply-to-post-id`}
+                                    style={styles.label}
+                                >{'Reply to Post ID (Go template, optional)'}</label>
                                 <input
+                                    id={`${action.id}-reply-to-post-id`}
                                     style={styles.input}
                                     type='text'
                                     value={action.reply_to_post_id}
@@ -440,8 +474,12 @@ const FlowEditorView: React.FC = () => {
                                 />
                             </div>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Body (Go template)'}</label>
+                                <label
+                                    htmlFor={`${action.id}-body`}
+                                    style={styles.label}
+                                >{'Body (Go template)'}</label>
                                 <textarea
+                                    id={`${action.id}-body`}
                                     style={styles.textarea}
                                     value={action.body}
                                     onChange={(e) => handleActionChange(index, 'body', e.target.value)}
@@ -463,8 +501,12 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                         <>
                             {agentsError && <p style={styles.warning}>{agentsError}</p>}
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Agent'}</label>
+                                <label
+                                    htmlFor={`${action.id}-agent`}
+                                    style={styles.label}
+                                >{'Agent'}</label>
                                 <select
+                                    id={`${action.id}-agent`}
                                     style={styles.select}
                                     value={action.provider_id}
                                     onChange={(e) => handleActionChange(index, 'provider_id', e.target.value)}
@@ -475,14 +517,18 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                             key={bot.id}
                                             value={bot.id}
                                         >
-                                            {`${bot.displayName} (@${bot.username})`}
+                                            {`${bot.display_name} (@${bot.username})`}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>{'Prompt (Go template)'}</label>
+                                <label
+                                    htmlFor={`${action.id}-prompt`}
+                                    style={styles.label}
+                                >{'Prompt (Go template)'}</label>
                                 <textarea
+                                    id={`${action.id}-prompt`}
                                     style={styles.textarea}
                                     value={action.prompt}
                                     onChange={(e) => handleActionChange(index, 'prompt', e.target.value)}

@@ -32,7 +32,7 @@ func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.Completi
 
 func TestFlowExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "p1",
 		ChannelId: "ch2",
@@ -65,7 +65,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 
 func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "p1",
 		ChannelId: "ch2",
@@ -103,7 +103,7 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 
 func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500)).Once()
 
 	registry := NewRegistry()
@@ -134,7 +134,7 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 
 func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(true)
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
 		return p.Message == "AI said: hello from AI"
 	})).Return(&mmmodel.Post{
@@ -210,7 +210,7 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 
 func TestFlowExecutor_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionManageChannelRoles).Return(false)
+	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(false)
 
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
@@ -232,6 +232,6 @@ func TestFlowExecutor_PermissionDenied(t *testing.T) {
 
 	err := executor.Execute(f, triggerData)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does not have permission to manage channel")
+	assert.Contains(t, err.Error(), "does not have permission to post in channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }

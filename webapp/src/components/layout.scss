@@ -34,7 +34,7 @@
     }
 
     &--active {
-        background-color: var(--sidebar-text-active-border);
+        background-color: var(--sidebar-text-hover-bg);
         color: var(--sidebar-text);
         font-weight: 600;
     }

@@ -59,11 +59,18 @@ func (s *Store) Enqueue(item *model.WorkItem) error {
 		return fmt.Errorf("failed to marshal work item %s: %w", item.ID, err)
 	}
 
+	if err := s.appendToIndex(pendingIndexKey, item.ID); err != nil {
+		return fmt.Errorf("failed to add work item %s to pending index: %w", item.ID, err)
+	}
+
 	if appErr := s.api.KVSet(workItemKeyPrefix+item.ID, data); appErr != nil {
+		// Best-effort rollback. If this also fails, we have a stale index
+		// entry which ClaimNext safely skips.
+		_ = s.removeFromIndex(pendingIndexKey, item.ID)
 		return fmt.Errorf("failed to save work item %s: %w", item.ID, appErr)
 	}
 
-	return s.appendToIndex(pendingIndexKey, item.ID)
+	return nil
 }
 
 // ClaimNext pops the first item from the pending index, moves it to the
@@ -143,29 +150,26 @@ func (s *Store) ClaimNext() (*model.WorkItem, error) {
 // Complete removes a work item from the running index and deletes it
 // from the KV store.
 func (s *Store) Complete(id string) error {
-	if err := s.removeFromIndex(runningIndexKey, id); err != nil {
-		return err
-	}
-
 	if appErr := s.api.KVDelete(workItemKeyPrefix + id); appErr != nil {
 		return fmt.Errorf("failed to delete work item %s: %w", id, appErr)
 	}
 
-	return nil
+	// Remove from running index. If this fails, the stale entry is
+	// harmless: ClaimNext skips items whose KV data is nil, and
+	// ResetRunningToPending also skips nil items.
+	return s.removeFromIndex(runningIndexKey, id)
 }
 
 // Fail removes a work item from the running index and updates it with
 // a failed status and error message.
 func (s *Store) Fail(id string, errMsg string) error {
-	if err := s.removeFromIndex(runningIndexKey, id); err != nil {
-		return err
-	}
-
 	item, err := s.Get(id)
 	if err != nil {
 		return err
 	}
 	if item == nil {
+		// Item already gone; clean index just in case.
+		_ = s.removeFromIndex(runningIndexKey, id)
 		return nil
 	}
 
@@ -181,7 +185,10 @@ func (s *Store) Fail(id string, errMsg string) error {
 		return fmt.Errorf("failed to update work item %s: %w", id, appErr)
 	}
 
-	return nil
+	// Remove from running index last. If this fails, the item stays in the
+	// running index but is already marked failed. ResetRunningToPending
+	// would move it to pending (a harmless retry is better than an orphan).
+	return s.removeFromIndex(runningIndexKey, id)
 }
 
 // ResetRunningToPending moves all items from the running index back to
@@ -231,12 +238,22 @@ func (s *Store) ResetRunningToPending() (int, error) {
 		count++
 	}
 
-	if err := s.setIndex(pendingIndexKey, pendingIDs); err != nil {
+	// Clear the running index FIRST.
+	if err := s.setIndex(runningIndexKey, nil); err != nil {
 		return count, err
 	}
 
-	// Clear the running index.
-	if err := s.setIndex(runningIndexKey, nil); err != nil {
+	// Deduplicate pending IDs in case of prior partial failures.
+	seen := make(map[string]struct{}, len(pendingIDs))
+	deduped := make([]string, 0, len(pendingIDs))
+	for _, id := range pendingIDs {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			deduped = append(deduped, id)
+		}
+	}
+
+	if err := s.setIndex(pendingIndexKey, deduped); err != nil {
 		return count, err
 	}
 

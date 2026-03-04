@@ -334,7 +334,9 @@ Action templates receive a `FlowContext` object with the following structure:
 
 ### Step output fields
 
-Previous action outputs are available via `{{.Steps.<action_id>}}`:
+Previous action outputs are available via `{{.Steps.<action_id>}}`.
+
+> **Note:** Trigger data fields use `.Id` (e.g. `{{.Trigger.Post.Id}}`) following Mattermost model conventions, while step output fields use `.PostID` / `.ChannelID` following Go naming conventions. This difference reflects the underlying Go struct definitions.
 
 | Field      | Access                             |
 | ---------- | ---------------------------------- |
