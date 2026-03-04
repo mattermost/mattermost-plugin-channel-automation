@@ -298,6 +298,7 @@ func TestAPI_DeleteFlow(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusNoContent, w.Code)
@@ -407,6 +408,11 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	// Allow existing flow's channel.
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	)
+	// Deny new flow's channel.
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)

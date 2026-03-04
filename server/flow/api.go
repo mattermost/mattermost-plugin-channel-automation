@@ -174,6 +174,18 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		return
+	}
+
+	// Check permissions on existing flow (must have permission to modify it).
+	if chID, ok := h.checkFlowPermissions(userID, existing); !ok {
+		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+		return
+	}
+
+	// Check permissions on new flow configuration (must have permission on new channels).
 	if chID, ok := h.checkFlowPermissions(userID, &f); !ok {
 		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
 		return
@@ -197,6 +209,28 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+
+	existing, err := h.store.Get(id)
+	if err != nil {
+		h.api.LogError("Failed to get flow for delete", "error", err.Error())
+		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		return
+	}
+	if existing == nil {
+		http.Error(w, "flow not found", http.StatusNotFound)
+		return
+	}
+
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		return
+	}
+
+	if chID, ok := h.checkFlowPermissions(userID, existing); !ok {
+		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+		return
+	}
 
 	if err := h.store.Delete(id); err != nil {
 		h.api.LogError("Failed to delete flow", "error", err.Error())
