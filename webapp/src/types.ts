@@ -3,6 +3,7 @@ export interface MessagePostedTriggerParams {
 }
 
 export interface ScheduleTriggerParams {
+    channel_id: string;
     interval: string;
     start_at?: number;
 }

@@ -15,6 +15,9 @@ func ValidateTrigger(t *Trigger) error {
 			return fmt.Errorf("message_posted trigger requires channel_id")
 		}
 	case t.Schedule != nil:
+		if t.Schedule.ChannelID == "" {
+			return fmt.Errorf("schedule trigger requires channel_id")
+		}
 		if t.Schedule.Interval == "" {
 			return fmt.Errorf("schedule trigger requires interval")
 		}

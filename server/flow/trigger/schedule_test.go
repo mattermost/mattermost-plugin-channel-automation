@@ -16,7 +16,7 @@ func TestScheduleTrigger_Type(t *testing.T) {
 
 func TestScheduleTrigger_Matches_AlwaysFalse(t *testing.T) {
 	tr := &trigger.ScheduleTrigger{}
-	trig := &model.Trigger{Schedule: &model.ScheduleConfig{Interval: "5m"}}
+	trig := &model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "5m"}}
 	event := &model.Event{Type: "schedule"}
 
 	assert.False(t, tr.Matches(trig, event))

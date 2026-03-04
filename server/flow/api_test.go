@@ -219,7 +219,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"schedule": {}},
+		"trigger": {"schedule": {"channel_id": "ch1"}},
 		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
@@ -238,7 +238,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"schedule": {"interval": "1m"}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "1m"}},
 		"actions": [{"name": "Send", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
@@ -280,7 +280,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"schedule": {"interval": "2m"}}
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2m"}}
 	}`
 
 	w := httptest.NewRecorder()

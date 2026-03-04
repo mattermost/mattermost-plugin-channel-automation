@@ -21,8 +21,9 @@ type MessagePostedConfig struct {
 
 // ScheduleConfig holds trigger config for the schedule trigger type.
 type ScheduleConfig struct {
-	Interval string `json:"interval"`
-	StartAt  int64  `json:"start_at,omitempty"`
+	ChannelID string `json:"channel_id"`
+	Interval  string `json:"interval"`
+	StartAt   int64  `json:"start_at,omitempty"`
 }
 
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
@@ -94,6 +95,9 @@ func CollectChannelIDs(f *Flow) []string {
 
 	if f.Trigger.MessagePosted != nil {
 		add(f.Trigger.MessagePosted.ChannelID)
+	}
+	if f.Trigger.Schedule != nil {
+		add(f.Trigger.Schedule.ChannelID)
 	}
 
 	for i := range f.Actions {

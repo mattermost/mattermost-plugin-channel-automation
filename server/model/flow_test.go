@@ -47,7 +47,19 @@ func TestCollectChannelIDs_DuplicatesRemoved(t *testing.T) {
 
 func TestCollectChannelIDs_ScheduleTrigger(t *testing.T) {
 	f := &Flow{
-		Trigger: Trigger{Schedule: &ScheduleConfig{Interval: "1h"}},
+		Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "ch2"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch1", "ch2"}, ids)
+}
+
+func TestCollectChannelIDs_ScheduleTriggerDuplicateWithAction(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 		Actions: []Action{
 			{SendMessage: &SendMessageActionConfig{ChannelID: "ch1"}},
 		},

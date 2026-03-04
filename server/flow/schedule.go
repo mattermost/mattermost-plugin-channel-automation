@@ -102,7 +102,8 @@ func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) {
 	// Determine whether the schedule parameters changed.
 	scheduleChanged := true // default true for create (no existing)
 	if oldIsActive && newIsActive {
-		scheduleChanged = existing.Trigger.Schedule.Interval != f.Trigger.Schedule.Interval ||
+		scheduleChanged = existing.Trigger.Schedule.ChannelID != f.Trigger.Schedule.ChannelID ||
+			existing.Trigger.Schedule.Interval != f.Trigger.Schedule.Interval ||
 			existing.Trigger.Schedule.StartAt != f.Trigger.Schedule.StartAt
 	}
 

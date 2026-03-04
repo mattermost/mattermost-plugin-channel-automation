@@ -22,35 +22,41 @@ func TestValidateTrigger_MessagePosted(t *testing.T) {
 
 func TestValidateTrigger_Schedule(t *testing.T) {
 	t.Run("valid minimal", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "5m"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "5m"}})
 		require.NoError(t, err)
 	})
 
 	t.Run("valid with start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "1h", StartAt: 1700000000000}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}})
 		require.NoError(t, err)
 	})
 
+	t.Run("missing channel_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "5m"}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "channel_id")
+	})
+
 	t.Run("missing interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1"}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "interval")
 	})
 
 	t.Run("unparseable interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "not-a-duration"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "not-a-duration"}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid interval")
 	})
 
 	t.Run("interval too small", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "1m"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1m"}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least")
 	})
 
 	t.Run("negative start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "10m", StartAt: -1}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: -1}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
 	})

@@ -19,18 +19,19 @@ const scheduleTrigger: TriggerConfig = {
     label: 'Schedule',
 
     defaultFormState(): TriggerFormState {
-        return {interval: '', start_at: ''};
+        return {channel_id: '', interval: '', start_at: ''};
     },
 
     fromTrigger(trigger: Trigger): TriggerFormState {
         return {
+            channel_id: trigger.schedule?.channel_id ?? '',
             interval: trigger.schedule?.interval ?? '',
             start_at: trigger.schedule?.start_at ? new Date(trigger.schedule.start_at).toISOString().slice(0, 16) : '',
         };
     },
 
     toTrigger(state: TriggerFormState): Trigger {
-        const params: {interval: string; start_at?: number} = {interval: state.interval};
+        const params: {channel_id: string; interval: string; start_at?: number} = {channel_id: state.channel_id, interval: state.interval};
         if (state.start_at) {
             params.start_at = new Date(state.start_at).getTime();
         }
@@ -50,6 +51,15 @@ const scheduleTrigger: TriggerConfig = {
     ): React.ReactNode {
         return (
             <>
+                <div style={styles.formGroup}>
+                    <label style={styles.label}>{'Channel ID'}</label>
+                    <input
+                        style={styles.input}
+                        type='text'
+                        value={state.channel_id}
+                        onChange={(e) => onChange('channel_id', e.target.value)}
+                    />
+                </div>
                 <div style={styles.formGroup}>
                     <label style={styles.label}>{'Interval (Go duration, e.g. 5m, 1h, 24h)'}</label>
                     <input
