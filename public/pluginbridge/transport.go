@@ -12,7 +12,7 @@ type pluginAPIRoundTripper struct {
 
 func (t *pluginAPIRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Body != nil {
-		defer req.Body.Close()
+		defer func() { _ = req.Body.Close() }()
 	}
 	resp := t.api.PluginHTTP(req)
 	if resp == nil {
