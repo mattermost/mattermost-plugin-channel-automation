@@ -56,15 +56,15 @@ func NewScheduleManager(api plugin.API, flowStore model.Store, enqueuer WorkItem
 	}
 }
 
-// Start lists all flows and creates cluster jobs for enabled schedule flows.
+// Start lists schedule-triggered flows and creates cluster jobs for enabled ones.
 func (sm *ScheduleManager) Start() error {
-	flows, err := sm.flowStore.List()
+	flows, err := sm.flowStore.ListScheduled()
 	if err != nil {
 		return err
 	}
 
 	for _, f := range flows {
-		if f.Trigger.Schedule == nil || !f.Enabled {
+		if !f.Enabled {
 			continue
 		}
 		if err := sm.startJob(f); err != nil {

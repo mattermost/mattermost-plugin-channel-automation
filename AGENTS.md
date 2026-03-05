@@ -4,6 +4,7 @@
 
 - Update documentation
 - Update webapp on backend changes
+- Update public/bridgeclient if needed
 - Add/Update unit tests
 - Run `/coderabbit:review`
 

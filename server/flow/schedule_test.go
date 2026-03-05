@@ -146,12 +146,12 @@ func TestScheduleManager_StartSkipsNonScheduleAndDisabled(t *testing.T) {
 	sm := NewScheduleManager(api, store, enq, notif)
 	// We can't call Start() because it would call cluster.Schedule
 	// which needs real KV store. Instead test the filtering logic directly.
-	flows, err := store.List()
+	flows, err := store.ListScheduled()
 	require.NoError(t, err)
 
 	var scheduled int
 	for _, f := range flows {
-		if f.Trigger.Schedule != nil && f.Enabled {
+		if f.Enabled {
 			scheduled++
 		}
 	}

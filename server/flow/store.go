@@ -16,6 +16,7 @@ const (
 	flowIndexKey              = "flow_index"
 	triggerIndexPrefix        = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
 	channelTriggerIndexPrefix = "ct:"    // all trigger types by channel (3 + 26 = 29)
+	scheduleIndexKey          = "sched_index"
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
@@ -87,6 +88,25 @@ func (s *KVStore) ListByTriggerChannel(channelID string) ([]*model.Flow, error) 
 	return flows, nil
 }
 
+func (s *KVStore) ListScheduled() ([]*model.Flow, error) {
+	ids, err := s.getScheduleIndex()
+	if err != nil {
+		return nil, err
+	}
+
+	flows := make([]*model.Flow, 0, len(ids))
+	for _, id := range ids {
+		f, err := s.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
+			flows = append(flows, f)
+		}
+	}
+	return flows, nil
+}
+
 func (s *KVStore) Save(f *model.Flow) error {
 	// Read old flow to clean up stale trigger index entries.
 	old, err := s.Get(f.ID)
@@ -136,6 +156,20 @@ func (s *KVStore) Save(f *model.Flow) error {
 		}
 	}
 
+	// Update schedule index.
+	oldHasSchedule := old != nil && old.Trigger.Schedule != nil
+	newHasSchedule := f.Trigger.Schedule != nil
+
+	if oldHasSchedule && !newHasSchedule {
+		if err := s.removeFromScheduleIndex(f.ID); err != nil {
+			return err
+		}
+	} else if !oldHasSchedule && newHasSchedule {
+		if err := s.addToScheduleIndex(f.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -164,6 +198,12 @@ func (s *KVStore) Delete(id string) error {
 
 	if chID := f.TriggerChannelID(); chID != "" {
 		if err := s.removeChannelTriggerIndex(chID, id); err != nil {
+			return err
+		}
+	}
+
+	if f.Trigger.Schedule != nil {
+		if err := s.removeFromScheduleIndex(id); err != nil {
 			return err
 		}
 	}
@@ -379,4 +419,71 @@ func (s *KVStore) removeChannelTriggerIndex(channelID, flowID string) error {
 		}
 	}
 	return s.setChannelTriggerIndex(channelID, filtered)
+}
+
+// --- Schedule index helpers ---
+
+func (s *KVStore) getScheduleIndex() ([]string, error) {
+	data, appErr := s.api.KVGet(scheduleIndexKey)
+	if appErr != nil {
+		return nil, fmt.Errorf("failed to get schedule index: %w", appErr)
+	}
+	if data == nil {
+		return nil, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal schedule index: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *KVStore) setScheduleIndex(ids []string) error {
+	if len(ids) == 0 {
+		if appErr := s.api.KVDelete(scheduleIndexKey); appErr != nil {
+			return fmt.Errorf("failed to delete schedule index: %w", appErr)
+		}
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schedule index: %w", err)
+	}
+	if appErr := s.api.KVSet(scheduleIndexKey, data); appErr != nil {
+		return fmt.Errorf("failed to save schedule index: %w", appErr)
+	}
+	return nil
+}
+
+func (s *KVStore) addToScheduleIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getScheduleIndex()
+	if err != nil {
+		return err
+	}
+	if slices.Contains(ids, id) {
+		return nil
+	}
+	ids = append(ids, id)
+	return s.setScheduleIndex(ids)
+}
+
+func (s *KVStore) removeFromScheduleIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getScheduleIndex()
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, existingID := range ids {
+		if existingID != id {
+			filtered = append(filtered, existingID)
+		}
+	}
+	return s.setScheduleIndex(filtered)
 }

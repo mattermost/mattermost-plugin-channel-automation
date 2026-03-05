@@ -292,6 +292,111 @@ func TestStore_ChannelTriggerIndex_ScheduleTrigger(t *testing.T) {
 	assert.Empty(t, ids)
 }
 
+func TestStore_ScheduleIndex(t *testing.T) {
+	store, kv := setupStore(t)
+
+	// Save two schedule flows.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch2", Interval: "30m"}}}))
+
+	flows, err := store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 2)
+	ids := []string{flows[0].ID, flows[1].ID}
+	assert.ElementsMatch(t, []string{"f1", "f2"}, ids)
+
+	// Delete one — returns one.
+	require.NoError(t, store.Delete("f1"))
+	flows, err = store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f2", flows[0].ID)
+
+	// Delete both — empty + KV key cleaned up.
+	require.NoError(t, store.Delete("f2"))
+	flows, err = store.ListScheduled()
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+
+	kv.mu.Lock()
+	_, exists := kv.data[scheduleIndexKey]
+	kv.mu.Unlock()
+	assert.False(t, exists)
+}
+
+func TestStore_ScheduleIndex_MessagePostedExcluded(t *testing.T) {
+	store, _ := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	flows, err := store.ListScheduled()
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+}
+
+func TestStore_ScheduleIndex_DisabledIncluded(t *testing.T) {
+	store, _ := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Enabled: false,
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
+	}))
+
+	flows, err := store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestStore_ScheduleIndex_TriggerTypeChange(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// Start with a schedule flow.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+
+	flows, err := store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+
+	// Change to message_posted — should remove from schedule index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	flows, err = store.ListScheduled()
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+
+	// Change back to schedule — should add to schedule index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}}))
+
+	flows, err = store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestStore_ScheduleIndex_NoDuplicates(t *testing.T) {
+	store, kv := setupStore(t)
+
+	// Save the same schedule flow twice.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}}))
+
+	flows, err := store.ListScheduled()
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+
+	// Verify the raw index has exactly one entry.
+	kv.mu.Lock()
+	indexData := kv.data[scheduleIndexKey]
+	kv.mu.Unlock()
+
+	var ids []string
+	require.NoError(t, json.Unmarshal(indexData, &ids))
+	assert.Equal(t, []string{"f1"}, ids)
+}
+
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 
