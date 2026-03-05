@@ -12,12 +12,12 @@ import (
 
 const basePath = "/plugins/" + pluginID + "/api/v1"
 
-func (c *Client) newRequest(method, path, userID string, body io.Reader) (*http.Request, error) {
+func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, "http://localhost"+basePath+path, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Mattermost-User-ID", userID)
+	req.Header.Set("Mattermost-User-ID", c.userID)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -35,9 +35,21 @@ func checkResponse(resp *http.Response) error {
 	}
 }
 
-// ListFlows returns all flows visible to the given user.
-func (c *Client) ListFlows(userID string) ([]*Flow, error) {
-	req, err := c.newRequest(http.MethodGet, "/flows", userID, nil)
+// ListFlowsOptions contains optional filters for ListFlows.
+type ListFlowsOptions struct {
+	// ChannelID filters flows to those triggered by the given channel.
+	ChannelID string
+}
+
+// ListFlows returns all flows visible to the caller.
+// Use the opts fields to filter the results (pass an empty struct for no filters).
+func (c *Client) ListFlows(opts ListFlowsOptions) ([]*Flow, error) {
+	path := "/flows"
+	if opts.ChannelID != "" {
+		path += "?channel_id=" + url.QueryEscape(opts.ChannelID)
+	}
+
+	req, err := c.newRequest(http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -60,8 +72,11 @@ func (c *Client) ListFlows(userID string) ([]*Flow, error) {
 }
 
 // GetFlow returns a single flow by ID.
-func (c *Client) GetFlow(userID, flowID string) (*Flow, error) {
-	req, err := c.newRequest(http.MethodGet, "/flows/"+url.PathEscape(flowID), userID, nil)
+func (c *Client) GetFlow(flowID string) (*Flow, error) {
+	if flowID == "" {
+		return nil, fmt.Errorf("flow ID must not be empty")
+	}
+	req, err := c.newRequest(http.MethodGet, "/flows/"+url.PathEscape(flowID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -84,7 +99,7 @@ func (c *Client) GetFlow(userID, flowID string) (*Flow, error) {
 }
 
 // CreateFlow creates a new flow and returns the created flow with server-assigned fields.
-func (c *Client) CreateFlow(userID string, flow *Flow) (*Flow, error) {
+func (c *Client) CreateFlow(flow *Flow) (*Flow, error) {
 	if flow == nil {
 		return nil, fmt.Errorf("flow must not be nil")
 	}
@@ -93,7 +108,7 @@ func (c *Client) CreateFlow(userID string, flow *Flow) (*Flow, error) {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.newRequest(http.MethodPost, "/flows", userID, bytes.NewReader(body))
+	req, err := c.newRequest(http.MethodPost, "/flows", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -116,7 +131,7 @@ func (c *Client) CreateFlow(userID string, flow *Flow) (*Flow, error) {
 }
 
 // UpdateFlow updates an existing flow. The flow's ID field must be set.
-func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
+func (c *Client) UpdateFlow(flow *Flow) (*Flow, error) {
 	if flow == nil {
 		return nil, fmt.Errorf("flow must not be nil")
 	}
@@ -129,7 +144,7 @@ func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.newRequest(http.MethodPut, "/flows/"+url.PathEscape(flow.ID), userID, bytes.NewReader(body))
+	req, err := c.newRequest(http.MethodPut, "/flows/"+url.PathEscape(flow.ID), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -152,8 +167,11 @@ func (c *Client) UpdateFlow(userID string, flow *Flow) (*Flow, error) {
 }
 
 // DeleteFlow deletes a flow by ID.
-func (c *Client) DeleteFlow(userID, flowID string) error {
-	req, err := c.newRequest(http.MethodDelete, "/flows/"+url.PathEscape(flowID), userID, nil)
+func (c *Client) DeleteFlow(flowID string) error {
+	if flowID == "" {
+		return fmt.Errorf("flow ID must not be empty")
+	}
+	req, err := c.newRequest(http.MethodDelete, "/flows/"+url.PathEscape(flowID), nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
