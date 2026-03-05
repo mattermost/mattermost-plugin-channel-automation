@@ -618,3 +618,43 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	// Verify GetChannelMember was only called for ch1.
 	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
 }
+
+func TestAPI_ListFlows_FilterByChannel(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f3", Name: "Flow 3", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/flows?channel_id=ch1", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var flows []*model.Flow
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
+	require.Len(t, flows, 2)
+	ids := []string{flows[0].ID, flows[1].ID}
+	assert.ElementsMatch(t, []string{"f1", "f3"}, ids)
+}
+
+func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/flows?channel_id=ch-nonexistent", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var flows []*model.Flow
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
+	assert.Empty(t, flows)
+}

@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	flowKeyPrefix      = "flow:"
-	flowIndexKey       = "flow_index"
-	triggerIndexPrefix = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
+	flowKeyPrefix             = "flow:"
+	flowIndexKey              = "flow_index"
+	triggerIndexPrefix        = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
+	channelTriggerIndexPrefix = "ct:"    // all trigger types by channel (3 + 26 = 29)
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
@@ -67,6 +68,25 @@ func (s *KVStore) List() ([]*model.Flow, error) {
 	return flows, nil
 }
 
+func (s *KVStore) ListByTriggerChannel(channelID string) ([]*model.Flow, error) {
+	ids, err := s.getChannelTriggerIndex(channelID)
+	if err != nil {
+		return nil, err
+	}
+
+	flows := make([]*model.Flow, 0, len(ids))
+	for _, id := range ids {
+		f, err := s.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
+			flows = append(flows, f)
+		}
+	}
+	return flows, nil
+}
+
 func (s *KVStore) Save(f *model.Flow) error {
 	// Read old flow to clean up stale trigger index entries.
 	old, err := s.Get(f.ID)
@@ -102,6 +122,20 @@ func (s *KVStore) Save(f *model.Flow) error {
 		}
 	}
 
+	// Update channel-trigger index (covers all trigger types).
+	if old != nil {
+		if oldChID := old.TriggerChannelID(); oldChID != "" {
+			if err := s.removeChannelTriggerIndex(oldChID, f.ID); err != nil {
+				return err
+			}
+		}
+	}
+	if newChID := f.TriggerChannelID(); newChID != "" {
+		if err := s.addChannelTriggerIndex(newChID, f.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -124,6 +158,12 @@ func (s *KVStore) Delete(id string) error {
 
 	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
 		if err := s.removeTriggerIndex(f.Trigger.MessagePosted.ChannelID, id); err != nil {
+			return err
+		}
+	}
+
+	if chID := f.TriggerChannelID(); chID != "" {
+		if err := s.removeChannelTriggerIndex(chID, id); err != nil {
 			return err
 		}
 	}
@@ -266,4 +306,77 @@ func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
 		}
 	}
 	return s.setTriggerIndex(channelID, filtered)
+}
+
+// --- Channel-trigger index helpers (all trigger types) ---
+
+func makeChannelTriggerIndexKey(channelID string) string {
+	return channelTriggerIndexPrefix + channelID
+}
+
+func (s *KVStore) getChannelTriggerIndex(channelID string) ([]string, error) {
+	key := makeChannelTriggerIndexKey(channelID)
+	data, appErr := s.api.KVGet(key)
+	if appErr != nil {
+		return nil, fmt.Errorf("failed to get channel trigger index: %w", appErr)
+	}
+	if data == nil {
+		return nil, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal channel trigger index: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *KVStore) setChannelTriggerIndex(channelID string, ids []string) error {
+	key := makeChannelTriggerIndexKey(channelID)
+	if len(ids) == 0 {
+		if appErr := s.api.KVDelete(key); appErr != nil {
+			return fmt.Errorf("failed to delete channel trigger index: %w", appErr)
+		}
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal channel trigger index: %w", err)
+	}
+	if appErr := s.api.KVSet(key, data); appErr != nil {
+		return fmt.Errorf("failed to save channel trigger index: %w", appErr)
+	}
+	return nil
+}
+
+func (s *KVStore) addChannelTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getChannelTriggerIndex(channelID)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(ids, flowID) {
+		return nil
+	}
+	ids = append(ids, flowID)
+	return s.setChannelTriggerIndex(channelID, ids)
+}
+
+func (s *KVStore) removeChannelTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getChannelTriggerIndex(channelID)
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != flowID {
+			filtered = append(filtered, id)
+		}
+	}
+	return s.setChannelTriggerIndex(channelID, filtered)
 }

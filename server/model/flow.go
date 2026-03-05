@@ -32,6 +32,18 @@ type Trigger struct {
 	Schedule      *ScheduleConfig      `json:"schedule,omitempty"`
 }
 
+// TriggerChannelID returns the channel ID from the flow's trigger config,
+// regardless of trigger type. Returns empty string if no trigger is set.
+func (f *Flow) TriggerChannelID() string {
+	if f.Trigger.MessagePosted != nil {
+		return f.Trigger.MessagePosted.ChannelID
+	}
+	if f.Trigger.Schedule != nil {
+		return f.Trigger.Schedule.ChannelID
+	}
+	return ""
+}
+
 // Type returns the trigger type based on which config is present.
 func (t *Trigger) Type() string {
 	if t.MessagePosted != nil {

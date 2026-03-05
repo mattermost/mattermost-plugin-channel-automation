@@ -100,6 +100,10 @@ func (s *testFlowStore) Delete(id string) error {
 	return nil
 }
 
+func (s *testFlowStore) ListByTriggerChannel(_ string) ([]*model.Flow, error) {
+	return nil, nil
+}
+
 func (s *testFlowStore) GetFlowIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }

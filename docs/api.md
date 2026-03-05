@@ -14,9 +14,16 @@ All endpoints additionally check permissions: **System Admins** (`manage_system`
 
 ```
 GET /flows
+GET /flows?channel_id=<channel-id>
 ```
 
 Returns all flows visible to the requesting user. System admins see all flows; other users only see flows where they have channel admin permissions on all referenced channels.
+
+**Query parameters:**
+
+| Parameter    | Type   | Description                                                                                                          |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to both `message_posted` and `schedule` triggers. |
 
 **Response:** `200 OK`
 

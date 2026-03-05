@@ -205,6 +205,93 @@ func TestStore_TriggerIndex_NoDuplicates(t *testing.T) {
 	assert.Equal(t, []string{"f1"}, ids)
 }
 
+func TestStore_ChannelTriggerIndex(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// Save flows with both trigger types targeting the same channel.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f3", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+
+	flows, err := store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	require.Len(t, flows, 2)
+	ids := []string{flows[0].ID, flows[1].ID}
+	assert.ElementsMatch(t, []string{"f1", "f2"}, ids)
+
+	flows, err = store.ListByTriggerChannel("ch2")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f3", flows[0].ID)
+
+	flows, err = store.ListByTriggerChannel("ch-nonexistent")
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+}
+
+func TestStore_ChannelTriggerIndex_UpdateChannel(t *testing.T) {
+	store, _ := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	flows, err := store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+
+	// Update flow to target ch2 instead.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+
+	flows, err = store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+
+	flows, err = store.ListByTriggerChannel("ch2")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestStore_ChannelTriggerIndex_Delete(t *testing.T) {
+	store, kv := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	require.NoError(t, store.Delete("f1"))
+	flows, err := store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f2", flows[0].ID)
+
+	require.NoError(t, store.Delete("f2"))
+	flows, err = store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+
+	// Key should be cleaned up from KV store.
+	kv.mu.Lock()
+	_, exists := kv.data[makeChannelTriggerIndexKey("ch1")]
+	kv.mu.Unlock()
+	assert.False(t, exists)
+}
+
+func TestStore_ChannelTriggerIndex_ScheduleTrigger(t *testing.T) {
+	store, _ := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+
+	flows, err := store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+
+	// Verify that the message_posted trigger index does NOT contain this flow.
+	kvStore := store.(*KVStore)
+	ids, err := kvStore.GetFlowIDsForChannel("ch1")
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
+
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 

@@ -60,7 +60,13 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	flows, err := h.store.List()
+	var flows []*model.Flow
+	var err error
+	if channelID := r.URL.Query().Get("channel_id"); channelID != "" {
+		flows, err = h.store.ListByTriggerChannel(channelID)
+	} else {
+		flows, err = h.store.List()
+	}
 	if err != nil {
 		h.api.LogError("Failed to list flows", "error", err.Error())
 		http.Error(w, "failed to list flows", http.StatusInternalServerError)
