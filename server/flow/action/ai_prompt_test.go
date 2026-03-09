@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
@@ -75,7 +76,12 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "AI says hello", output.Message)
 	assert.Equal(t, "ai-bot", bc.lastAgent)
-	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[0].Message)
+	// Posts: [trigger context (system), user prompt]
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[1].Message)
 }
 
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
@@ -103,7 +109,12 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "Service response", output.Message)
 	assert.Equal(t, "openai", bc.lastService)
-	assert.Equal(t, "Tell me about alice", bc.lastReq.Posts[0].Message)
+	// Posts: [trigger context (system), user prompt]
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "Triggering User: alice")
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Equal(t, "Tell me about alice", bc.lastReq.Posts[1].Message)
 }
 
 func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
@@ -130,7 +141,11 @@ func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "refined output", output.Message)
-	assert.Equal(t, "Refine: previous result", bc.lastReq.Posts[0].Message)
+	// Posts: [scope instruction (system), user prompt]
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "Complete only the specific task")
+	assert.Equal(t, "Refine: previous result", bc.lastReq.Posts[1].Message)
 }
 
 func TestAIPromptAction_Execute_MissingConfig(t *testing.T) {
@@ -327,14 +342,17 @@ func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "response", output.Message)
-	require.Len(t, bc.lastReq.Posts, 2)
+	// Posts: [user system prompt, trigger context (system), user prompt]
+	require.Len(t, bc.lastReq.Posts, 3)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
 	assert.Equal(t, "You are a helpful assistant for alice.", bc.lastReq.Posts[0].Message)
-	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
-	assert.Equal(t, "Summarize this.", bc.lastReq.Posts[1].Message)
+	assert.Equal(t, "system", bc.lastReq.Posts[1].Role)
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "[Trigger Context]")
+	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
+	assert.Equal(t, "Summarize this.", bc.lastReq.Posts[2].Message)
 }
 
-func TestAIPromptAction_Execute_EmptySystemPromptNoSystemPost(t *testing.T) {
+func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "response"}
 	a := NewAIPromptAction(api, bc)
@@ -355,9 +373,13 @@ func TestAIPromptAction_Execute_EmptySystemPromptNoSystemPost(t *testing.T) {
 	output, err := a.Execute(act, ctx)
 	require.NoError(t, err)
 	require.NotNil(t, output)
-	require.Len(t, bc.lastReq.Posts, 1)
-	assert.Equal(t, "user", bc.lastReq.Posts[0].Role)
-	assert.Equal(t, "Hello", bc.lastReq.Posts[0].Message)
+	// Even with no user system prompt and empty trigger, scope instruction is always present
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "Complete only the specific task")
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Equal(t, "Hello", bc.lastReq.Posts[1].Message)
 }
 
 func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
@@ -380,6 +402,122 @@ func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, output)
 	assert.Contains(t, err.Error(), "failed to render system prompt template")
+}
+
+func TestBuildTriggerContext(t *testing.T) {
+	t.Run("empty trigger", func(t *testing.T) {
+		got := buildTriggerContext(model.TriggerData{})
+		assert.Empty(t, got)
+	})
+
+	t.Run("post trigger", func(t *testing.T) {
+		got := buildTriggerContext(model.TriggerData{
+			Post: &model.SafePost{
+				Id:        "post123",
+				ThreadId:  "thread456",
+				ChannelId: "chan789",
+				Message:   "Alert: server is down",
+			},
+			Channel: &model.SafeChannel{
+				Id:          "chan789",
+				Name:        "incidents",
+				DisplayName: "Incidents",
+			},
+			User: &model.SafeUser{
+				Id:       "user1",
+				Username: "sysadmin",
+			},
+		})
+		assert.Contains(t, got, "[Trigger Context]")
+		assert.Contains(t, got, "Post ID: post123")
+		assert.Contains(t, got, "Thread ID: thread456")
+		assert.Contains(t, got, "Channel ID: chan789")
+		assert.Contains(t, got, "Post Message:\nAlert: server is down")
+		assert.Contains(t, got, "Channel Name: incidents")
+		assert.Contains(t, got, "Channel Display Name: Incidents")
+		assert.Contains(t, got, "Triggering User: sysadmin (ID: user1)")
+		// Channel ID should not be duplicated (already in post section)
+		assert.Equal(t, 1, strings.Count(got, "Channel ID:"))
+	})
+
+	t.Run("schedule trigger", func(t *testing.T) {
+		got := buildTriggerContext(model.TriggerData{
+			Schedule: &model.ScheduleInfo{
+				Interval: "daily",
+				FiredAt:  1700000000000,
+			},
+		})
+		assert.Contains(t, got, "[Trigger Context]")
+		assert.Contains(t, got, "Schedule Interval: daily")
+		assert.Contains(t, got, "Fired At: 1700000000000")
+		assert.NotContains(t, got, "Post ID")
+		assert.NotContains(t, got, "Triggering User")
+	})
+
+	t.Run("channel only trigger", func(t *testing.T) {
+		got := buildTriggerContext(model.TriggerData{
+			Channel: &model.SafeChannel{
+				Id:   "chan1",
+				Name: "general",
+			},
+		})
+		assert.Contains(t, got, "Channel ID: chan1")
+		assert.Contains(t, got, "Channel Name: general")
+	})
+}
+
+func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "done"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Handle this incident",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{
+				Id:        "post123",
+				ThreadId:  "thread456",
+				ChannelId: "chan789",
+				Message:   "Postgres is down in production",
+			},
+			Channel: &model.SafeChannel{
+				Id:          "chan789",
+				Name:        "incidents",
+				DisplayName: "Incidents",
+			},
+			User: &model.SafeUser{
+				Id:       "user1",
+				Username: "sysadmin",
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	// Should have trigger context + scope instruction system message + user prompt
+	require.Len(t, bc.lastReq.Posts, 2)
+	triggerCtx := bc.lastReq.Posts[0]
+	assert.Equal(t, "system", triggerCtx.Role)
+	assert.Contains(t, triggerCtx.Message, "Post ID: post123")
+	assert.Contains(t, triggerCtx.Message, "Thread ID: thread456")
+	assert.Contains(t, triggerCtx.Message, "Channel ID: chan789")
+	assert.Contains(t, triggerCtx.Message, "Postgres is down in production")
+	assert.Contains(t, triggerCtx.Message, "Triggering User: sysadmin (ID: user1)")
+	assert.Contains(t, triggerCtx.Message, "Channel Name: incidents")
+	assert.Contains(t, triggerCtx.Message, "Complete only the specific task")
+
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Equal(t, "Handle this incident", bc.lastReq.Posts[1].Message)
 }
 
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
