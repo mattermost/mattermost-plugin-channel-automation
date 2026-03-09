@@ -16,12 +16,20 @@ async function doFetch<T>(url: string, options: {method?: string; body?: string}
     if (!resp.ok) {
         let message = resp.statusText;
         try {
-            const body = await resp.json();
-            if (body && body.error) {
-                message = body.error;
+            const text = await resp.text();
+            try {
+                const body = JSON.parse(text);
+                if (body && body.error) {
+                    message = body.error;
+                }
+            } catch {
+                // Not JSON — use the plain text response body directly
+                if (text.trim()) {
+                    message = text.trim();
+                }
             }
         } catch {
-            // ignore parse errors
+            // ignore read errors
         }
         throw new Error(message);
     }
