@@ -36,6 +36,7 @@ export interface ToolConstraints {
 }
 
 export interface AIPromptActionParams {
+    system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;

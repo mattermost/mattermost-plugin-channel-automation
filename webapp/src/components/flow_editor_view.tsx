@@ -15,6 +15,7 @@ interface ActionForm {
     channel_id: string;
     reply_to_post_id: string;
     body: string;
+    system_prompt: string;
     prompt: string;
     provider_id: string;
     allowed_tools: string;
@@ -167,7 +168,7 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -178,6 +179,7 @@ function actionToForm(a: Action): ActionForm {
             channel_id: '',
             reply_to_post_id: '',
             body: '',
+            system_prompt: a.ai_prompt.system_prompt ?? '',
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tools: (a.ai_prompt.allowed_tools ?? []).join(', '),
@@ -191,13 +193,14 @@ function actionToForm(a: Action): ActionForm {
             channel_id: a.send_message.channel_id,
             reply_to_post_id: a.send_message.reply_to_post_id ?? '',
             body: a.send_message.body,
+            system_prompt: '',
             prompt: '',
             provider_id: '',
             allowed_tools: '',
             tool_constraints: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -422,6 +425,9 @@ const FlowEditorView: React.FC = () => {
                             provider_id: a.provider_id,
                         },
                     };
+                    if (a.system_prompt.trim() && action.ai_prompt) {
+                        action.ai_prompt.system_prompt = a.system_prompt;
+                    }
                     const tools = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
                     if (tools.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = tools;
@@ -650,6 +656,19 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-system-prompt`}
+                                    style={styles.label}
+                                >{'System Prompt (Go template, optional)'}</label>
+                                <textarea
+                                    id={`action-${index}-system-prompt`}
+                                    style={styles.textarea}
+                                    placeholder={'e.g. You are a helpful assistant.'}
+                                    value={action.system_prompt}
+                                    onChange={(e) => handleActionChange(index, 'system_prompt', e.target.value)}
+                                />
                             </div>
                             <div style={styles.formGroup}>
                                 <label

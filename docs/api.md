@@ -291,6 +291,7 @@ Exactly one type-specific config key should be set alongside `id`:
 
 | Field              | Type                            | Description                                                                                                             |
 | ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `system_prompt`    | string                          | _(optional)_ System prompt template (Go `text/template` syntax). Sent as the first message with role `"system"`.        |
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |

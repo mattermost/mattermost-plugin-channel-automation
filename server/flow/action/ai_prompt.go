@@ -54,6 +54,16 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		return nil, fmt.Errorf("failed to render template: %w", err)
 	}
 
+	var posts []bridgeclient.Post
+	if cfg.SystemPrompt != "" {
+		renderedSystem, sysErr := renderTemplate(cfg.SystemPrompt, ctx)
+		if sysErr != nil {
+			return nil, fmt.Errorf("failed to render system prompt template: %w", sysErr)
+		}
+		posts = append(posts, bridgeclient.Post{Role: "system", Message: renderedSystem})
+	}
+	posts = append(posts, bridgeclient.Post{Role: "user", Message: rendered})
+
 	a.api.LogDebug("AI prompt action: rendered prompt",
 		"action_id", action.ID,
 		"provider_type", cfg.ProviderType,
@@ -67,9 +77,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 
 	req := bridgeclient.CompletionRequest{
-		Posts: []bridgeclient.Post{
-			{Role: "user", Message: rendered},
-		},
+		Posts:     posts,
 		UserID:    ctx.CreatedBy,
 		ChannelID: channelID,
 	}

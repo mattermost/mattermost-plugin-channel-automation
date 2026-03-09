@@ -302,6 +302,86 @@ func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
 	assert.Nil(t, bc.lastReq.ToolConstraints)
 }
 
+func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			SystemPrompt: "You are a helpful assistant for {{.Trigger.User.Username}}.",
+			Prompt:       "Summarize this.",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			User: &model.SafeUser{Username: "alice"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "response", output.Message)
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Equal(t, "You are a helpful assistant for alice.", bc.lastReq.Posts[0].Message)
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Equal(t, "Summarize this.", bc.lastReq.Posts[1].Message)
+}
+
+func TestAIPromptAction_Execute_EmptySystemPromptNoSystemPost(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Hello",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	require.Len(t, bc.lastReq.Posts, 1)
+	assert.Equal(t, "user", bc.lastReq.Posts[0].Role)
+	assert.Equal(t, "Hello", bc.lastReq.Posts[0].Message)
+}
+
+func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			SystemPrompt: "{{.Invalid",
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "bot",
+		},
+	}
+	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to render system prompt template")
+}
+
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
