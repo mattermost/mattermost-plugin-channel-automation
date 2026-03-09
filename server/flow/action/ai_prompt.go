@@ -3,12 +3,16 @@ package action
 import (
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
+
+const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
+	"Do not take additional follow-up actions beyond what was explicitly requested."
 
 // BridgeClient is the interface for AI bridge operations, satisfied by *bridgeclient.Client.
 type BridgeClient interface {
@@ -62,6 +66,12 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		}
 		posts = append(posts, bridgeclient.Post{Role: "system", Message: renderedSystem})
 	}
+	contextMsg := buildTriggerContext(ctx.Trigger)
+	scopeMsg := completionScopeInstruction
+	if contextMsg != "" {
+		scopeMsg = contextMsg + "\n\n" + scopeMsg
+	}
+	posts = append(posts, bridgeclient.Post{Role: "system", Message: scopeMsg})
 	posts = append(posts, bridgeclient.Post{Role: "user", Message: rendered})
 
 	a.api.LogDebug("AI prompt action: rendered prompt",
@@ -114,6 +124,61 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	return &model.StepOutput{
 		Message: response,
 	}, nil
+}
+
+// buildTriggerContext builds a structured context string from trigger data
+// so the AI agent knows what triggered the flow without requiring template variables.
+func buildTriggerContext(trigger model.TriggerData) string {
+	var b strings.Builder
+
+	if trigger.Post != nil {
+		p := trigger.Post
+		b.WriteString("Post ID: " + p.Id + "\n")
+		if p.ThreadId != "" {
+			b.WriteString("Thread ID: " + p.ThreadId + "\n")
+		}
+		if p.ChannelId != "" {
+			b.WriteString("Channel ID: " + p.ChannelId + "\n")
+		}
+		b.WriteString("Post Message:\n" + p.Message + "\n")
+	}
+
+	if trigger.Channel != nil {
+		ch := trigger.Channel
+		if trigger.Post == nil && ch.Id != "" {
+			b.WriteString("Channel ID: " + ch.Id + "\n")
+		}
+		if ch.Name != "" {
+			b.WriteString("Channel Name: " + ch.Name + "\n")
+		}
+		if ch.DisplayName != "" {
+			b.WriteString("Channel Display Name: " + ch.DisplayName + "\n")
+		}
+	}
+
+	if trigger.User != nil {
+		u := trigger.User
+		name := u.Username
+		if u.Id != "" {
+			name += " (ID: " + u.Id + ")"
+		}
+		b.WriteString("Triggering User: " + name + "\n")
+	}
+
+	if trigger.Schedule != nil {
+		s := trigger.Schedule
+		if s.Interval != "" {
+			b.WriteString("Schedule Interval: " + s.Interval + "\n")
+		}
+		b.WriteString(fmt.Sprintf("Fired At: %d\n", s.FiredAt))
+	}
+
+	content := strings.TrimSpace(b.String())
+	if content == "" {
+		return ""
+	}
+
+	return "[Trigger Context]\nThis automation was triggered by the following event:\n\n" + content
 }
 
 // toBridgeToolConstraints converts model.ToolConstraints to bridgeclient.ToolConstraints.
