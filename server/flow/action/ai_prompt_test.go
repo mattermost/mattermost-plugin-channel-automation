@@ -241,6 +241,67 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to render template")
 }
 
+func TestAIPromptAction_Execute_AllowedToolsAndConstraints(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "tool result"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Do something",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"search", "create_post"},
+			ToolConstraints: model.ToolConstraints{
+				"create_post": {
+					"channel_id": {"ch1", "ch2"},
+				},
+			},
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "tool result", output.Message)
+	assert.Equal(t, []string{"search", "create_post"}, bc.lastReq.AllowedTools)
+	assert.Equal(t, bridgeclient.ToolConstraints{
+		"create_post": {
+			"channel_id": {"ch1", "ch2"},
+		},
+	}, bc.lastReq.ToolConstraints)
+}
+
+func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Nil(t, bc.lastReq.AllowedTools)
+	assert.Nil(t, bc.lastReq.ToolConstraints)
+}
+
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}

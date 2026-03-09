@@ -62,11 +62,17 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
+// ToolConstraints restricts tool parameters to allowed values.
+// Maps tool name → param name → allowed values.
+type ToolConstraints map[string]map[string][]string
+
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	Prompt       string `json:"prompt"`
-	ProviderType string `json:"provider_type"`
-	ProviderID   string `json:"provider_id"`
+	Prompt          string          `json:"prompt"`
+	ProviderType    string          `json:"provider_type"`
+	ProviderID      string          `json:"provider_id"`
+	AllowedTools    []string        `json:"allowed_tools,omitempty"`
+	ToolConstraints ToolConstraints `json:"tool_constraints,omitempty"`
 }
 
 // Action defines a single step in a flow. Exactly one config pointer should be set.

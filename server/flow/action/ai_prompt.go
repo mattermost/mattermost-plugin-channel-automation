@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -73,6 +74,13 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		ChannelID: channelID,
 	}
 
+	if len(cfg.AllowedTools) > 0 {
+		req.AllowedTools = cfg.AllowedTools
+	}
+	if len(cfg.ToolConstraints) > 0 {
+		req.ToolConstraints = toBridgeToolConstraints(cfg.ToolConstraints)
+	}
+
 	var response string
 	switch cfg.ProviderType {
 	case "agent":
@@ -98,4 +106,11 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	return &model.StepOutput{
 		Message: response,
 	}, nil
+}
+
+// toBridgeToolConstraints converts model.ToolConstraints to bridgeclient.ToolConstraints.
+func toBridgeToolConstraints(tc model.ToolConstraints) bridgeclient.ToolConstraints {
+	out := make(bridgeclient.ToolConstraints, len(tc))
+	maps.Copy(out, tc)
+	return out
 }

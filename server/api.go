@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -20,7 +21,31 @@ func (p *Plugin) initRouter() *mux.Router {
 	flowAPI := flow.NewAPIHandler(p.flowStore, p.API, p.scheduleManager)
 	flowAPI.RegisterRoutes(apiRouter)
 
+	apiRouter.HandleFunc("/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
+
 	return router
+}
+
+// handleGetAgentTools proxies a request to the AI plugin bridge to retrieve the
+// tools available for a specific agent.
+func (p *Plugin) handleGetAgentTools(w http.ResponseWriter, r *http.Request) {
+	if p.bridgeClient == nil {
+		http.Error(w, "AI plugin bridge not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	userID := r.Header.Get("Mattermost-User-ID")
+	agentID := mux.Vars(r)["agent_id"]
+
+	tools, err := p.bridgeClient.GetAgentTools(agentID, userID)
+	if err != nil {
+		p.API.LogError("Failed to get agent tools", "agent_id", agentID, "err", err.Error())
+		http.Error(w, "failed to get agent tools", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(tools)
 }
 
 // ServeHTTP handles HTTP requests for the plugin API.

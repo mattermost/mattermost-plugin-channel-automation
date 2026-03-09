@@ -1,4 +1,4 @@
-import {createFlow, getAIBots, getFlow, updateFlow} from 'client';
+import {createFlow, getAgentTools, getAIBots, getFlow, updateFlow} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 import {useHistory, useParams, useRouteMatch} from 'react-router-dom';
 import type {TriggerFormState} from 'triggers';
@@ -6,7 +6,7 @@ import {getAllTriggerConfigs, getTriggerConfig} from 'triggers';
 
 import 'triggers/message_posted';
 import 'triggers/schedule';
-import type {AIBotInfo, Action} from 'types';
+import type {AIBotInfo, AIToolInfo, Action} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -17,6 +17,8 @@ interface ActionForm {
     body: string;
     prompt: string;
     provider_id: string;
+    allowed_tools: string;
+    tool_constraints: string;
 }
 
 const styles = {
@@ -141,13 +143,31 @@ const styles = {
         overflowX: 'auto',
         margin: '4px 0 0',
     } as React.CSSProperties,
+    toolList: {
+        border: '1px solid rgba(var(--center-channel-color-rgb), 0.15)',
+        borderRadius: 4,
+        maxHeight: 200,
+        overflowY: 'auto',
+        padding: 4,
+    } as React.CSSProperties,
+    toolItem: {
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 6,
+        padding: '4px 8px',
+        fontSize: 13,
+    } as React.CSSProperties,
+    toolDescription: {
+        fontSize: 12,
+        color: 'rgba(var(--center-channel-color-rgb), 0.56)',
+    } as React.CSSProperties,
 };
 
 const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -160,6 +180,8 @@ function actionToForm(a: Action): ActionForm {
             body: '',
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
+            allowed_tools: (a.ai_prompt.allowed_tools ?? []).join(', '),
+            tool_constraints: a.ai_prompt.tool_constraints ? JSON.stringify(a.ai_prompt.tool_constraints, null, 2) : '',
         };
     }
     if (a.send_message) {
@@ -171,10 +193,56 @@ function actionToForm(a: Action): ActionForm {
             body: a.send_message.body,
             prompt: '',
             provider_id: '',
+            allowed_tools: '',
+            tool_constraints: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
+
+const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
+
+interface ToolSelectorProps {
+    action: ActionForm;
+    index: number;
+    tools: AIToolInfo[] | undefined;
+    onToggle: (index: number, toolName: string, checked: boolean) => void;
+}
+
+const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onToggle}) => {
+    if (!action.provider_id) {
+        return <p style={hintStyle}>{'Select an agent to see available tools.'}</p>;
+    }
+    if (tools === undefined) {
+        return <p style={hintStyle}>{'Loading tools...'}</p>;
+    }
+    if (tools.length === 0) {
+        return <p style={hintStyle}>{'No tools available for this agent.'}</p>;
+    }
+    const selected = action.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
+    return (
+        <div style={styles.toolList}>
+            {tools.map((tool) => (
+                <label
+                    key={tool.name}
+                    style={styles.toolItem}
+                >
+                    <input
+                        type='checkbox'
+                        checked={selected.includes(tool.name)}
+                        onChange={(e) => onToggle(index, tool.name, e.target.checked)}
+                    />
+                    <span>
+                        <strong>{tool.name}</strong>
+                        {tool.description && (
+                            <span style={styles.toolDescription}>{` \u2014 ${tool.description}`}</span>
+                        )}
+                    </span>
+                </label>
+            ))}
+        </div>
+    );
+};
 
 const FlowEditorView: React.FC = () => {
     const {id: flowId} = useParams<{id?: string}>();
@@ -193,6 +261,7 @@ const FlowEditorView: React.FC = () => {
     const [actions, setActions] = useState<ActionForm[]>([]);
     const [agents, setAgents] = useState<AIBotInfo[]>([]);
     const [agentsError, setAgentsError] = useState<string | null>(null);
+    const [agentTools, setAgentTools] = useState<Map<number, AIToolInfo[]>>(new Map());
     const [loading, setLoading] = useState(Boolean(flowId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -221,6 +290,30 @@ const FlowEditorView: React.FC = () => {
         };
     }, []);
 
+    const fetchToolsForAction = useCallback((index: number, agentId: string) => {
+        if (!agentId) {
+            setAgentTools((prev) => {
+                const next = new Map(prev);
+                next.delete(index);
+                return next;
+            });
+            return;
+        }
+        getAgentTools(agentId).then((tools) => {
+            setAgentTools((prev) => {
+                const next = new Map(prev);
+                next.set(index, tools);
+                return next;
+            });
+        }).catch(() => {
+            setAgentTools((prev) => {
+                const next = new Map(prev);
+                next.set(index, []);
+                return next;
+            });
+        });
+    }, []);
+
     useEffect(() => {
         if (!flowId) {
             return undefined;
@@ -238,7 +331,13 @@ const FlowEditorView: React.FC = () => {
                 setTriggerType(tt);
                 const config = getTriggerConfig(tt);
                 setTriggerState(config?.fromTrigger(flow.trigger) ?? {});
-                setActions((flow.actions ?? []).map(actionToForm));
+                const forms = (flow.actions ?? []).map(actionToForm);
+                setActions(forms);
+                forms.forEach((a, idx) => {
+                    if (a.type === 'ai_prompt' && a.provider_id) {
+                        fetchToolsForAction(idx, a.provider_id);
+                    }
+                });
             } catch (err: unknown) {
                 if (!cancelled) {
                     setError(err instanceof Error ? err.message : 'Failed to load flow');
@@ -252,7 +351,7 @@ const FlowEditorView: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [flowId]);
+    }, [flowId, fetchToolsForAction]);
 
     const handleTriggerTypeChange = useCallback((newType: string) => {
         setTriggerType(newType);
@@ -270,10 +369,37 @@ const FlowEditorView: React.FC = () => {
 
     const handleRemoveAction = useCallback((index: number) => {
         setActions((prev) => prev.filter((_, i) => i !== index));
+        setAgentTools((prev) => {
+            const next = new Map<number, AIToolInfo[]>();
+            for (const [k, v] of prev) {
+                if (k < index) {
+                    next.set(k, v);
+                } else if (k > index) {
+                    next.set(k - 1, v);
+                }
+            }
+            return next;
+        });
     }, []);
 
     const handleActionChange = useCallback((index: number, field: keyof ActionForm, value: string) => {
         setActions((prev) => prev.map((a, i) => (i === index ? {...a, [field]: value} : a)));
+    }, []);
+
+    const handleAgentChange = useCallback((index: number, agentId: string) => {
+        handleActionChange(index, 'provider_id', agentId);
+        fetchToolsForAction(index, agentId);
+    }, [handleActionChange, fetchToolsForAction]);
+
+    const handleToolToggle = useCallback((index: number, toolName: string, checked: boolean) => {
+        setActions((prev) => prev.map((a, i) => {
+            if (i !== index) {
+                return a;
+            }
+            const current = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
+            const updated = checked ? [...current, toolName] : current.filter((t) => t !== toolName);
+            return {...a, allowed_tools: updated.join(', ')};
+        }));
     }, []);
 
     const handleSave = useCallback(async () => {
@@ -288,7 +414,7 @@ const FlowEditorView: React.FC = () => {
             trigger,
             actions: actions.map((a): Action => {
                 if (a.type === 'ai_prompt') {
-                    return {
+                    const action: Action = {
                         id: a.id,
                         ai_prompt: {
                             prompt: a.prompt,
@@ -296,6 +422,18 @@ const FlowEditorView: React.FC = () => {
                             provider_id: a.provider_id,
                         },
                     };
+                    const tools = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
+                    if (tools.length > 0 && action.ai_prompt) {
+                        action.ai_prompt.allowed_tools = tools;
+                    }
+                    if (a.tool_constraints.trim() && action.ai_prompt) {
+                        try {
+                            action.ai_prompt.tool_constraints = JSON.parse(a.tool_constraints);
+                        } catch {
+                            // ignore invalid JSON — server will validate
+                        }
+                    }
+                    return action;
                 }
                 const action: Action = {
                     id: a.id,
@@ -500,7 +638,7 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                     id={`action-${index}-agent`}
                                     style={styles.select}
                                     value={action.provider_id}
-                                    onChange={(e) => handleActionChange(index, 'provider_id', e.target.value)}
+                                    onChange={(e) => handleAgentChange(index, e.target.value)}
                                 >
                                     <option value=''>{'Select an agent...'}</option>
                                     {agents.map((bot) => (
@@ -523,6 +661,28 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                     style={styles.textarea}
                                     value={action.prompt}
                                     onChange={(e) => handleActionChange(index, 'prompt', e.target.value)}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>{'Allowed Tools (optional)'}</label>
+                                <ToolSelector
+                                    action={action}
+                                    index={index}
+                                    tools={agentTools.get(index)}
+                                    onToggle={handleToolToggle}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-tool-constraints`}
+                                    style={styles.label}
+                                >{'Tool Constraints (JSON, optional)'}</label>
+                                <textarea
+                                    id={`action-${index}-tool-constraints`}
+                                    style={styles.textarea}
+                                    placeholder='e.g. {"create_post": {"channel_id": ["ch1", "ch2"]}}'
+                                    value={action.tool_constraints}
+                                    onChange={(e) => handleActionChange(index, 'tool_constraints', e.target.value)}
                                 />
                             </div>
                             <details style={styles.details}>

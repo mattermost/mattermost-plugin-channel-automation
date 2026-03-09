@@ -29,10 +29,18 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+export interface ToolConstraints {
+    [toolName: string]: {
+        [paramName: string]: string[];
+    };
+}
+
 export interface AIPromptActionParams {
     prompt: string;
     provider_type: string;
     provider_id: string;
+    allowed_tools?: string[];
+    tool_constraints?: ToolConstraints;
 }
 
 export interface Action {
@@ -45,6 +53,11 @@ export interface AIBotInfo {
     id: string;
     display_name: string;
     username: string;
+}
+
+export interface AIToolInfo {
+    name: string;
+    description: string;
 }
 
 export interface Flow {

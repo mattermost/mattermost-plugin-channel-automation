@@ -199,6 +199,38 @@ Deletes a flow by ID.
 
 ---
 
+### List agent tools
+
+```
+GET /agents/{agent_id}/tools
+```
+
+Returns the tools available for a specific AI agent. Proxies the request to the AI plugin bridge.
+
+**Response:** `200 OK`
+
+```json
+[
+    {
+        "name": "search",
+        "description": "Search for information"
+    },
+    {
+        "name": "create_post",
+        "description": "Create a new post in a channel"
+    }
+]
+```
+
+**Errors:**
+
+| Status | Body                             |
+| ------ | -------------------------------- |
+| 502    | `failed to get agent tools`      |
+| 503    | `AI plugin bridge not available` |
+
+---
+
 ## Data types
 
 ### Flow
@@ -257,11 +289,13 @@ Exactly one type-specific config key should be set alongside `id`:
 
 #### AIPromptActionConfig
 
-| Field           | Type   | Description                                     |
-| --------------- | ------ | ----------------------------------------------- |
-| `prompt`        | string | The prompt template (Go `text/template` syntax) |
-| `provider_type` | string | Either `"agent"` or `"service"`                 |
-| `provider_id`   | string | ID of the agent or service to use               |
+| Field              | Type                            | Description                                                                                                             |
+| ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
+| `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
+| `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| `tool_constraints` | map[string]map[string]string[]  | _(optional)_ Restricts tool parameter values. Maps tool name → param name → allowed values. Requires `allowed_tools`.   |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 

@@ -36,6 +36,8 @@ type Plugin struct {
 	workQueueStore *workqueue.Store
 	workerPool     *workqueue.WorkerPool
 
+	bridgeClient *bridgeclient.Client
+
 	botUserID       string
 	registry        *flow.Registry
 	flowStore       model.Store
@@ -66,6 +68,7 @@ func (p *Plugin) OnActivate() error {
 	p.botUserID = botUserID
 
 	bc := bridgeclient.NewClient(p.API)
+	p.bridgeClient = bc
 
 	// TODO: Register tools in the bridge client
 
