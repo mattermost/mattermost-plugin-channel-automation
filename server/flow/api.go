@@ -18,13 +18,14 @@ const maxRequestBodySize = 1 << 20 // 1 MB
 // APIHandler provides HTTP handlers for flow CRUD operations.
 type APIHandler struct {
 	store           model.Store
+	historyStore    model.ExecutionStore
 	api             plugin.API
 	scheduleManager *ScheduleManager
 }
 
 // NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, api plugin.API, scheduleManager *ScheduleManager) *APIHandler {
-	return &APIHandler{store: store, api: api, scheduleManager: scheduleManager}
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -275,6 +276,12 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 
 	if h.scheduleManager != nil {
 		h.scheduleManager.RemoveFlow(id)
+	}
+
+	if h.historyStore != nil {
+		if err := h.historyStore.PurgeFlow(id); err != nil {
+			h.api.LogError("Failed to purge execution history", "flow_id", id, "error", err.Error())
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)

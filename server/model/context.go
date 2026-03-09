@@ -104,4 +104,5 @@ type StepOutput struct {
 	PostID    string `json:"post_id"`
 	ChannelID string `json:"channel_id"`
 	Message   string `json:"message"`
+	Truncated bool   `json:"truncated,omitempty"`
 }

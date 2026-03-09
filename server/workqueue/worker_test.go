@@ -131,7 +131,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, api, maxWorkers)
+	wp := NewWorkerPool(store, executor, flowStore, nil, api, maxWorkers)
 	wp.pollInterval = 50 * time.Millisecond // speed up tests
 
 	return wp, store, flowStore
