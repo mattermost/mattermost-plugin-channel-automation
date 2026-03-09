@@ -17,8 +17,9 @@ func NewFlowExecutor(registry *Registry) *FlowExecutor {
 }
 
 // Execute runs all actions in the flow sequentially, building up the FlowContext.
-// Returns an error on the first failure or if an action type is unknown.
-func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) error {
+// Returns the context (with any partial step outputs) and an error on the first
+// failure or if an action type is unknown.
+func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) (*model.FlowContext, error) {
 	ctx := &model.FlowContext{
 		CreatedBy: f.CreatedBy,
 		Trigger:   triggerData,
@@ -28,12 +29,12 @@ func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) err
 	for _, action := range f.Actions {
 		handler, ok := e.registry.GetAction(action.Type())
 		if !ok {
-			return fmt.Errorf("unknown action type %q for action %q", action.Type(), action.ID)
+			return ctx, fmt.Errorf("unknown action type %q for action %q", action.Type(), action.ID)
 		}
 
 		output, err := handler.Execute(&action, ctx)
 		if err != nil {
-			return fmt.Errorf("action %q failed: %w", action.ID, err)
+			return ctx, fmt.Errorf("action %q failed: %w", action.ID, err)
 		}
 
 		if output != nil {
@@ -41,5 +42,5 @@ func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) err
 		}
 	}
 
-	return nil
+	return ctx, nil
 }

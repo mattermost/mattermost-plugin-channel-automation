@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 )
 
@@ -18,8 +19,11 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.API, p.scheduleManager)
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager)
 	flowAPI.RegisterRoutes(apiRouter)
+
+	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)
+	execAPI.RegisterRoutes(apiRouter)
 
 	apiRouter.HandleFunc("/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
 

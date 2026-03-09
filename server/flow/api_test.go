@@ -29,7 +29,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, api, nil)
+	handler := NewAPIHandler(store, nil, api, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -409,7 +409,7 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, api, nil)
+	handler := NewAPIHandler(store, nil, api, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 

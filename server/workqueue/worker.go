@@ -17,6 +17,7 @@ type WorkerPool struct {
 	store        *Store
 	executor     *flow.FlowExecutor
 	flowStore    model.Store
+	historyStore model.ExecutionStore
 	api          plugin.API
 	maxWorkers   int
 	pollInterval time.Duration
@@ -28,11 +29,12 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
-func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, api plugin.API, maxWorkers int) *WorkerPool {
+func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
 		store:        store,
 		executor:     executor,
 		flowStore:    flowStore,
+		historyStore: historyStore,
 		api:          api,
 		maxWorkers:   maxWorkers,
 		pollInterval: 30 * time.Second,
@@ -163,32 +165,67 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 
-	if err := wp.executor.Execute(f, item.TriggerData); err != nil {
+	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
+	completedAt := time.Now().UnixMilli()
+
+	if execErr != nil {
 		wp.api.LogError("Flow execution failed",
 			"work_item_id", item.ID,
 			"flow_id", item.FlowID,
 			"flow_name", item.FlowName,
-			"err", err.Error(),
+			"err", execErr.Error(),
 		)
-		if storeErr := wp.store.Fail(item.ID, err.Error()); storeErr != nil {
+		if storeErr := wp.store.Fail(item.ID, execErr.Error()); storeErr != nil {
 			wp.api.LogError("Failed to mark work item as failed",
 				"work_item_id", item.ID,
 				"err", storeErr.Error(),
 			)
 		}
+	} else {
+		if err := wp.store.Complete(item.ID); err != nil {
+			wp.api.LogError("Failed to complete work item",
+				"work_item_id", item.ID,
+				"err", err.Error(),
+			)
+		}
+
+		wp.api.LogInfo("Flow executed successfully",
+			"work_item_id", item.ID,
+			"flow_id", item.FlowID,
+			"flow_name", item.FlowName,
+		)
+	}
+
+	wp.saveExecutionRecord(item, ctx, execErr, completedAt)
+}
+
+func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.FlowContext, execErr error, completedAt int64) {
+	if wp.historyStore == nil {
 		return
 	}
 
-	if err := wp.store.Complete(item.ID); err != nil {
-		wp.api.LogError("Failed to complete work item",
+	record := &model.ExecutionRecord{
+		ID:          item.ID,
+		FlowID:      item.FlowID,
+		FlowName:    item.FlowName,
+		Status:      "success",
+		TriggerData: item.TriggerData,
+		CreatedAt:   item.CreatedAt,
+		StartedAt:   item.StartedAt,
+		CompletedAt: completedAt,
+	}
+	if execErr != nil {
+		record.Status = "failed"
+		record.Error = execErr.Error()
+	}
+	if ctx != nil {
+		record.Steps = ctx.Steps
+	}
+
+	if err := wp.historyStore.Save(record); err != nil {
+		wp.api.LogError("Failed to save execution record",
 			"work_item_id", item.ID,
 			"err", err.Error(),
 		)
 	}
-
-	wp.api.LogInfo("Flow executed successfully",
-		"work_item_id", item.ID,
-		"flow_id", item.FlowID,
-		"flow_name", item.FlowName,
-	)
 }

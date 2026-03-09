@@ -13,6 +13,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/command"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
@@ -41,6 +42,7 @@ type Plugin struct {
 	botUserID       string
 	registry        *flow.Registry
 	flowStore       model.Store
+	historyStore    model.ExecutionStore
 	triggerService  *flow.TriggerService
 	flowExecutor    *flow.FlowExecutor
 	scheduleManager *flow.ScheduleManager
@@ -93,6 +95,12 @@ func (p *Plugin) OnActivate() error {
 	}
 	p.workQueueStore = workqueue.NewStore(p.API, indexMu)
 
+	xhIndexMu, err := cluster.NewMutex(p.API, "xh_index_mutex")
+	if err != nil {
+		return fmt.Errorf("failed to create execution history mutex: %w", err)
+	}
+	p.historyStore = execution.NewStore(p.API, xhIndexMu)
+
 	resetCount, err := p.workQueueStore.ResetRunningToPending()
 	if err != nil {
 		p.API.LogError("Failed to reset running work items", "err", err.Error())
@@ -105,7 +113,7 @@ func (p *Plugin) OnActivate() error {
 		maxWorkers = 4
 	}
 
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.API, maxWorkers)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, p.API, maxWorkers)
 	p.workerPool.Start()
 
 	// Start schedule manager after worker pool so scheduled items can be processed.

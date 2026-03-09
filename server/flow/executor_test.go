@@ -58,7 +58,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
@@ -96,7 +96,7 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	api.AssertNumberOfCalls(t, "CreatePost", 2)
 }
@@ -125,7 +125,7 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 		User: &model.SafeUser{Id: "user1"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `action "act1" failed`)
 	// Second action should never be called.
@@ -182,7 +182,7 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[0].Message)
@@ -203,7 +203,7 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 		Post: &model.SafePost{Id: "post1", ChannelId: "ch1"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown action type")
 }
@@ -230,7 +230,7 @@ func TestFlowExecutor_PermissionDenied(t *testing.T) {
 		User: &model.SafeUser{Id: "user1"},
 	}
 
-	err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have permission to post in channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
