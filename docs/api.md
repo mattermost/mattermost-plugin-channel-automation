@@ -21,9 +21,9 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 **Query parameters:**
 
-| Parameter    | Type   | Description                                                                                                          |
-| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------- |
-| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to both `message_posted` and `schedule` triggers. |
+| Parameter    | Type   | Description                                                                                                                               |
+| ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to `message_posted`, `schedule`, and `membership_changed` triggers. |
 
 **Response:** `200 OK`
 
@@ -250,10 +250,11 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 
 Exactly one key should be set, indicating the trigger type:
 
-| Field            | Type                                        | Description                                     |
-| ---------------- | ------------------------------------------- | ----------------------------------------------- |
-| `message_posted` | [MessagePostedConfig](#messagepostedconfig) | _(optional)_ Fires on new messages in a channel |
-| `schedule`       | [ScheduleConfig](#scheduleconfig)           | _(optional)_ Fires on a recurring schedule      |
+| Field                | Type                                                  | Description                                                       |
+| -------------------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| `message_posted`     | [MessagePostedConfig](#messagepostedconfig)           | _(optional)_ Fires on new messages in a channel                   |
+| `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
+| `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
 
 #### MessagePostedConfig
 
@@ -268,6 +269,12 @@ Exactly one key should be set, indicating the trigger type:
 | `channel_id` | string  | Channel associated with the schedule (required)                                      |
 | `interval`   | string  | Go duration string, e.g. `"1h"`, `"30m"` (required, minimum 5m)                     |
 | `start_at`   | integer | _(optional)_ Start time in milliseconds since epoch. Defaults to flow creation time. |
+
+#### MembershipChangedConfig
+
+| Field        | Type   | Description                 |
+| ------------ | ------ | --------------------------- |
+| `channel_id` | string | Channel to watch (required) |
 
 ### Action
 
@@ -314,6 +321,10 @@ Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDu
 
 If `start_at` is provided, the first execution is scheduled at that time. Otherwise, the schedule starts from the flow's creation time.
 
+### `membership_changed`
+
+Fires when a user joins or leaves the specified channel. Bot users are automatically excluded. The membership action (`"joined"` or `"left"`) is available in the trigger data via `{{.Trigger.Membership.Action}}`.
+
 ---
 
 ## Action types
@@ -337,12 +348,13 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 Action templates receive a `FlowContext` object with the following structure:
 
 ```
-{{.Trigger}}           — trigger event data
-{{.Trigger.Post}}      — the post that triggered the flow (message_posted only)
-{{.Trigger.Channel}}   — the channel where the event occurred (message_posted only)
-{{.Trigger.User}}      — the user who triggered the event (message_posted only)
-{{.Trigger.Schedule}}  — schedule metadata (schedule only)
-{{.Steps.<action_id>}} — output from a previous action step
+{{.Trigger}}            — trigger event data
+{{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
+{{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed)
+{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed)
+{{.Trigger.Schedule}}   — schedule metadata (schedule only)
+{{.Trigger.Membership}} — membership change metadata (membership_changed only)
+{{.Steps.<action_id>}}  — output from a previous action step
 ```
 
 ### Trigger data fields
@@ -356,7 +368,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |
 | Message    | `{{.Trigger.Post.Message}}`   |
 
-**Channel** _(message_posted trigger only):_
+**Channel** _(message_posted, membership_changed):_
 
 | Field        | Access                             |
 | ------------ | ---------------------------------- |
@@ -364,7 +376,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | Name         | `{{.Trigger.Channel.Name}}`        |
 | Display Name | `{{.Trigger.Channel.DisplayName}}` |
 
-**User** _(message_posted trigger only):_
+**User** _(message_posted, membership_changed):_
 
 | Field      | Access                        |
 | ---------- | ----------------------------- |
@@ -372,6 +384,12 @@ Action templates receive a `FlowContext` object with the following structure:
 | Username   | `{{.Trigger.User.Username}}`  |
 | First Name | `{{.Trigger.User.FirstName}}` |
 | Last Name  | `{{.Trigger.User.LastName}}`  |
+
+**Membership** _(membership_changed trigger only):_
+
+| Field  | Access                            |
+| ------ | --------------------------------- |
+| Action | `{{.Trigger.Membership.Action}}`  |
 
 **Schedule** _(schedule trigger only):_
 

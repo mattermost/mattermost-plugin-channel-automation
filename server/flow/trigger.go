@@ -31,6 +31,11 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetFlowIDsForChannel(event.Post.ChannelId)
+	case "membership_changed":
+		if event.Channel == nil {
+			return nil, nil
+		}
+		candidateIDs, err = t.store.GetFlowIDsForMembershipChannel(event.Channel.Id)
 	default:
 		return nil, nil
 	}

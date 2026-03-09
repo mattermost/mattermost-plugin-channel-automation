@@ -62,6 +62,19 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 }
 
+func TestValidateTrigger_MembershipChanged(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}})
+		require.NoError(t, err)
+	})
+
+	t.Run("missing channel_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "channel_id")
+	})
+}
+
 func TestValidateTrigger_UnknownType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{})
 	require.Error(t, err)

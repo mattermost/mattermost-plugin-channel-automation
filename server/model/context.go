@@ -14,10 +14,16 @@ type FlowContext struct {
 // templates, preventing PII leakage and blocking method calls on
 // live model objects.
 type TriggerData struct {
-	Post     *SafePost     `json:"post,omitempty"`
-	Channel  *SafeChannel  `json:"channel,omitempty"`
-	User     *SafeUser     `json:"user,omitempty"`
-	Schedule *ScheduleInfo `json:"schedule,omitempty"`
+	Post       *SafePost       `json:"post,omitempty"`
+	Channel    *SafeChannel    `json:"channel,omitempty"`
+	User       *SafeUser       `json:"user,omitempty"`
+	Schedule   *ScheduleInfo   `json:"schedule,omitempty"`
+	Membership *MembershipInfo `json:"membership,omitempty"`
+}
+
+// MembershipInfo contains metadata about a membership change trigger firing.
+type MembershipInfo struct {
+	Action string `json:"action"` // "joined" or "left"
 }
 
 // ScheduleInfo contains metadata about a schedule trigger firing.

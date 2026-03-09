@@ -397,6 +397,105 @@ func TestStore_ScheduleIndex_NoDuplicates(t *testing.T) {
 	assert.Equal(t, []string{"f1"}, ids)
 }
 
+func TestStore_MembershipTriggerIndex(t *testing.T) {
+	store, kv := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+
+	ids, err := kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"f1", "f2"}, ids)
+
+	require.NoError(t, store.Delete("f1"))
+	ids, err = kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f2"}, ids)
+
+	require.NoError(t, store.Delete("f2"))
+	ids, err = kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	// Key should be cleaned up from KV store.
+	kv.mu.Lock()
+	_, exists := kv.data[makeMembershipTriggerIndexKey("ch1")]
+	kv.mu.Unlock()
+	assert.False(t, exists)
+}
+
+func TestStore_MembershipTriggerIndex_UpdateChannel(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+
+	ids, err := kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	// Update flow to watch ch2.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch2"}}}))
+
+	ids, err = kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	ids, err = kvStore.GetFlowIDsForMembershipChannel("ch2")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+}
+
+func TestStore_MembershipTriggerIndex_NoDuplicates(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	// Save the same flow twice (simulating update with same channel).
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+
+	ids, err := kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+}
+
+func TestStore_MembershipTriggerIndex_CrossTypeIsolation(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	// Save a membership flow and a message_posted flow on the same channel.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	// Membership index should only contain f1.
+	memberIDs, err := kvStore.GetFlowIDsForMembershipChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, memberIDs)
+
+	// Message posted index should only contain f2.
+	postIDs, err := kvStore.GetFlowIDsForChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f2"}, postIDs)
+}
+
+func TestStore_ChannelTriggerIndex_MembershipChangedTrigger(t *testing.T) {
+	store, _ := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+
+	flows, err := store.ListByTriggerChannel("ch1")
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+
+	// Verify that the message_posted trigger index does NOT contain this flow.
+	kvStore := store.(*KVStore)
+	ids, err := kvStore.GetFlowIDsForChannel("ch1")
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
+
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 

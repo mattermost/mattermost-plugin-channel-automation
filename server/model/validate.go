@@ -34,6 +34,10 @@ func ValidateTrigger(t *Trigger) error {
 		if t.Schedule.StartAt < 0 {
 			return fmt.Errorf("schedule trigger start_at must not be negative")
 		}
+	case t.MembershipChanged != nil:
+		if t.MembershipChanged.ChannelID == "" {
+			return fmt.Errorf("membership_changed trigger requires channel_id")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}

@@ -14,8 +14,14 @@ type Flow struct {
 
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
-	MessagePosted *MessagePostedConfig `json:"message_posted,omitempty"`
-	Schedule      *ScheduleConfig      `json:"schedule,omitempty"`
+	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
+	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
+	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
+}
+
+// MembershipChangedConfig holds trigger config for the membership_changed trigger type.
+type MembershipChangedConfig struct {
+	ChannelID string `json:"channel_id"`
 }
 
 // MessagePostedConfig holds trigger config for the message_posted trigger type.

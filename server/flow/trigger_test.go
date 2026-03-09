@@ -14,6 +14,7 @@ import (
 func newTestRegistry() *Registry {
 	r := NewRegistry()
 	r.RegisterTrigger(&trigger.MessagePostedTrigger{})
+	r.RegisterTrigger(&trigger.MembershipChangedTrigger{})
 	return r
 }
 
@@ -21,6 +22,14 @@ func newMessagePostedEvent(channelID string) *model.Event {
 	return &model.Event{
 		Type: "message_posted",
 		Post: &mmmodel.Post{ChannelId: channelID},
+	}
+}
+
+func newMembershipChangedEvent(channelID, action string) *model.Event {
+	return &model.Event{
+		Type:             "membership_changed",
+		Channel:          &mmmodel.Channel{Id: channelID},
+		MembershipAction: action,
 	}
 }
 
@@ -153,4 +162,62 @@ func TestTriggerService_FindMatchingFlows_DeletedFlowSkipped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, flows, 1)
 	assert.Equal(t, "f2", flows[0].ID)
+}
+
+func TestTriggerService_FindMatchingFlows_MembershipChanged(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Welcome",
+		Enabled: true,
+		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch1", "joined"))
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestTriggerService_FindMatchingFlows_MembershipChanged_WrongChannel(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Welcome",
+		Enabled: true,
+		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch2", "joined"))
+	require.NoError(t, err)
+	assert.Nil(t, flows)
+}
+
+func TestTriggerService_FindMatchingFlows_MembershipChanged_Disabled(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Disabled",
+		Enabled: false,
+		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch1", "joined"))
+	require.NoError(t, err)
+	assert.Nil(t, flows)
+}
+
+func TestTriggerService_FindMatchingFlows_MembershipChanged_NilChannel(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	flows, err := svc.FindMatchingFlows(&model.Event{Type: "membership_changed", Channel: nil})
+	require.NoError(t, err)
+	assert.Nil(t, flows)
 }

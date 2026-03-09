@@ -8,9 +8,14 @@ export interface ScheduleTriggerParams {
     start_at?: number;
 }
 
+export interface MembershipChangedTriggerParams {
+    channel_id: string;
+}
+
 export interface Trigger {
     message_posted?: MessagePostedTriggerParams;
     schedule?: ScheduleTriggerParams;
+    membership_changed?: MembershipChangedTriggerParams;
 }
 
 export function getTriggerType(trigger: Trigger): string {
@@ -19,6 +24,9 @@ export function getTriggerType(trigger: Trigger): string {
     }
     if (trigger.schedule) {
         return 'schedule';
+    }
+    if (trigger.membership_changed) {
+        return 'membership_changed';
     }
     return '';
 }

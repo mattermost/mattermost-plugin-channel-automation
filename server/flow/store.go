@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	flowKeyPrefix             = "flow:"
-	flowIndexKey              = "flow_index"
-	triggerIndexPrefix        = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
-	channelTriggerIndexPrefix = "ct:"    // all trigger types by channel (3 + 26 = 29)
-	scheduleIndexKey          = "sched_index"
+	flowKeyPrefix                = "flow:"
+	flowIndexKey                 = "flow_index"
+	triggerIndexPrefix           = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
+	channelTriggerIndexPrefix    = "ct:"    // all trigger types by channel (3 + 26 = 29)
+	membershipTriggerIndexPrefix = "ti:mc:" // membership_changed by channel (6 + 26 = 32)
+	scheduleIndexKey             = "sched_index"
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
@@ -142,6 +143,18 @@ func (s *KVStore) Save(f *model.Flow) error {
 		}
 	}
 
+	// Update membership trigger index: remove old entry, add new entry.
+	if old != nil && old.Trigger.MembershipChanged != nil && old.Trigger.MembershipChanged.ChannelID != "" {
+		if err := s.removeMembershipTriggerIndex(old.Trigger.MembershipChanged.ChannelID, f.ID); err != nil {
+			return err
+		}
+	}
+	if f.Trigger.MembershipChanged != nil && f.Trigger.MembershipChanged.ChannelID != "" {
+		if err := s.addMembershipTriggerIndex(f.Trigger.MembershipChanged.ChannelID, f.ID); err != nil {
+			return err
+		}
+	}
+
 	// Update channel-trigger index (covers all trigger types).
 	if old != nil {
 		if oldChID := old.TriggerChannelID(); oldChID != "" {
@@ -196,6 +209,12 @@ func (s *KVStore) Delete(id string) error {
 		}
 	}
 
+	if f.Trigger.MembershipChanged != nil && f.Trigger.MembershipChanged.ChannelID != "" {
+		if err := s.removeMembershipTriggerIndex(f.Trigger.MembershipChanged.ChannelID, id); err != nil {
+			return err
+		}
+	}
+
 	if chID := f.TriggerChannelID(); chID != "" {
 		if err := s.removeChannelTriggerIndex(chID, id); err != nil {
 			return err
@@ -214,6 +233,11 @@ func (s *KVStore) Delete(id string) error {
 // GetFlowIDsForChannel returns flow IDs triggered by messages in the given channel.
 func (s *KVStore) GetFlowIDsForChannel(channelID string) ([]string, error) {
 	return s.getTriggerIndex(channelID)
+}
+
+// GetFlowIDsForMembershipChannel returns flow IDs triggered by membership changes in the given channel.
+func (s *KVStore) GetFlowIDsForMembershipChannel(channelID string) ([]string, error) {
+	return s.getMembershipTriggerIndex(channelID)
 }
 
 // --- Index helpers ---
@@ -346,6 +370,79 @@ func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
 		}
 	}
 	return s.setTriggerIndex(channelID, filtered)
+}
+
+// --- Membership trigger index helpers ---
+
+func makeMembershipTriggerIndexKey(channelID string) string {
+	return membershipTriggerIndexPrefix + channelID
+}
+
+func (s *KVStore) getMembershipTriggerIndex(channelID string) ([]string, error) {
+	key := makeMembershipTriggerIndexKey(channelID)
+	data, appErr := s.api.KVGet(key)
+	if appErr != nil {
+		return nil, fmt.Errorf("failed to get membership trigger index: %w", appErr)
+	}
+	if data == nil {
+		return nil, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal membership trigger index: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *KVStore) setMembershipTriggerIndex(channelID string, ids []string) error {
+	key := makeMembershipTriggerIndexKey(channelID)
+	if len(ids) == 0 {
+		if appErr := s.api.KVDelete(key); appErr != nil {
+			return fmt.Errorf("failed to delete membership trigger index: %w", appErr)
+		}
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal membership trigger index: %w", err)
+	}
+	if appErr := s.api.KVSet(key, data); appErr != nil {
+		return fmt.Errorf("failed to save membership trigger index: %w", appErr)
+	}
+	return nil
+}
+
+func (s *KVStore) addMembershipTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getMembershipTriggerIndex(channelID)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(ids, flowID) {
+		return nil
+	}
+	ids = append(ids, flowID)
+	return s.setMembershipTriggerIndex(channelID, ids)
+}
+
+func (s *KVStore) removeMembershipTriggerIndex(channelID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getMembershipTriggerIndex(channelID)
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != flowID {
+			filtered = append(filtered, id)
+		}
+	}
+	return s.setMembershipTriggerIndex(channelID, filtered)
 }
 
 // --- Channel-trigger index helpers (all trigger types) ---

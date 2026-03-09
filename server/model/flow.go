@@ -26,10 +26,16 @@ type ScheduleConfig struct {
 	StartAt   int64  `json:"start_at,omitempty"`
 }
 
+// MembershipChangedConfig holds trigger config for the membership_changed trigger type.
+type MembershipChangedConfig struct {
+	ChannelID string `json:"channel_id"`
+}
+
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
-	MessagePosted *MessagePostedConfig `json:"message_posted,omitempty"`
-	Schedule      *ScheduleConfig      `json:"schedule,omitempty"`
+	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
+	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
+	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
 }
 
 // TriggerChannelID returns the channel ID from the flow's trigger config,
@@ -41,6 +47,9 @@ func (f *Flow) TriggerChannelID() string {
 	if f.Trigger.Schedule != nil {
 		return f.Trigger.Schedule.ChannelID
 	}
+	if f.Trigger.MembershipChanged != nil {
+		return f.Trigger.MembershipChanged.ChannelID
+	}
 	return ""
 }
 
@@ -51,6 +60,9 @@ func (t *Trigger) Type() string {
 	}
 	if t.Schedule != nil {
 		return "schedule"
+	}
+	if t.MembershipChanged != nil {
+		return "membership_changed"
 	}
 	return ""
 }
@@ -116,6 +128,9 @@ func CollectChannelIDs(f *Flow) []string {
 	}
 	if f.Trigger.Schedule != nil {
 		add(f.Trigger.Schedule.ChannelID)
+	}
+	if f.Trigger.MembershipChanged != nil {
+		add(f.Trigger.MembershipChanged.ChannelID)
 	}
 
 	for i := range f.Actions {

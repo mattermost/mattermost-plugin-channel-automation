@@ -9,4 +9,5 @@ type Store interface {
 	Save(flow *Flow) error
 	Delete(id string) error
 	GetFlowIDsForChannel(channelID string) ([]string, error)
+	GetFlowIDsForMembershipChannel(channelID string) ([]string, error)
 }

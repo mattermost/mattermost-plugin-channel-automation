@@ -75,6 +75,7 @@ func (p *Plugin) OnActivate() error {
 	p.registry = flow.NewRegistry()
 	p.registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
 	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
+	p.registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
@@ -214,6 +215,92 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 			"flow_id", f.ID,
 			"flow_name", f.Name,
 			"post_id", post.Id,
+		)
+	}
+
+	p.workerPool.Notify()
+}
+
+// UserHasJoinedChannel is invoked after a user joins a channel.
+func (p *Plugin) UserHasJoinedChannel(_ *plugin.Context, member *mmmodel.ChannelMember, _ *mmmodel.User) {
+	p.handleMembershipChange(member, "joined")
+}
+
+// UserHasLeftChannel is invoked after a user leaves a channel.
+func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, member *mmmodel.ChannelMember, _ *mmmodel.User) {
+	p.handleMembershipChange(member, "left")
+}
+
+// handleMembershipChange is the shared logic for join/leave hooks.
+func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action string) {
+	if member.UserId == p.botUserID {
+		return
+	}
+
+	user, appErr := p.API.GetUser(member.UserId)
+	if appErr != nil {
+		p.API.LogError("Failed to get user for membership trigger", "user_id", member.UserId, "err", appErr.Error())
+		return
+	}
+	if user.IsBot {
+		return
+	}
+
+	channel, appErr := p.API.GetChannel(member.ChannelId)
+	if appErr != nil {
+		p.API.LogError("Failed to get channel for membership trigger", "channel_id", member.ChannelId, "err", appErr.Error())
+		return
+	}
+
+	event := &model.Event{
+		Type:             "membership_changed",
+		Channel:          channel,
+		User:             user,
+		MembershipAction: action,
+	}
+
+	flows, err := p.triggerService.FindMatchingFlows(event)
+	if err != nil {
+		p.API.LogError("Failed to find flows for membership change", "err", err.Error())
+		return
+	}
+	if len(flows) == 0 {
+		return
+	}
+
+	triggerData := model.TriggerData{
+		Channel:    model.NewSafeChannel(channel),
+		User:       model.NewSafeUser(user),
+		Membership: &model.MembershipInfo{Action: action},
+	}
+
+	for _, f := range flows {
+		item := &model.WorkItem{
+			ID:          mmmodel.NewId(),
+			FlowID:      f.ID,
+			FlowName:    f.Name,
+			TriggerData: triggerData,
+		}
+
+		if err := p.workQueueStore.Enqueue(item); err != nil {
+			p.API.LogError("Failed to enqueue work item",
+				"flow_id", f.ID,
+				"flow_name", f.Name,
+				"channel_id", member.ChannelId,
+				"user_id", member.UserId,
+				"action", action,
+				"err", err.Error(),
+			)
+			continue
+		}
+
+		p.API.LogDebug("Work item enqueued",
+			"work_item_id", item.ID,
+			"flow_id", f.ID,
+			"flow_name", f.Name,
+			"channel_id", member.ChannelId,
+			"user_id", member.UserId,
+			"action", action,
 		)
 	}
 

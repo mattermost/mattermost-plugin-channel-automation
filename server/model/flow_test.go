@@ -69,6 +69,30 @@ func TestCollectChannelIDs_ScheduleTriggerDuplicateWithAction(t *testing.T) {
 	assert.Equal(t, []string{"ch1"}, ids)
 }
 
+func TestCollectChannelIDs_MembershipChangedTrigger(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "ch2"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch1", "ch2"}, ids)
+}
+
+func TestCollectChannelIDs_MembershipChangedDuplicateWithAction(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "ch1"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch1"}, ids)
+}
+
 func TestCollectChannelIDs_NoChannels(t *testing.T) {
 	f := &Flow{
 		Trigger: Trigger{Schedule: &ScheduleConfig{Interval: "1h"}},
