@@ -18,6 +18,7 @@ const (
 	channelTriggerIndexPrefix    = "ct:"    // all trigger types by channel (3 + 26 = 29)
 	membershipTriggerIndexPrefix = "ti:mc:" // membership_changed by channel (6 + 26 = 32)
 	scheduleIndexKey             = "sched_index"
+	channelCreatedIndexKey       = "cc_index"
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
@@ -183,6 +184,20 @@ func (s *KVStore) Save(f *model.Flow) error {
 		}
 	}
 
+	// Update channel-created index.
+	oldHasChannelCreated := old != nil && old.Trigger.ChannelCreated != nil
+	newHasChannelCreated := f.Trigger.ChannelCreated != nil
+
+	if oldHasChannelCreated && !newHasChannelCreated {
+		if err := s.removeFromChannelCreatedIndex(f.ID); err != nil {
+			return err
+		}
+	} else if !oldHasChannelCreated && newHasChannelCreated {
+		if err := s.addToChannelCreatedIndex(f.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -227,6 +242,12 @@ func (s *KVStore) Delete(id string) error {
 		}
 	}
 
+	if f.Trigger.ChannelCreated != nil {
+		if err := s.removeFromChannelCreatedIndex(id); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -238,6 +259,11 @@ func (s *KVStore) GetFlowIDsForChannel(channelID string) ([]string, error) {
 // GetFlowIDsForMembershipChannel returns flow IDs triggered by membership changes in the given channel.
 func (s *KVStore) GetFlowIDsForMembershipChannel(channelID string) ([]string, error) {
 	return s.getMembershipTriggerIndex(channelID)
+}
+
+// GetChannelCreatedFlowIDs returns flow IDs triggered by channel creation events.
+func (s *KVStore) GetChannelCreatedFlowIDs() ([]string, error) {
+	return s.getChannelCreatedIndex()
 }
 
 // --- Index helpers ---
@@ -583,4 +609,71 @@ func (s *KVStore) removeFromScheduleIndex(id string) error {
 		}
 	}
 	return s.setScheduleIndex(filtered)
+}
+
+// --- Channel-created index helpers ---
+
+func (s *KVStore) getChannelCreatedIndex() ([]string, error) {
+	data, appErr := s.api.KVGet(channelCreatedIndexKey)
+	if appErr != nil {
+		return nil, fmt.Errorf("failed to get channel created index: %w", appErr)
+	}
+	if data == nil {
+		return nil, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal channel created index: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *KVStore) setChannelCreatedIndex(ids []string) error {
+	if len(ids) == 0 {
+		if appErr := s.api.KVDelete(channelCreatedIndexKey); appErr != nil {
+			return fmt.Errorf("failed to delete channel created index: %w", appErr)
+		}
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal channel created index: %w", err)
+	}
+	if appErr := s.api.KVSet(channelCreatedIndexKey, data); appErr != nil {
+		return fmt.Errorf("failed to save channel created index: %w", appErr)
+	}
+	return nil
+}
+
+func (s *KVStore) addToChannelCreatedIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getChannelCreatedIndex()
+	if err != nil {
+		return err
+	}
+	if slices.Contains(ids, id) {
+		return nil
+	}
+	ids = append(ids, id)
+	return s.setChannelCreatedIndex(ids)
+}
+
+func (s *KVStore) removeFromChannelCreatedIndex(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getChannelCreatedIndex()
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, existingID := range ids {
+		if existingID != id {
+			filtered = append(filtered, existingID)
+		}
+	}
+	return s.setChannelCreatedIndex(filtered)
 }

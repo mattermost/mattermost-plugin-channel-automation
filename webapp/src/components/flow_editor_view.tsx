@@ -4,6 +4,7 @@ import {useHistory, useParams, useRouteMatch} from 'react-router-dom';
 import type {TriggerFormState} from 'triggers';
 import {getAllTriggerConfigs, getTriggerConfig} from 'triggers';
 
+import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';

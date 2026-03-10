@@ -78,6 +78,7 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
 	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
 	p.registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
+	p.registry.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
@@ -309,6 +310,69 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 			"channel_id", member.ChannelId,
 			"user_id", member.UserId,
 			"action", action,
+		)
+	}
+
+	p.workerPool.Notify()
+}
+
+// ChannelHasBeenCreated is invoked after a new channel is created.
+// Only public channels (type "O") trigger flows.
+func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Channel) {
+	if channel.Type != mmmodel.ChannelTypeOpen {
+		return
+	}
+
+	event := &model.Event{
+		Type:    "channel_created",
+		Channel: channel,
+	}
+
+	flows, err := p.triggerService.FindMatchingFlows(event)
+	if err != nil {
+		p.API.LogError("Failed to find flows for channel creation", "err", err.Error())
+		return
+	}
+	if len(flows) == 0 {
+		return
+	}
+
+	triggerData := model.TriggerData{
+		Channel: model.NewSafeChannel(channel),
+	}
+
+	if channel.CreatorId != "" {
+		user, appErr := p.API.GetUser(channel.CreatorId)
+		if appErr != nil {
+			p.API.LogError("Failed to get user for channel creation trigger", "user_id", channel.CreatorId, "err", appErr.Error())
+		} else {
+			triggerData.User = model.NewSafeUser(user)
+		}
+	}
+
+	for _, f := range flows {
+		item := &model.WorkItem{
+			ID:          mmmodel.NewId(),
+			FlowID:      f.ID,
+			FlowName:    f.Name,
+			TriggerData: triggerData,
+		}
+
+		if err := p.workQueueStore.Enqueue(item); err != nil {
+			p.API.LogError("Failed to enqueue work item",
+				"flow_id", f.ID,
+				"flow_name", f.Name,
+				"channel_id", channel.Id,
+				"err", err.Error(),
+			)
+			continue
+		}
+
+		p.API.LogDebug("Work item enqueued",
+			"work_item_id", item.ID,
+			"flow_id", f.ID,
+			"flow_name", f.Name,
+			"channel_id", channel.Id,
 		)
 	}
 

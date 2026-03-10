@@ -15,6 +15,7 @@ func newTestRegistry() *Registry {
 	r := NewRegistry()
 	r.RegisterTrigger(&trigger.MessagePostedTrigger{})
 	r.RegisterTrigger(&trigger.MembershipChangedTrigger{})
+	r.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
 	return r
 }
 
@@ -220,4 +221,75 @@ func TestTriggerService_FindMatchingFlows_MembershipChanged_NilChannel(t *testin
 	flows, err := svc.FindMatchingFlows(&model.Event{Type: "membership_changed", Channel: nil})
 	require.NoError(t, err)
 	assert.Nil(t, flows)
+}
+
+func newChannelCreatedEvent(channelID string) *model.Event {
+	return &model.Event{
+		Type:    "channel_created",
+		Channel: &mmmodel.Channel{Id: channelID},
+	}
+}
+
+func TestTriggerService_FindMatchingFlows_ChannelCreated(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "On Channel Created",
+		Enabled: true,
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	require.NoError(t, err)
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestTriggerService_FindMatchingFlows_ChannelCreated_Disabled(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Disabled",
+		Enabled: false,
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	require.NoError(t, err)
+	assert.Nil(t, flows)
+}
+
+func TestTriggerService_FindMatchingFlows_ChannelCreated_NilChannel(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	flows, err := svc.FindMatchingFlows(&model.Event{Type: "channel_created", Channel: nil})
+	require.NoError(t, err)
+	assert.Nil(t, flows)
+}
+
+func TestTriggerService_FindMatchingFlows_ChannelCreated_MultipleFlows(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Flow 1",
+		Enabled: true,
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+	}))
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f2",
+		Name:    "Flow 2",
+		Enabled: true,
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	require.NoError(t, err)
+	require.Len(t, flows, 2)
 }

@@ -12,10 +12,15 @@ export interface MembershipChangedTriggerParams {
     channel_id: string;
 }
 
+export interface ChannelCreatedTriggerParams {
+    [key: string]: never;
+}
+
 export interface Trigger {
     message_posted?: MessagePostedTriggerParams;
     schedule?: ScheduleTriggerParams;
     membership_changed?: MembershipChangedTriggerParams;
+    channel_created?: ChannelCreatedTriggerParams;
 }
 
 export function getTriggerType(trigger: Trigger): string {
@@ -27,6 +32,9 @@ export function getTriggerType(trigger: Trigger): string {
     }
     if (trigger.membership_changed) {
         return 'membership_changed';
+    }
+    if (trigger.channel_created) {
+        return 'channel_created';
     }
     return '';
 }

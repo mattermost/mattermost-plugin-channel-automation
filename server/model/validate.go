@@ -38,6 +38,8 @@ func ValidateTrigger(t *Trigger) error {
 		if t.MembershipChanged.ChannelID == "" {
 			return fmt.Errorf("membership_changed trigger requires channel_id")
 		}
+	case t.ChannelCreated != nil:
+		// No fields to validate — fires on any new public channel.
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}

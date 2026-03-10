@@ -31,11 +31,16 @@ type MembershipChangedConfig struct {
 	ChannelID string `json:"channel_id"`
 }
 
+// ChannelCreatedConfig holds trigger config for the channel_created trigger type.
+// No fields are needed — the trigger fires on any new public channel.
+type ChannelCreatedConfig struct{}
+
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
 	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
+	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
 }
 
 // TriggerChannelID returns the channel ID from the flow's trigger config,
@@ -63,6 +68,9 @@ func (t *Trigger) Type() string {
 	}
 	if t.MembershipChanged != nil {
 		return "membership_changed"
+	}
+	if t.ChannelCreated != nil {
+		return "channel_created"
 	}
 	return ""
 }

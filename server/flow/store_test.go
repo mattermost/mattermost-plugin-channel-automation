@@ -496,6 +496,93 @@ func TestStore_ChannelTriggerIndex_MembershipChangedTrigger(t *testing.T) {
 	assert.Empty(t, ids)
 }
 
+func TestStore_ChannelCreatedIndex(t *testing.T) {
+	store, kv := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+
+	ids, err := kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"f1", "f2"}, ids)
+
+	require.NoError(t, store.Delete("f1"))
+	ids, err = kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f2"}, ids)
+
+	require.NoError(t, store.Delete("f2"))
+	ids, err = kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	// Key should be cleaned up from KV store.
+	kv.mu.Lock()
+	_, exists := kv.data[channelCreatedIndexKey]
+	kv.mu.Unlock()
+	assert.False(t, exists)
+}
+
+func TestStore_ChannelCreatedIndex_NoDuplicates(t *testing.T) {
+	store, kv := setupStore(t)
+
+	// Save the same channel_created flow twice.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+
+	kvStore := store.(*KVStore)
+	ids, err := kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	// Verify the raw index has exactly one entry.
+	kv.mu.Lock()
+	indexData := kv.data[channelCreatedIndexKey]
+	kv.mu.Unlock()
+
+	var rawIDs []string
+	require.NoError(t, json.Unmarshal(indexData, &rawIDs))
+	assert.Equal(t, []string{"f1"}, rawIDs)
+}
+
+func TestStore_ChannelCreatedIndex_TriggerTypeChange(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	// Start with a channel_created flow.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+
+	ids, err := kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	// Change to message_posted — should remove from channel_created index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	ids, err = kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	// Change back to channel_created — should add to channel_created index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+
+	ids, err = kvStore.GetChannelCreatedFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+}
+
+func TestStore_ChannelCreatedIndex_NoChannelTriggerIndex(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// channel_created flows should NOT appear in the channel-trigger index (they have no channel ID).
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+
+	flows, err := store.ListByTriggerChannel("any")
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+}
+
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 

@@ -10,4 +10,5 @@ type Store interface {
 	Delete(id string) error
 	GetFlowIDsForChannel(channelID string) ([]string, error)
 	GetFlowIDsForMembershipChannel(channelID string) ([]string, error)
+	GetChannelCreatedFlowIDs() ([]string, error)
 }

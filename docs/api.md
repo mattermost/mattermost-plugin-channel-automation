@@ -23,7 +23,7 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 | Parameter    | Type   | Description                                                                                                                               |
 | ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to `message_posted`, `schedule`, and `membership_changed` triggers. |
+| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to `message_posted`, `schedule`, and `membership_changed` triggers. Does not apply to `channel_created` (global trigger). |
 
 **Response:** `200 OK`
 
@@ -255,6 +255,7 @@ Exactly one key should be set, indicating the trigger type:
 | `message_posted`     | [MessagePostedConfig](#messagepostedconfig)           | _(optional)_ Fires on new messages in a channel                   |
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
+| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
 
 #### MessagePostedConfig
 
@@ -275,6 +276,14 @@ Exactly one key should be set, indicating the trigger type:
 | Field        | Type   | Description                 |
 | ------------ | ------ | --------------------------- |
 | `channel_id` | string | Channel to watch (required) |
+
+#### ChannelCreatedConfig
+
+Empty object — no fields required. The trigger fires on any new public channel creation.
+
+```json
+{ "channel_created": {} }
+```
 
 ### Action
 
@@ -325,6 +334,10 @@ If `start_at` is provided, the first execution is scheduled at that time. Otherw
 
 Fires when a user joins or leaves the specified channel. Bot users are automatically excluded. The membership action (`"joined"` or `"left"`) is available in the trigger data via `{{.Trigger.Membership.Action}}`.
 
+### `channel_created`
+
+Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
+
 ---
 
 ## Action types
@@ -350,8 +363,8 @@ Action templates receive a `FlowContext` object with the following structure:
 ```
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
-{{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed)
-{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed)
+{{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
+{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)
 {{.Trigger.Membership}} — membership change metadata (membership_changed only)
 {{.Steps.<action_id>}}  — output from a previous action step
@@ -368,7 +381,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |
 | Message    | `{{.Trigger.Post.Message}}`   |
 
-**Channel** _(message_posted, membership_changed):_
+**Channel** _(message_posted, membership_changed, channel_created):_
 
 | Field        | Access                             |
 | ------------ | ---------------------------------- |
@@ -376,7 +389,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | Name         | `{{.Trigger.Channel.Name}}`        |
 | Display Name | `{{.Trigger.Channel.DisplayName}}` |
 
-**User** _(message_posted, membership_changed):_
+**User** _(message_posted, membership_changed, channel_created):_
 
 | Field      | Access                        |
 | ---------- | ----------------------------- |
