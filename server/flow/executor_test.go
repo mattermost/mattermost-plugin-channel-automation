@@ -185,7 +185,10 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	_, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
-	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[0].Message)
+	// Posts: [trigger context (system), user prompt]
+	require.Len(t, bc.lastReq.Posts, 2)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
+	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[1].Message)
 }
 
 func TestFlowExecutor_UnknownActionType(t *testing.T) {
