@@ -439,7 +439,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "ch1")
+	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
 func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
@@ -468,7 +468,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "ch2")
+	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
 func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
@@ -494,7 +494,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "ch1")
+	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
 func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
@@ -531,7 +531,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "ch-new")
+	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
 func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
@@ -617,6 +617,111 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 
 	// Verify GetChannelMember was only called for ch1.
 	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
+}
+
+func TestAPI_CreateFlow_ChannelCreated_NonAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Global Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {}},
+		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "system admin")
+}
+
+func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "AI on new channels",
+		"enabled": true,
+		"trigger": {"channel_created": {}},
+		"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "agent", "provider_id": "bot1"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "system admin")
+}
+
+func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Global Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {}},
+		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_ListFlows_ChannelCreated_HiddenFromNonAdmin(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	)
+
+	router, store := setupAPIWithCustomMock(t, api)
+
+	// A normal flow the user can see.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Normal Flow",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+	// A channel_created flow — should be hidden from non-admin.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f2",
+		Name:    "Global Flow",
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+	}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var flows []*model.Flow
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
+	require.Len(t, flows, 1)
+	assert.Equal(t, "f1", flows[0].ID)
 }
 
 func TestAPI_ListFlows_FilterByChannel(t *testing.T) {

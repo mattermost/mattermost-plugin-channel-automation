@@ -104,3 +104,27 @@ func TestCollectChannelIDs_NoChannels(t *testing.T) {
 	ids := CollectChannelIDs(f)
 	assert.Empty(t, ids)
 }
+
+func TestCollectChannelIDs_ChannelCreatedTrigger(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{}},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hello"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Empty(t, ids, "channel_created with templated action channels should return no concrete IDs")
+}
+
+func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{}},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "ch-notify", Body: "hello"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch-notify"}, ids)
+}

@@ -39,19 +39,29 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 
 // checkFlowPermissions verifies that userID has permission to manage the flow.
 // System admins are always allowed. Otherwise the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the flow. It returns the
-// first failing channel ID and false when the check fails.
-func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) (string, bool) {
+// (SchemeAdmin) on every literal channel referenced in the flow.
+//
+// When no concrete channels can be verified (e.g. a channel_created trigger
+// with only templated or AI-only actions), we require system admin permission.
+// The authorization model relies on proving the user is admin on every channel
+// the flow touches. If there are zero channels to verify, we have no evidence
+// the user should be allowed to manage this flow, so we deny rather than
+// silently granting access to what is effectively a global-scope operation.
+func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		return "", true
+		return nil
 	}
-	for _, chID := range model.CollectChannelIDs(f) {
+	channelIDs := model.CollectChannelIDs(f)
+	if len(channelIDs) == 0 {
+		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
+	}
+	for _, chID := range channelIDs {
 		member, appErr := h.api.GetChannelMember(chID, userID)
 		if appErr != nil || !member.SchemeAdmin {
-			return chID, false
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
 	}
-	return "", true
+	return nil
 }
 
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +89,7 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		visible := make([]*model.Flow, 0, len(flows))
 		for _, f := range flows {
-			if _, ok := h.checkFlowPermissions(userID, f); ok {
+			if h.checkFlowPermissions(userID, f) == nil {
 				visible = append(visible, f)
 			}
 		}
@@ -119,8 +129,8 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if chID, ok := h.checkFlowPermissions(f.CreatedBy, &f); !ok {
-		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -161,8 +171,8 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if chID, ok := h.checkFlowPermissions(userID, f); !ok {
-		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+	if err := h.checkFlowPermissions(userID, f); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -216,14 +226,14 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check permissions on existing flow (must have permission to modify it).
-	if chID, ok := h.checkFlowPermissions(userID, existing); !ok {
-		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+	if err := h.checkFlowPermissions(userID, existing); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
-	if chID, ok := h.checkFlowPermissions(userID, &f); !ok {
-		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+	if err := h.checkFlowPermissions(userID, &f); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -263,8 +273,8 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if chID, ok := h.checkFlowPermissions(userID, existing); !ok {
-		http.Error(w, fmt.Sprintf("you do not have channel admin permissions on channel %s", chID), http.StatusForbidden)
+	if err := h.checkFlowPermissions(userID, existing); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
