@@ -45,9 +45,19 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+export interface OutputBinding {
+    tool: string;
+    field: string;
+}
+
+export interface ParamConstraint {
+    allowed_values?: string[];
+    from_tool_output?: OutputBinding[];
+}
+
 export interface ToolConstraints {
     [toolName: string]: {
-        [paramName: string]: string[];
+        [paramName: string]: ParamConstraint | string[];
     };
 }
 

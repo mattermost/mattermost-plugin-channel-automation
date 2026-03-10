@@ -312,9 +312,44 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
-| `tool_constraints` | map[string]map[string]string[]  | _(optional)_ Restricts tool parameter values. Maps tool name → param name → allowed values. Requires `allowed_tools`.   |
+| `tool_constraints` | map[string]map[string][ParamConstraint](#paramconstraint) | _(optional)_ Restricts tool parameter values. Maps tool name → param name → constraint. Supports static allowed values and dynamic values from other tool outputs. Requires `allowed_tools`. |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+
+#### ParamConstraint
+
+Defines allowed values for a tool parameter. Supports both a shorthand `[]string` form (deserialized as `allowed_values`) and the full object form.
+
+| Field              | Type                                  | Description                                                                                 |
+| ------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `allowed_values`   | string[]                              | _(optional)_ Static list of allowed values for the parameter                                |
+| `from_tool_output` | [OutputBinding](#outputbinding)[]     | _(optional)_ Dynamic values captured at runtime from other tool call outputs                |
+
+**Shorthand example** (equivalent to `{"allowed_values": ["ch1", "ch2"]}`):
+
+```json
+["ch1", "ch2"]
+```
+
+**Full example:**
+
+```json
+{
+    "allowed_values": ["ch1"],
+    "from_tool_output": [
+        { "tool": "list_channels", "field": "channel_id" }
+    ]
+}
+```
+
+#### OutputBinding
+
+Declares that values from a source tool's MCP `_meta` should be accepted as allowed values for the parameter. Only values from successful tool calls are captured.
+
+| Field   | Type   | Description                                          |
+| ------- | ------ | ---------------------------------------------------- |
+| `tool`  | string | Source tool name                                     |
+| `field` | string | Key in the source tool's `_meta` (e.g. `channel_id`) |
 
 ---
 

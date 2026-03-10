@@ -2,7 +2,6 @@ package action
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
@@ -184,6 +183,24 @@ func buildTriggerContext(trigger model.TriggerData) string {
 // toBridgeToolConstraints converts model.ToolConstraints to bridgeclient.ToolConstraints.
 func toBridgeToolConstraints(tc model.ToolConstraints) bridgeclient.ToolConstraints {
 	out := make(bridgeclient.ToolConstraints, len(tc))
-	maps.Copy(out, tc)
+	for tool, params := range tc {
+		bp := make(map[string]bridgeclient.ParamConstraint, len(params))
+		for param, constraint := range params {
+			bc := bridgeclient.ParamConstraint{
+				AllowedValues: constraint.AllowedValues,
+			}
+			if len(constraint.FromToolOutput) > 0 {
+				bc.FromToolOutput = make([]bridgeclient.OutputBinding, len(constraint.FromToolOutput))
+				for i, ob := range constraint.FromToolOutput {
+					bc.FromToolOutput[i] = bridgeclient.OutputBinding{
+						Tool:  ob.Tool,
+						Field: ob.Field,
+					}
+				}
+			}
+			bp[param] = bc
+		}
+		out[tool] = bp
+	}
 	return out
 }

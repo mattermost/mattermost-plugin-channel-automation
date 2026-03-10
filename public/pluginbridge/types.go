@@ -1,5 +1,7 @@
 package pluginbridge
 
+import "encoding/json"
+
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`
@@ -50,9 +52,35 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
-// ToolConstraints restricts tool parameters to allowed values.
-// Maps tool name → param name → allowed values.
-type ToolConstraints map[string]map[string][]string
+// ToolConstraints maps tool names to their parameter constraints.
+type ToolConstraints map[string]map[string]ParamConstraint
+
+// ParamConstraint defines allowed values for a tool parameter.
+// Supports both static values and dynamic expansion from other tools' outputs.
+type ParamConstraint struct {
+	AllowedValues  []string        `json:"allowed_values,omitempty"`
+	FromToolOutput []OutputBinding `json:"from_tool_output,omitempty"`
+}
+
+// OutputBinding declares that values from a source tool's MCP _meta should be
+// accepted as allowed values for this parameter.
+type OutputBinding struct {
+	Tool  string `json:"tool"`  // source tool name
+	Field string `json:"field"` // key in source tool's _meta
+}
+
+// UnmarshalJSON supports both shorthand ([]string) and full struct forms.
+// Shorthand: ["val1", "val2"] → ParamConstraint{AllowedValues: ["val1", "val2"]}
+// Full: {"allowed_values": [...], "from_tool_output": [...]}
+func (p *ParamConstraint) UnmarshalJSON(data []byte) error {
+	var values []string
+	if err := json.Unmarshal(data, &values); err == nil {
+		p.AllowedValues = values
+		return nil
+	}
+	type alias ParamConstraint
+	return json.Unmarshal(data, (*alias)(p))
+}
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
