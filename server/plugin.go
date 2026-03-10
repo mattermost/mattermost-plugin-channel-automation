@@ -168,6 +168,9 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	if post.GetProp("from_bot") == "true" {
 		return
 	}
+	if post.GetProp("ai_generated_by") != nil {
+		return
+	}
 
 	event := &model.Event{
 		Type: "message_posted",

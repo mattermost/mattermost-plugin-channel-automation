@@ -128,3 +128,20 @@ func TestHandleGetAgentTools(t *testing.T) {
 		assert.Equal(t, http.StatusBadGateway, w.Code)
 	})
 }
+
+func TestMessageHasBeenPosted_SkipsAIGeneratedPosts(t *testing.T) {
+	// Plugin has nil triggerService — if the early return doesn't fire,
+	// we'll get a nil-pointer panic, proving the filter works.
+	p := &Plugin{botUserID: "bot-id"}
+
+	post := &mmmodel.Post{
+		UserId:  "human-user",
+		Message: "AI-generated reply",
+	}
+	post.AddProp("ai_generated_by", "some-bot-id")
+
+	// Should return immediately without touching triggerService.
+	assert.NotPanics(t, func() {
+		p.MessageHasBeenPosted(nil, post)
+	})
+}
