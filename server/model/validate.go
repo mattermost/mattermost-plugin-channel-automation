@@ -11,7 +11,9 @@ const minScheduleInterval = 5 * time.Minute
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
 // ValidateTrigger validates a trigger configuration based on its type.
-func ValidateTrigger(t *Trigger) error {
+// An optional existing trigger can be passed for update scenarios; when
+// provided, start_at is only validated if it changed from the existing value.
+func ValidateTrigger(t *Trigger, existing *Trigger) error {
 	switch {
 	case t.MessagePosted != nil:
 		if t.MessagePosted.ChannelID == "" {
@@ -31,7 +33,9 @@ func ValidateTrigger(t *Trigger) error {
 		if d < minScheduleInterval {
 			return fmt.Errorf("schedule trigger interval must be at least %s", minScheduleInterval)
 		}
-		if t.Schedule.StartAt != 0 && time.UnixMilli(t.Schedule.StartAt).Before(time.Now().UTC()) {
+		startAtChanged := existing == nil || existing.Schedule == nil ||
+			time.UnixMilli(existing.Schedule.StartAt).Truncate(time.Minute) != time.UnixMilli(t.Schedule.StartAt).Truncate(time.Minute)
+		if startAtChanged && t.Schedule.StartAt != 0 && time.UnixMilli(t.Schedule.StartAt).Before(time.Now().UTC()) {
 			return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
 		}
 	case t.MembershipChanged != nil:

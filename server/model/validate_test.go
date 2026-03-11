@@ -10,12 +10,12 @@ import (
 
 func TestValidateTrigger_MessagePosted(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}})
+		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{}})
+		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "channel_id")
 	})
@@ -23,41 +23,69 @@ func TestValidateTrigger_MessagePosted(t *testing.T) {
 
 func TestValidateTrigger_Schedule(t *testing.T) {
 	t.Run("valid minimal", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "5m"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "5m"}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid with start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: time.Now().Add(1 * time.Hour).UnixMilli()}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: time.Now().Add(1 * time.Hour).UnixMilli()}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "5m"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "5m"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "channel_id")
 	})
 
 	t.Run("missing interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "interval")
 	})
 
 	t.Run("unparseable interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "not-a-duration"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "not-a-duration"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid interval")
 	})
 
 	t.Run("interval too small", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1m"}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1m"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least")
 	})
 
 	t.Run("start_at in the past", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "start_at")
+	})
+
+	t.Run("update with unchanged past start_at is valid", func(t *testing.T) {
+		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
+		err := ValidateTrigger(updated, existing)
+		require.NoError(t, err)
+	})
+
+	t.Run("update with round-tripped past start_at is valid", func(t *testing.T) {
+		// The webapp truncates to minute precision via datetime-local input;
+		// a round-tripped value may differ by up to 59s but should still be
+		// treated as unchanged.
+		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
+		truncated := time.UnixMilli(pastStartAt).Truncate(time.Minute).UnixMilli()
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: truncated}}
+		err := ValidateTrigger(updated, existing)
+		require.NoError(t, err)
+	})
+
+	t.Run("update with new past start_at is rejected", func(t *testing.T) {
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-2 * time.Hour).UnixMilli()}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}
+		err := ValidateTrigger(updated, existing)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
 	})
@@ -65,40 +93,40 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 
 func TestValidateTrigger_MembershipChanged(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid with joined action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "joined"}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "joined"}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid with left action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "left"}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "left"}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("valid with empty action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: ""}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: ""}}, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("invalid action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "kicked"}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "kicked"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "action")
 	})
 
 	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{}})
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "channel_id")
 	})
 }
 
 func TestValidateTrigger_UnknownType(t *testing.T) {
-	err := ValidateTrigger(&Trigger{})
+	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown trigger type")
 }

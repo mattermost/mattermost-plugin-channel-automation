@@ -3,9 +3,11 @@ package flow
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
@@ -365,6 +367,30 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "at least")
+}
+
+func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}},
+	}))
+
+	body := fmt.Sprintf(`{
+		"name": "Updated name",
+		"enabled": true,
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "10m", "start_at": %d}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`, pastStartAt)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestAPI_DeleteFlow(t *testing.T) {

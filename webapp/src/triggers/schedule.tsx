@@ -23,10 +23,16 @@ const scheduleTrigger: TriggerConfig = {
     },
 
     fromTrigger(trigger: Trigger): TriggerFormState {
+        let startAt = '';
+        if (trigger.schedule?.start_at) {
+            const d = new Date(trigger.schedule.start_at);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            startAt = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
         return {
             channel_id: trigger.schedule?.channel_id ?? '',
             interval: trigger.schedule?.interval ?? '',
-            start_at: trigger.schedule?.start_at ? new Date(trigger.schedule.start_at).toISOString().slice(0, 16) : '',
+            start_at: startAt,
         };
     },
 
