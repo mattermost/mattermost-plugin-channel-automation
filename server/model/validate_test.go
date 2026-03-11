@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("valid with start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}})
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: time.Now().Add(1 * time.Hour).UnixMilli()}})
 		require.NoError(t, err)
 	})
 
@@ -55,8 +56,8 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 		assert.Contains(t, err.Error(), "at least")
 	})
 
-	t.Run("negative start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: -1}})
+	t.Run("start_at in the past", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
 	})

@@ -31,8 +31,8 @@ func ValidateTrigger(t *Trigger) error {
 		if d < minScheduleInterval {
 			return fmt.Errorf("schedule trigger interval must be at least %s", minScheduleInterval)
 		}
-		if t.Schedule.StartAt < 0 {
-			return fmt.Errorf("schedule trigger start_at must not be negative")
+		if t.Schedule.StartAt != 0 && time.UnixMilli(t.Schedule.StartAt).Before(time.Now().UTC()) {
+			return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
 		}
 	case t.MembershipChanged != nil:
 		if t.MembershipChanged.ChannelID == "" {
