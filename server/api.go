@@ -11,6 +11,17 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 )
 
+// configProvider adapts the plugin's unexported configuration to the
+// flow.Configuration interface. It calls getConfig on each access so
+// it always reflects the current configuration.
+type configProvider struct {
+	getConfig func() *configuration
+}
+
+func (c *configProvider) MaxFlowsPerChannel() int {
+	return c.getConfig().MaxFlowsPerChannelLimit
+}
+
 // initRouter initializes the HTTP router for the plugin.
 func (p *Plugin) initRouter() *mux.Router {
 	router := mux.NewRouter()
@@ -19,7 +30,7 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager)
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
 	flowAPI.RegisterRoutes(apiRouter)
 
 	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)

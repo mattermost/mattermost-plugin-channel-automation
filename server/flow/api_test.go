@@ -17,6 +17,15 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
+// testConfig is a simple Configuration implementation for tests.
+type testConfig struct {
+	maxFlowsPerChannel int
+}
+
+func (c *testConfig) MaxFlowsPerChannel() int {
+	return c.maxFlowsPerChannel
+}
+
 func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	t.Helper()
 
@@ -29,7 +38,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, nil, api, nil)
+	handler := NewAPIHandler(store, nil, api, nil, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -409,7 +418,27 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, nil)
+	handler := NewAPIHandler(store, nil, api, nil, nil)
+	router := mux.NewRouter()
+	handler.RegisterRoutes(router)
+
+	return router, store
+}
+
+// setupAPIWithLimit creates an API handler with a per-channel flow limit.
+func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
+	t.Helper()
+
+	store, _ := setupStore(t)
+
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
+	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	).Maybe()
+
+	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: limit})
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -762,4 +791,165 @@ func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
 	var flows []*model.Flow
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
 	assert.Empty(t, flows)
+}
+
+func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
+	router, store := setupAPIWithLimit(t, 1)
+
+	// Save one flow on ch1 — fills the limit.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Second Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "maximum")
+}
+
+func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
+	router, store := setupAPIWithLimit(t, 1)
+
+	// ch1 is full.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	// Creating on ch2 should succeed.
+	body := `{
+		"name": "Other Channel Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch2"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
+	router, store := setupAPIWithLimit(t, 1)
+
+	// ch1 has one flow — at the limit.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	// Updating the same flow on the same channel should succeed (self-exclusion).
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "updated"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
+	router, store := setupAPIWithLimit(t, 1)
+
+	// ch1 has a flow, ch2 has a flow.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f2",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+	}))
+
+	// Moving f1 to ch2 should be blocked (ch2 already at limit).
+	body := `{
+		"name": "Moved",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch2"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch2", "body": "moved"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "maximum")
+}
+
+func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
+	router, store := setupAPIWithLimit(t, 0)
+
+	// Even with many flows, limit=0 means unlimited.
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f2",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Third Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+
+	store, _ := setupStore(t)
+
+	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: 1})
+	router := mux.NewRouter()
+	handler.RegisterRoutes(router)
+
+	// channel_created flows have no trigger channel, so they bypass the limit.
+	body := `{
+		"name": "Global Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {}},
+		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
 }

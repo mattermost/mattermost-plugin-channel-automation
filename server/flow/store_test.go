@@ -599,3 +599,34 @@ func TestStore_FlowIndex_Consistency(t *testing.T) {
 	require.NoError(t, json.Unmarshal(indexData, &ids))
 	assert.ElementsMatch(t, []string{"f1", "f3"}, ids)
 }
+
+func TestStore_CountByTriggerChannel(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// Empty channel returns 0.
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	// Add flows with different trigger types targeting the same channel.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f3", Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}}}))
+	// Different channel should not count.
+	require.NoError(t, store.Save(&model.Flow{ID: "f4", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+
+	count, err = store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
+
+	count, err = store.CountByTriggerChannel("ch2")
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Delete one and verify count decreases.
+	require.NoError(t, store.Delete("f2"))
+
+	count, err = store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+}

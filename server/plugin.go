@@ -110,7 +110,7 @@ func (p *Plugin) OnActivate() error {
 		p.API.LogInfo("Reset orphaned work items to pending", "count", resetCount)
 	}
 
-	maxWorkers := p.getConfiguration().MaxConcurrentFlows
+	maxWorkers := p.getConfiguration().MaxConcurrentFlowsLimit
 	if maxWorkers <= 0 {
 		maxWorkers = 4
 	}

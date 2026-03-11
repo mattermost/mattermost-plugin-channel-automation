@@ -18,7 +18,13 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	MaxConcurrentFlows int `json:"max_concurrent_flows"`
+	MaxConcurrentFlowsLimit int
+	MaxFlowsPerChannelLimit int
+}
+
+// MaxFlowsPerChannel implements flow.Configuration.
+func (c *configuration) MaxFlowsPerChannel() int {
+	return c.MaxFlowsPerChannelLimit
 }
 
 // Clone shallow copies the configuration. Your implementation may require a deep copy if

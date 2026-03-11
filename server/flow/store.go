@@ -251,6 +251,16 @@ func (s *KVStore) Delete(id string) error {
 	return nil
 }
 
+// CountByTriggerChannel returns the number of flows targeting the given channel
+// across all trigger types (message_posted, schedule, membership_changed).
+func (s *KVStore) CountByTriggerChannel(channelID string) (int, error) {
+	ids, err := s.getChannelTriggerIndex(channelID)
+	if err != nil {
+		return 0, err
+	}
+	return len(ids), nil
+}
+
 // GetFlowIDsForChannel returns flow IDs triggered by messages in the given channel.
 func (s *KVStore) GetFlowIDsForChannel(channelID string) ([]string, error) {
 	return s.getTriggerIndex(channelID)

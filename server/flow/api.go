@@ -21,11 +21,12 @@ type APIHandler struct {
 	historyStore    model.ExecutionStore
 	api             plugin.API
 	scheduleManager *ScheduleManager
+	config          model.Configuration
 }
 
 // NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager}
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -60,6 +61,43 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 		if appErr != nil || !member.SchemeAdmin {
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
+	}
+	return nil
+}
+
+// checkChannelFlowLimit verifies that the channel has not reached the
+// per-channel flow limit. excludeFlowID is used during updates so the
+// flow being modified does not count against itself.
+func (h *APIHandler) checkChannelFlowLimit(channelID, excludeFlowID string) error {
+	if channelID == "" {
+		return nil
+	}
+
+	limit := 0
+	if h.config != nil {
+		limit = h.config.MaxFlowsPerChannel()
+	}
+	if limit <= 0 {
+		return nil
+	}
+
+	count, err := h.store.CountByTriggerChannel(channelID)
+	if err != nil {
+		return fmt.Errorf("failed to check channel flow count: %w", err)
+	}
+
+	if excludeFlowID != "" {
+		existing, err := h.store.Get(excludeFlowID)
+		if err != nil {
+			return fmt.Errorf("failed to check existing flow: %w", err)
+		}
+		if existing != nil && existing.TriggerChannelID() == channelID {
+			count--
+		}
+	}
+
+	if count >= limit {
+		return fmt.Errorf("channel has reached the maximum of %d flow(s)", limit)
 	}
 	return nil
 }
@@ -131,6 +169,11 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 
@@ -234,6 +277,11 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 

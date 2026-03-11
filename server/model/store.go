@@ -8,6 +8,7 @@ type Store interface {
 	ListScheduled() ([]*Flow, error)
 	Save(flow *Flow) error
 	Delete(id string) error
+	CountByTriggerChannel(channelID string) (int, error)
 	GetFlowIDsForChannel(channelID string) ([]string, error)
 	GetFlowIDsForMembershipChannel(channelID string) ([]string, error)
 	GetChannelCreatedFlowIDs() ([]string, error)
