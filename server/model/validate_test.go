@@ -68,6 +68,27 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("valid with joined action", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "joined"}})
+		require.NoError(t, err)
+	})
+
+	t.Run("valid with left action", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "left"}})
+		require.NoError(t, err)
+	})
+
+	t.Run("valid with empty action", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: ""}})
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid action", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "kicked"}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "action")
+	})
+
 	t.Run("missing channel_id", func(t *testing.T) {
 		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{}})
 		require.Error(t, err)

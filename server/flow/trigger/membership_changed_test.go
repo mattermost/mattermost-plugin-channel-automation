@@ -60,3 +60,34 @@ func TestMembershipChangedTrigger_Matches_NilConfig(t *testing.T) {
 
 	assert.False(t, tr.Matches(trig, event))
 }
+
+func TestMembershipChangedTrigger_Matches_ActionFilter(t *testing.T) {
+	tr := &trigger.MembershipChangedTrigger{}
+
+	t.Run("empty action matches both joined and left", func(t *testing.T) {
+		trig := &model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1", Action: ""}}
+		joinEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "joined"}
+		leaveEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "left"}
+
+		assert.True(t, tr.Matches(trig, joinEvent))
+		assert.True(t, tr.Matches(trig, leaveEvent))
+	})
+
+	t.Run("joined action matches only joined", func(t *testing.T) {
+		trig := &model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1", Action: "joined"}}
+		joinEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "joined"}
+		leaveEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "left"}
+
+		assert.True(t, tr.Matches(trig, joinEvent))
+		assert.False(t, tr.Matches(trig, leaveEvent))
+	})
+
+	t.Run("left action matches only left", func(t *testing.T) {
+		trig := &model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1", Action: "left"}}
+		joinEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "joined"}
+		leaveEvent := &model.Event{Type: "membership_changed", Channel: &mmmodel.Channel{Id: "ch1"}, MembershipAction: "left"}
+
+		assert.False(t, tr.Matches(trig, joinEvent))
+		assert.True(t, tr.Matches(trig, leaveEvent))
+	})
+}

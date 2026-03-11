@@ -16,5 +16,11 @@ func (t *MembershipChangedTrigger) Matches(trigger *model.Trigger, event *model.
 	if event.Channel == nil {
 		return false
 	}
-	return trigger.MembershipChanged.ChannelID == event.Channel.Id
+	if trigger.MembershipChanged.ChannelID != event.Channel.Id {
+		return false
+	}
+	if a := trigger.MembershipChanged.Action; a != "" && a != event.MembershipAction {
+		return false
+	}
+	return true
 }

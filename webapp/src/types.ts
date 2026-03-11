@@ -10,6 +10,7 @@ export interface ScheduleTriggerParams {
 
 export interface MembershipChangedTriggerParams {
     channel_id: string;
+    action?: string; // "joined", "left", or undefined (both)
 }
 
 export interface ChannelCreatedTriggerParams {

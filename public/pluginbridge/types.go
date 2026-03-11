@@ -24,6 +24,7 @@ type Trigger struct {
 // MembershipChangedConfig holds trigger config for the membership_changed trigger type.
 type MembershipChangedConfig struct {
 	ChannelID string `json:"channel_id"`
+	Action    string `json:"action,omitempty"` // "joined", "left", or "" (both)
 }
 
 // MessagePostedConfig holds trigger config for the message_posted trigger type.
