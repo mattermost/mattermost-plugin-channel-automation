@@ -43,6 +43,7 @@ export function getTriggerType(trigger: Trigger): string {
 export interface SendMessageActionParams {
     channel_id: string;
     reply_to_post_id?: string;
+    as_bot_id?: string;
     body: string;
 }
 

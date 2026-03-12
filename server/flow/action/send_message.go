@@ -40,11 +40,33 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 		return nil, fmt.Errorf("user %q does not have permission to post in channel %q", ctx.CreatedBy, channelID)
 	}
 
+	userID := a.botUserID
+	if cfg.AsBotID != "" {
+		botUser, appErr := a.api.GetUser(cfg.AsBotID)
+		if appErr != nil {
+			return nil, fmt.Errorf("failed to get bot user %q: %s", cfg.AsBotID, appErr.Error())
+		}
+		if !botUser.IsBot {
+			return nil, fmt.Errorf("user %q is not a bot", cfg.AsBotID)
+		}
+		userID = cfg.AsBotID
+	}
+
 	var replyToPostID string
 	if cfg.ReplyToPostID != "" {
 		replyToPostID, err = renderTemplate(cfg.ReplyToPostID, ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to render reply_to_post_id template: %w", err)
+		}
+	}
+
+	if replyToPostID != "" {
+		replyPost, appErr := a.api.GetPost(replyToPostID)
+		if appErr != nil {
+			return nil, fmt.Errorf("failed to get post %q for reply: %s", replyToPostID, appErr.Error())
+		}
+		if replyPost.RootId != "" {
+			replyToPostID = replyPost.RootId
 		}
 	}
 
@@ -54,7 +76,7 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 	}
 
 	post := &mmmodel.Post{
-		UserId:    a.botUserID,
+		UserId:    userID,
 		ChannelId: channelID,
 		RootId:    replyToPostID,
 		Message:   msg,

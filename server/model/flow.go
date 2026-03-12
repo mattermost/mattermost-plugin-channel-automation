@@ -83,6 +83,7 @@ func (t *Trigger) Type() string {
 type SendMessageActionConfig struct {
 	ChannelID     string `json:"channel_id"`
 	ReplyToPostID string `json:"reply_to_post_id,omitempty"`
+	AsBotID       string `json:"as_bot_id,omitempty"`
 	Body          string `json:"body"`
 }
 

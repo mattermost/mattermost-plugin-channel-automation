@@ -16,6 +16,7 @@ interface ActionForm {
     type: string;
     channel_id: string;
     reply_to_post_id: string;
+    as_bot_id: string;
     body: string;
     system_prompt: string;
     prompt: string;
@@ -170,7 +171,7 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -180,6 +181,7 @@ function actionToForm(a: Action): ActionForm {
             type: 'ai_prompt',
             channel_id: '',
             reply_to_post_id: '',
+            as_bot_id: '',
             body: '',
             system_prompt: a.ai_prompt.system_prompt ?? '',
             prompt: a.ai_prompt.prompt ?? '',
@@ -194,6 +196,7 @@ function actionToForm(a: Action): ActionForm {
             type: 'send_message',
             channel_id: a.send_message.channel_id,
             reply_to_post_id: a.send_message.reply_to_post_id ?? '',
+            as_bot_id: a.send_message.as_bot_id ?? '',
             body: a.send_message.body,
             system_prompt: '',
             prompt: '',
@@ -202,7 +205,7 @@ function actionToForm(a: Action): ActionForm {
             tool_constraints: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -453,6 +456,9 @@ const FlowEditorView: React.FC = () => {
                 if (a.reply_to_post_id && action.send_message) {
                     action.send_message.reply_to_post_id = a.reply_to_post_id;
                 }
+                if (a.as_bot_id && action.send_message) {
+                    action.send_message.as_bot_id = a.as_bot_id;
+                }
                 return action;
             }),
         };
@@ -608,6 +614,20 @@ const FlowEditorView: React.FC = () => {
                                     value={action.reply_to_post_id}
                                     placeholder={'e.g. {{.Trigger.Post.ThreadId}}'}
                                     onChange={(e) => handleActionChange(index, 'reply_to_post_id', e.target.value)}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-as-bot-id`}
+                                    style={styles.label}
+                                >{'Bot User ID (optional, overrides default bot)'}</label>
+                                <input
+                                    id={`action-${index}-as-bot-id`}
+                                    style={styles.input}
+                                    type='text'
+                                    value={action.as_bot_id}
+                                    placeholder={'Bot user ID'}
+                                    onChange={(e) => handleActionChange(index, 'as_bot_id', e.target.value)}
                                 />
                             </div>
                             <div style={styles.formGroup}>

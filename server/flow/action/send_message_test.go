@@ -155,6 +155,7 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetPost", "parent-post-id").Return(&mmmodel.Post{Id: "parent-post-id"}, nil)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -190,6 +191,7 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetPost", "trigger-post-id").Return(&mmmodel.Post{Id: "trigger-post-id"}, nil)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "reply-post-id",
 		ChannelId: "ch1",
@@ -397,6 +399,193 @@ func TestSendMessageAction_Execute_EmptyCreatedBy(t *testing.T) {
 	assert.Nil(t, output)
 	assert.Contains(t, err.Error(), "flow has no creator")
 	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestSendMessageAction_Execute_ReplyToPostID_ResolvesRootFromChild(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetPost", "child-post-id").Return(&mmmodel.Post{Id: "child-post-id", RootId: "root-post-id"}, nil)
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "reply-post-id",
+		ChannelId: "ch1",
+		RootId:    "root-post-id",
+		Message:   "threaded reply",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "child-post-id",
+			Body:          "threaded reply",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.RootId == "root-post-id"
+	}))
+}
+
+func TestSendMessageAction_Execute_ReplyToPostID_GetPostFails(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetPost", "missing-post-id").Return(nil, mmmodel.NewAppError("GetPost", "not_found", nil, "", 404))
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "missing-post-id",
+			Body:          "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to get post")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestSendMessageAction_Execute_ReplyToPostID_Templated_ResolvesRoot(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetPost", "child-post-id").Return(&mmmodel.Post{Id: "child-post-id", RootId: "root-post-id"}, nil)
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "reply-post-id",
+		ChannelId: "ch1",
+		RootId:    "root-post-id",
+		Message:   "reply",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID:     "ch1",
+			ReplyToPostID: "{{.Trigger.Post.Id}}",
+			Body:          "reply",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "child-post-id", ChannelId: "ch1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.RootId == "root-post-id"
+	}))
+}
+
+func TestSendMessageAction_Execute_AsBotID_ValidBot(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetUser", "custom-bot-id").Return(&mmmodel.User{Id: "custom-bot-id", IsBot: true}, nil)
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "new-post-id",
+		ChannelId: "ch1",
+		Message:   "hello",
+	}, nil)
+
+	a := NewSendMessageAction(api, "default-bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch1",
+			AsBotID:   "custom-bot-id",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	api.AssertCalled(t, "CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
+		return p.UserId == "custom-bot-id"
+	}))
+}
+
+func TestSendMessageAction_Execute_AsBotID_NotABot(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetUser", "human-user-id").Return(&mmmodel.User{Id: "human-user-id", IsBot: false}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch1",
+			AsBotID:   "human-user-id",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "is not a bot")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestSendMessageAction_Execute_AsBotID_UserNotFound(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch1", mmmodel.PermissionCreatePost).Return(true)
+	api.On("GetUser", "nonexistent-id").Return(nil, mmmodel.NewAppError("GetUser", "not_found", nil, "", 404))
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch1",
+			AsBotID:   "nonexistent-id",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "failed to get bot user")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
