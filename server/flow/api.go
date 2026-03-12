@@ -162,7 +162,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger); err != nil {
+	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -257,7 +257,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger); err != nil {
+	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

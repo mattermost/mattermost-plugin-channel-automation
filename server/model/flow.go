@@ -26,7 +26,7 @@ type MessagePostedConfig struct {
 type ScheduleConfig struct {
 	ChannelID string `json:"channel_id"`
 	Interval  string `json:"interval"`
-	StartAt   int64  `json:"start_at,omitempty"`
+	StartAt   int64  `json:"start_at,omitempty"` // UTC Unix milliseconds; must be in the future if set
 }
 
 // MembershipChangedConfig holds trigger config for the membership_changed trigger type.
