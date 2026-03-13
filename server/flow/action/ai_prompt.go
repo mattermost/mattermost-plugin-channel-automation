@@ -94,10 +94,6 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	if len(cfg.AllowedTools) > 0 {
 		req.AllowedTools = cfg.AllowedTools
 	}
-	if len(cfg.ToolConstraints) > 0 {
-		req.ToolConstraints = toBridgeToolConstraints(cfg.ToolConstraints)
-	}
-
 	var response string
 	switch cfg.ProviderType {
 	case "agent":
@@ -178,29 +174,4 @@ func buildTriggerContext(trigger model.TriggerData) string {
 	}
 
 	return "[Trigger Context]\nThis automation was triggered by the following event:\n\n" + content
-}
-
-// toBridgeToolConstraints converts model.ToolConstraints to bridgeclient.ToolConstraints.
-func toBridgeToolConstraints(tc model.ToolConstraints) bridgeclient.ToolConstraints {
-	out := make(bridgeclient.ToolConstraints, len(tc))
-	for tool, params := range tc {
-		bp := make(map[string]bridgeclient.ParamConstraint, len(params))
-		for param, constraint := range params {
-			bc := bridgeclient.ParamConstraint{
-				AllowedValues: constraint.AllowedValues,
-			}
-			if len(constraint.FromToolOutput) > 0 {
-				bc.FromToolOutput = make([]bridgeclient.OutputBinding, len(constraint.FromToolOutput))
-				for i, ob := range constraint.FromToolOutput {
-					bc.FromToolOutput[i] = bridgeclient.OutputBinding{
-						Tool:  ob.Tool,
-						Field: ob.Field,
-					}
-				}
-			}
-			bp[param] = bc
-		}
-		out[tool] = bp
-	}
-	return out
 }

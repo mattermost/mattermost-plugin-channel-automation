@@ -22,7 +22,6 @@ interface ActionForm {
     prompt: string;
     provider_id: string;
     allowed_tools: string;
-    tool_constraints: string;
 }
 
 const styles = {
@@ -171,7 +170,7 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -187,7 +186,6 @@ function actionToForm(a: Action): ActionForm {
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tools: (a.ai_prompt.allowed_tools ?? []).join(', '),
-            tool_constraints: a.ai_prompt.tool_constraints ? JSON.stringify(a.ai_prompt.tool_constraints, null, 2) : '',
         };
     }
     if (a.send_message) {
@@ -202,10 +200,9 @@ function actionToForm(a: Action): ActionForm {
             prompt: '',
             provider_id: '',
             allowed_tools: '',
-            tool_constraints: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', tool_constraints: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -419,20 +416,6 @@ const FlowEditorView: React.FC = () => {
 
         const trigger = triggerConfig?.toTrigger(triggerState) ?? {};
 
-        // Validate tool_constraints JSON before building the request.
-        for (let i = 0; i < actions.length; i++) {
-            const a = actions[i];
-            if (a.type === 'ai_prompt' && a.tool_constraints.trim()) {
-                try {
-                    JSON.parse(a.tool_constraints);
-                } catch {
-                    setError(`Action ${i + 1}: Tool constraints contains invalid JSON`);
-                    setSaving(false);
-                    return;
-                }
-            }
-        }
-
         const data = {
             name,
             enabled,
@@ -453,9 +436,6 @@ const FlowEditorView: React.FC = () => {
                     const tools = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
                     if (tools.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = tools;
-                    }
-                    if (a.tool_constraints.trim() && action.ai_prompt) {
-                        action.ai_prompt.tool_constraints = JSON.parse(a.tool_constraints);
                     }
                     return action;
                 }
@@ -724,19 +704,6 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                     index={index}
                                     tools={agentTools.get(index)}
                                     onToggle={handleToolToggle}
-                                />
-                            </div>
-                            <div style={styles.formGroup}>
-                                <label
-                                    htmlFor={`action-${index}-tool-constraints`}
-                                    style={styles.label}
-                                >{'Tool Constraints (JSON, optional)'}</label>
-                                <textarea
-                                    id={`action-${index}-tool-constraints`}
-                                    style={styles.textarea}
-                                    placeholder='e.g. {"create_post": {"channel_id": ["ch1", "ch2"]}}'
-                                    value={action.tool_constraints}
-                                    onChange={(e) => handleActionChange(index, 'tool_constraints', e.target.value)}
                                 />
                             </div>
                             <details style={styles.details}>

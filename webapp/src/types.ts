@@ -47,29 +47,12 @@ export interface SendMessageActionParams {
     body: string;
 }
 
-export interface OutputBinding {
-    tool: string;
-    field: string;
-}
-
-export interface ParamConstraint {
-    allowed_values?: string[];
-    from_tool_output?: OutputBinding[];
-}
-
-export interface ToolConstraints {
-    [toolName: string]: {
-        [paramName: string]: ParamConstraint | string[];
-    };
-}
-
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
     allowed_tools?: string[];
-    tool_constraints?: ToolConstraints;
 }
 
 export interface Action {
