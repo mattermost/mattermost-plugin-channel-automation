@@ -213,6 +213,7 @@ ifneq ($(HAS_SERVER),)
 ifneq ($(MM_DEBUG),)
 	$(info DEBUG mode is on; to disable, unset MM_DEBUG)
 endif
+	rm -rf server/dist;
 	mkdir -p server/dist;
 ifneq ($(MM_SERVICESETTINGS_ENABLEDEVELOPER),)
 	@echo Building plugin only for $(DEFAULT_GOOS)-$(DEFAULT_GOARCH) because MM_SERVICESETTINGS_ENABLEDEVELOPER is enabled
@@ -342,7 +343,7 @@ detach: setup-attach
 
 ## Runs any lints and unit tests defined for the server and webapp, if they exist.
 .PHONY: test
-test: apply webapp/node_modules install-go-tools
+test: apply webapp/node_modules install-go-tools dist
 ifneq ($(HAS_SERVER),)
 	$(GOBIN)/gotestsum -- -v ./...
 endif

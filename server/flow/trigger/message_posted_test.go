@@ -1,0 +1,49 @@
+package trigger_test
+
+import (
+	"testing"
+
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
+)
+
+func TestMessagePostedTrigger_Type(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	assert.Equal(t, "message_posted", tr.Type())
+}
+
+func TestMessagePostedTrigger_Matches_CorrectChannel(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	event := &model.Event{
+		Type: "message_posted",
+		Post: &mmmodel.Post{ChannelId: "ch1"},
+	}
+
+	assert.True(t, tr.Matches(trig, event))
+}
+
+func TestMessagePostedTrigger_Matches_WrongChannel(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	event := &model.Event{
+		Type: "message_posted",
+		Post: &mmmodel.Post{ChannelId: "ch2"},
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
+func TestMessagePostedTrigger_Matches_NilPost(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	event := &model.Event{
+		Type: "message_posted",
+		Post: nil,
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}

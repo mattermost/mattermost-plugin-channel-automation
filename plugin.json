@@ -4,7 +4,7 @@
     "description": "A Mattermost plugin for channel automation.",
     "homepage_url": "https://github.com/mattermost/mattermost-plugin-channel-automation",
     "support_url": "https://github.com/mattermost/mattermost-plugin-channel-automation/issues",
-    "icon_path": "assets/starter-template-icon.svg",
+    "icon_path": "assets/icon.svg",
     "min_server_version": "6.2.1",
     "server": {
         "executables": {
@@ -21,6 +21,21 @@
     "settings_schema": {
         "header": "",
         "footer": "",
-        "settings": []
+        "settings": [
+            {
+                "key": "MaxConcurrentFlowsLimit",
+                "display_name": "Max Concurrent Flows",
+                "type": "number",
+                "default": 4,
+                "help_text": "Maximum number of flow executions that can run concurrently per plugin instance. Requires plugin restart to take effect."
+            },
+            {
+                "key": "MaxFlowsPerChannelLimit",
+                "display_name": "Max Flows Per Channel",
+                "type": "number",
+                "default": 0,
+                "help_text": "Maximum number of flows that can target a single channel. Set to 0 or leave empty for unlimited."
+            }
+        ]
     }
 }
