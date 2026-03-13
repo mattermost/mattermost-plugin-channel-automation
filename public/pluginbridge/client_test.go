@@ -220,6 +220,95 @@ func TestNilResponse(t *testing.T) {
 	assert.Contains(t, err.Error(), "PluginHTTP returned nil response")
 }
 
+func TestCreateFlowWithChannelCreatedTrigger(t *testing.T) {
+	created := &Flow{
+		ID:      "flow456",
+		Name:    "channel created flow",
+		Enabled: true,
+		Trigger: Trigger{
+			ChannelCreated: &ChannelCreatedConfig{},
+		},
+		Actions: []Action{
+			{
+				ID:          "act1",
+				SendMessage: &SendMessageActionConfig{ChannelID: "ch2", Body: "welcome"},
+			},
+		},
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+	}
+	mock := &mockPluginAPI{response: jsonResponse(http.StatusCreated, created)}
+	client := NewClient(mock, WithUser("user1"))
+
+	input := &Flow{
+		Name:    "channel created flow",
+		Enabled: true,
+		Trigger: Trigger{
+			ChannelCreated: &ChannelCreatedConfig{},
+		},
+		Actions: []Action{
+			{
+				ID:          "act1",
+				SendMessage: &SendMessageActionConfig{ChannelID: "ch2", Body: "welcome"},
+			},
+		},
+	}
+	result, err := client.CreateFlow(input)
+	require.NoError(t, err)
+	assert.Equal(t, "flow456", result.ID)
+	assert.NotNil(t, result.Trigger.ChannelCreated)
+	assert.Nil(t, result.Trigger.MessagePosted)
+
+	// Verify the request body round-trips the channel_created trigger.
+	var sent Flow
+	require.NoError(t, json.NewDecoder(mock.lastRequest.Body).Decode(&sent))
+	assert.NotNil(t, sent.Trigger.ChannelCreated)
+}
+
+func TestCreateFlowWithAsBotID(t *testing.T) {
+	created := &Flow{
+		ID:      "flow789",
+		Name:    "bot flow",
+		Enabled: true,
+		Trigger: Trigger{
+			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
+		},
+		Actions: []Action{
+			{
+				ID:          "act1",
+				SendMessage: &SendMessageActionConfig{ChannelID: "ch2", AsBotID: "bot123", Body: "hello from bot"},
+			},
+		},
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+	}
+	mock := &mockPluginAPI{response: jsonResponse(http.StatusCreated, created)}
+	client := NewClient(mock, WithUser("user1"))
+
+	input := &Flow{
+		Name:    "bot flow",
+		Enabled: true,
+		Trigger: Trigger{
+			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
+		},
+		Actions: []Action{
+			{
+				ID:          "act1",
+				SendMessage: &SendMessageActionConfig{ChannelID: "ch2", AsBotID: "bot123", Body: "hello from bot"},
+			},
+		},
+	}
+	result, err := client.CreateFlow(input)
+	require.NoError(t, err)
+	assert.Equal(t, "flow789", result.ID)
+	assert.Equal(t, "bot123", result.Actions[0].SendMessage.AsBotID)
+
+	// Verify the request body round-trips the as_bot_id field.
+	var sent Flow
+	require.NoError(t, json.NewDecoder(mock.lastRequest.Body).Decode(&sent))
+	assert.Equal(t, "bot123", sent.Actions[0].SendMessage.AsBotID)
+}
+
 func TestAsUser(t *testing.T) {
 	mock := &mockPluginAPI{response: jsonResponse(http.StatusOK, []*Flow{})}
 	client := NewClient(mock, WithUser("user1"))

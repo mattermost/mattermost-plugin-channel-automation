@@ -14,11 +14,16 @@ type Flow struct {
 	CreatedBy string   `json:"created_by"`
 }
 
+// ChannelCreatedConfig holds trigger config for the channel_created trigger type.
+// No fields are needed — the trigger fires on any new public channel.
+type ChannelCreatedConfig struct{}
+
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
 	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
+	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
 }
 
 // MembershipChangedConfig holds trigger config for the membership_changed trigger type.
@@ -50,6 +55,7 @@ type Action struct {
 type SendMessageActionConfig struct {
 	ChannelID     string `json:"channel_id"`
 	ReplyToPostID string `json:"reply_to_post_id,omitempty"`
+	AsBotID       string `json:"as_bot_id,omitempty"`
 	Body          string `json:"body"`
 }
 
