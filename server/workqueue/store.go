@@ -126,9 +126,15 @@ func (s *Store) ClaimNext() (*model.WorkItem, error) {
 			item.Status = model.WorkItemStatusPending
 			item.StartedAt = 0
 			if rbData, rbErr := json.Marshal(item); rbErr == nil {
-				_ = s.api.KVSet(workItemKeyPrefix+id, rbData)
+				if appErr := s.api.KVSet(workItemKeyPrefix+id, rbData); appErr != nil {
+					s.api.LogError("rollback failed - work item may be orphaned",
+						"work_item_id", id, "err", appErr.Error())
+				}
 			}
-			_ = s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...))
+			if rbErr := s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...)); rbErr != nil {
+				s.api.LogError("rollback failed - pending index restore failed",
+					"work_item_id", id, "err", rbErr.Error())
+			}
 			return nil, err
 		}
 		if err := s.setIndex(runningIndexKey, append(runningIDs, id)); err != nil {
@@ -136,9 +142,15 @@ func (s *Store) ClaimNext() (*model.WorkItem, error) {
 			item.Status = model.WorkItemStatusPending
 			item.StartedAt = 0
 			if rbData, rbErr := json.Marshal(item); rbErr == nil {
-				_ = s.api.KVSet(workItemKeyPrefix+id, rbData)
+				if appErr := s.api.KVSet(workItemKeyPrefix+id, rbData); appErr != nil {
+					s.api.LogError("rollback failed - work item may be orphaned",
+						"work_item_id", id, "err", appErr.Error())
+				}
 			}
-			_ = s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...))
+			if rbErr := s.setIndex(pendingIndexKey, append([]string{id}, pendingIDs[1:]...)); rbErr != nil {
+				s.api.LogError("rollback failed - pending index restore failed",
+					"work_item_id", id, "err", rbErr.Error())
+			}
 			return nil, err
 		}
 

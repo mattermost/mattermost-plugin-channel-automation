@@ -67,7 +67,9 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(records)
+	if err := json.NewEncoder(w).Encode(records); err != nil {
+		h.api.LogError("Failed to encode response", "error", err.Error())
+	}
 }
 
 func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +110,9 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(record)
+	if err := json.NewEncoder(w).Encode(record); err != nil {
+		h.api.LogError("Failed to encode response", "error", err.Error())
+	}
 }
 
 func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +137,9 @@ func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(records)
+	if err := json.NewEncoder(w).Encode(records); err != nil {
+		h.api.LogError("Failed to encode response", "error", err.Error())
+	}
 }
 
 // checkPermission returns true if the user is a system admin or has

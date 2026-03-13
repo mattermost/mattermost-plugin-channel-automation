@@ -1,6 +1,8 @@
 package flow
 
 import (
+	"fmt"
+
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -42,7 +44,7 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 		}
 		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("trigger type %q is registered but has no candidate resolution logic", event.Type)
 	}
 
 	if err != nil {

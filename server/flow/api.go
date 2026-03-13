@@ -2,6 +2,7 @@ package flow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -69,11 +70,32 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 	}
 	for _, chID := range channelIDs {
 		member, appErr := h.api.GetChannelMember(chID, userID)
-		if appErr != nil || !member.SchemeAdmin {
+		if appErr != nil {
+			// 4xx errors (not found, unauthorized) mean the user is not a member;
+			// 5xx errors are infrastructure failures that should surface differently.
+			if appErr.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
+			}
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
+		}
+		if !member.SchemeAdmin {
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
 	}
 	return nil
+}
+
+// writePermissionError writes the appropriate HTTP error based on whether
+// the permission check failed due to an API/infrastructure error (500) or
+// the user genuinely lacking permissions (403).
+func (h *APIHandler) writePermissionError(w http.ResponseWriter, err error) {
+	var appErr *mmmodel.AppError
+	if errors.As(err, &appErr) {
+		h.api.LogError("Failed to verify permissions", "error", err.Error())
+		http.Error(w, "failed to verify permissions", http.StatusInternalServerError)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusForbidden)
 }
 
 // checkChannelFlowLimit verifies that the channel has not reached the
@@ -180,6 +202,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusForbidden)
+		h.writePermissionError(w, err)
 		return
 	}
 
@@ -195,7 +218,9 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.scheduleManager != nil {
-		h.scheduleManager.SyncFlow(nil, &f)
+		if err := h.scheduleManager.SyncFlow(nil, &f); err != nil {
+			h.api.LogWarn("Failed to sync schedule after flow create", "flow_id", f.ID, "error", err.Error())
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -227,6 +252,7 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.checkFlowPermissions(userID, f); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusForbidden)
+		h.writePermissionError(w, err)
 		return
 	}
 
@@ -282,12 +308,14 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	// Check permissions on existing flow (must have permission to modify it).
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusForbidden)
+		h.writePermissionError(w, err)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusForbidden)
+		h.writePermissionError(w, err)
 		return
 	}
 
@@ -303,7 +331,9 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.scheduleManager != nil {
-		h.scheduleManager.SyncFlow(existing, &f)
+		if err := h.scheduleManager.SyncFlow(existing, &f); err != nil {
+			h.api.LogWarn("Failed to sync schedule after flow update", "flow_id", f.ID, "error", err.Error())
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -334,6 +364,7 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusForbidden)
+		h.writePermissionError(w, err)
 		return
 	}
 

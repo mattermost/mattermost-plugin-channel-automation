@@ -46,12 +46,14 @@ func (s *Store) Save(record *model.ExecutionRecord) error {
 		return fmt.Errorf("failed to save execution record %s: %w", record.ID, appErr)
 	}
 
+	var indexErr error
 	if err := s.prependToIndex(flowIndexPrefix+record.FlowID, record.ID, maxFlowIndexSize); err != nil {
 		s.api.LogError("Failed to update flow execution index",
 			"flow_id", record.FlowID,
 			"execution_id", record.ID,
 			"err", err.Error(),
 		)
+		indexErr = err
 	}
 
 	if err := s.prependToIndex(globalIndexKey, record.ID, maxGlobalIndexSize); err != nil {
@@ -59,9 +61,10 @@ func (s *Store) Save(record *model.ExecutionRecord) error {
 			"execution_id", record.ID,
 			"err", err.Error(),
 		)
+		indexErr = err
 	}
 
-	return nil
+	return indexErr
 }
 
 // Get retrieves a single execution record by ID.

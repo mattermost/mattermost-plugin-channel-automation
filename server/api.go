@@ -60,7 +60,9 @@ func (p *Plugin) handleGetAgentTools(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(tools)
+	if err := json.NewEncoder(w).Encode(tools); err != nil {
+		p.API.LogError("Failed to encode response", "error", err.Error())
+	}
 }
 
 // ServeHTTP handles HTTP requests for the plugin API.

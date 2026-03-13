@@ -286,12 +286,13 @@ const FlowEditorView: React.FC = () => {
             if (bots.length === 0) {
                 setAgentsError('No AI agents found. Please configure agents in the AI plugin.');
             }
-        }).catch(() => {
+        }).catch((err: unknown) => {
             if (cancelled) {
                 return;
             }
             setAgents([]);
-            setAgentsError('Could not reach the AI plugin. Make sure the Mattermost AI plugin is installed and enabled.');
+            const msg = err instanceof Error ? err.message : 'unknown error';
+            setAgentsError(`Could not load AI agents: ${msg}`);
         });
         return () => {
             cancelled = true;
@@ -313,7 +314,9 @@ const FlowEditorView: React.FC = () => {
                 next.set(index, tools);
                 return next;
             });
-        }).catch(() => {
+        }).catch((err: unknown) => {
+            // eslint-disable-next-line no-console
+            console.error('Failed to fetch agent tools:', err);
             setAgentTools((prev) => {
                 const next = new Map(prev);
                 next.set(index, []);
@@ -416,6 +419,20 @@ const FlowEditorView: React.FC = () => {
 
         const trigger = triggerConfig?.toTrigger(triggerState) ?? {};
 
+        // Validate tool_constraints JSON before building the request.
+        for (let i = 0; i < actions.length; i++) {
+            const a = actions[i];
+            if (a.type === 'ai_prompt' && a.tool_constraints.trim()) {
+                try {
+                    JSON.parse(a.tool_constraints);
+                } catch {
+                    setError(`Action ${i + 1}: Tool constraints contains invalid JSON`);
+                    setSaving(false);
+                    return;
+                }
+            }
+        }
+
         const data = {
             name,
             enabled,
@@ -438,11 +455,7 @@ const FlowEditorView: React.FC = () => {
                         action.ai_prompt.allowed_tools = tools;
                     }
                     if (a.tool_constraints.trim() && action.ai_prompt) {
-                        try {
-                            action.ai_prompt.tool_constraints = JSON.parse(a.tool_constraints);
-                        } catch {
-                            // ignore invalid JSON — server will validate
-                        }
+                        action.ai_prompt.tool_constraints = JSON.parse(a.tool_constraints);
                     }
                     return action;
                 }

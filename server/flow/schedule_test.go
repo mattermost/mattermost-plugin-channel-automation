@@ -243,11 +243,12 @@ func TestScheduleManager_SyncFlowStopsOldJob(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
 	}
-	sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	})
+	require.NoError(t, err)
 
 	assert.True(t, oldJob.closed)
 	sm.mu.Lock()
@@ -314,11 +315,12 @@ func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
 	}
-	sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}},
 	})
+	require.NoError(t, err)
 
 	assert.True(t, oldJob.closed, "old job must be closed when interval changes")
 	require.Len(t, calls, 1, "a new job must be scheduled")
@@ -354,11 +356,12 @@ func TestScheduleManager_SyncFlowUpdatedStartAtStopsOldJob(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
 	}
-	sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
 	})
+	require.NoError(t, err)
 
 	assert.True(t, oldJob.closed, "old job must be closed when start_at changes")
 	require.Len(t, calls, 1, "a new job must be scheduled")
@@ -384,11 +387,12 @@ func TestScheduleManager_SyncFlowDisabledStopsJob(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
 	}
-	sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: false,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
 	})
+	require.NoError(t, err)
 
 	assert.True(t, existing.closed)
 	sm.mu.Lock()
@@ -419,12 +423,13 @@ func TestScheduleManager_SyncFlowNoOpWhenScheduleUnchanged(t *testing.T) {
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
 	}
-	sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Name:    "New Name",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
 	})
+	require.NoError(t, err)
 
 	assert.False(t, existingJob.closed, "job must NOT be stopped when schedule fields are unchanged")
 	assert.Empty(t, calls, "no new job should be created when schedule fields are unchanged")
@@ -448,11 +453,12 @@ func TestScheduleManager_SyncFlowCreateNewSchedule(t *testing.T) {
 	sm.scheduleFn = fakeScheduleFunc(&calls)
 
 	// Create (nil existing) with a schedule flow — should start a new job.
-	sm.SyncFlow(nil, &model.Flow{
+	err := sm.SyncFlow(nil, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "5m"}},
 	})
+	require.NoError(t, err)
 
 	require.Len(t, calls, 1, "a new job must be created on flow creation")
 	assert.Equal(t, scheduleJobKeyPrefix+"f1", calls[0])

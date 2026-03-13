@@ -95,7 +95,7 @@ func (sm *ScheduleManager) Stop() {
 // It compares the existing flow (nil on create) with the new flow and
 // only restarts the cluster job when the schedule-relevant fields
 // (Trigger.Type, Enabled, Interval, StartAt) actually changed.
-func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) {
+func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) error {
 	oldIsActive := existing != nil && existing.Trigger.Schedule != nil && existing.Enabled
 	newIsActive := f.Trigger.Schedule != nil && f.Enabled
 
@@ -120,8 +120,11 @@ func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) {
 				"flow_name", f.Name,
 				"err", err.Error(),
 			)
+			return err
 		}
 	}
+
+	return nil
 }
 
 // RemoveFlow stops the schedule job for a deleted flow.
