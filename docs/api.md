@@ -6,7 +6,7 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with the failing channel ID if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
+All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"` if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
 
 ## Endpoints
 
@@ -23,7 +23,7 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 | Parameter    | Type   | Description                                                                                                                               |
 | ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. Applies to `message_posted`, `schedule`, and `membership_changed` triggers. Does not apply to `channel_created` (global trigger). |
+| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. |
 
 **Response:** `200 OK`
 
@@ -99,13 +99,16 @@ The created flow object with all server-assigned fields populated.
 
 **Errors:**
 
-| Status | Body                                                        |
-| ------ | ----------------------------------------------------------- |
-| 400    | `invalid request body`                                      |
-| 400    | Action validation error (missing/invalid/duplicate ID)      |
-| 400    | Trigger validation error (missing/invalid fields)           |
-| 403    | `you do not have channel admin permissions on channel <id>` |
-| 500    | `failed to create flow`                                     |
+| Status | Body                                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid request body`                                                                                      |
+| 400    | `name is required`                                                                                          |
+| 400    | `name must be 100 characters or fewer`                                                                      |
+| 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
+| 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
+| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
+| 500    | `failed to create flow`                                                                                     |
 
 ---
 
@@ -123,11 +126,11 @@ The flow object.
 
 **Errors:**
 
-| Status | Body                                                        |
-| ------ | ----------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on channel <id>` |
-| 404    | `flow not found`                                            |
-| 500    | `failed to get flow`                                        |
+| Status | Body                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
+| 404    | `flow not found`                                                                            |
+| 500    | `failed to get flow`                                                                        |
 
 ---
 
@@ -168,14 +171,17 @@ The updated flow object.
 
 **Errors:**
 
-| Status | Body                                                        |
-| ------ | ----------------------------------------------------------- |
-| 400    | `invalid request body`                                      |
-| 400    | Action validation error (missing/invalid/duplicate ID)      |
-| 400    | Trigger validation error (missing/invalid fields)           |
-| 403    | `you do not have channel admin permissions on channel <id>` |
-| 404    | `flow not found`                                            |
-| 500    | `failed to update flow`                                     |
+| Status | Body                                                                                                        |
+| ------ | ----------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid request body`                                                                                      |
+| 400    | `name is required`                                                                                          |
+| 400    | `name must be 100 characters or fewer`                                                                      |
+| 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
+| 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
+| 404    | `flow not found`                                                                                            |
+| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
+| 500    | `failed to update flow`                                                                                     |
 
 ---
 
@@ -191,11 +197,11 @@ Deletes a flow by ID.
 
 **Errors:**
 
-| Status | Body                                                        |
-| ------ | ----------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on channel <id>` |
-| 404    | `flow not found`                                            |
-| 500    | `failed to delete flow`                                     |
+| Status | Body                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
+| 404    | `flow not found`                                                                            |
+| 500    | `failed to delete flow`                                                                     |
 
 ---
 
@@ -231,6 +237,107 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 
 ---
 
+### List executions for a flow
+
+```
+GET /flows/{flow_id}/executions
+GET /flows/{flow_id}/executions?limit=50
+```
+
+Returns execution history records for a specific flow, ordered by most recent first. The user must have permission to view the flow (system admin or channel admin on all referenced channels).
+
+**Query parameters:**
+
+| Parameter | Type    | Description                                                  |
+| --------- | ------- | ------------------------------------------------------------ |
+| `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
+
+**Response:** `200 OK`
+
+```json
+[
+    {
+        "id": "exec-id-1",
+        "flow_id": "flow-id-1",
+        "flow_name": "My Flow",
+        "status": "success",
+        "steps": {
+            "send-greeting": {
+                "post_id": "post-id-1",
+                "channel_id": "channel-id-1",
+                "message": "Hello!"
+            }
+        },
+        "trigger_data": { ... },
+        "created_at": 1735689600000,
+        "started_at": 1735689600100,
+        "completed_at": 1735689600500
+    }
+]
+```
+
+**Errors:**
+
+| Status | Body                       |
+| ------ | -------------------------- |
+| 403    | `forbidden`                |
+| 404    | `flow not found`           |
+| 500    | `failed to get flow`       |
+| 500    | `failed to list executions`|
+
+---
+
+### Get execution
+
+```
+GET /executions/{id}
+```
+
+Returns a single execution record by ID. The user must have permission to view the parent flow. If the flow has been deleted, only system admins can view the execution.
+
+**Response:** `200 OK`
+
+An [ExecutionRecord](#executionrecord) object.
+
+**Errors:**
+
+| Status | Body                        |
+| ------ | --------------------------- |
+| 403    | `forbidden`                 |
+| 404    | `execution not found`       |
+| 500    | `failed to get execution`   |
+| 500    | `failed to get flow`        |
+
+---
+
+### List recent executions
+
+```
+GET /executions
+GET /executions?limit=50
+```
+
+Returns recent execution records across all flows. **System admin only.**
+
+**Query parameters:**
+
+| Parameter | Type    | Description                                                  |
+| --------- | ------- | ------------------------------------------------------------ |
+| `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
+
+**Response:** `200 OK`
+
+An array of [ExecutionRecord](#executionrecord) objects.
+
+**Errors:**
+
+| Status | Body                        |
+| ------ | --------------------------- |
+| 403    | `forbidden`                 |
+| 500    | `failed to list executions` |
+
+---
+
 ## Data types
 
 ### Flow
@@ -245,6 +352,30 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 | `created_at` | integer             | Creation time in milliseconds since epoch (server-assigned)    |
 | `updated_at` | integer             | Last update time in milliseconds since epoch (server-assigned) |
 | `created_by` | string              | User ID of the creator (server-assigned)                       |
+
+### ExecutionRecord
+
+| Field          | Type                            | Description                                                    |
+| -------------- | ------------------------------- | -------------------------------------------------------------- |
+| `id`           | string                          | Unique execution ID (server-assigned)                          |
+| `flow_id`      | string                          | ID of the flow that was executed                               |
+| `flow_name`    | string                          | Name of the flow at execution time                             |
+| `status`       | string                          | `"success"` or `"error"`                                       |
+| `error`        | string                          | _(optional)_ Error message if status is `"error"`              |
+| `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
+| `trigger_data` | [TriggerData](#trigger-data-fields) | Snapshot of the trigger event data                         |
+| `created_at`   | integer                         | Time the execution was queued (ms since epoch)                 |
+| `started_at`   | integer                         | Time execution started (ms since epoch)                        |
+| `completed_at` | integer                         | Time execution completed (ms since epoch)                      |
+
+### StepOutput
+
+| Field        | Type    | Description                                         |
+| ------------ | ------- | --------------------------------------------------- |
+| `post_id`    | string  | Post ID created by the action (if applicable)       |
+| `channel_id` | string  | Channel ID where the action operated                |
+| `message`    | string  | Output message from the action                      |
+| `truncated`  | boolean | _(optional)_ Whether the message was truncated      |
 
 ### Trigger
 
@@ -273,9 +404,10 @@ Exactly one key should be set, indicating the trigger type:
 
 #### MembershipChangedConfig
 
-| Field        | Type   | Description                 |
-| ------------ | ------ | --------------------------- |
-| `channel_id` | string | Channel to watch (required) |
+| Field        | Type   | Description                                                                    |
+| ------------ | ------ | ------------------------------------------------------------------------------ |
+| `channel_id` | string | Channel to watch (required)                                                    |
+| `action`     | string | _(optional)_ `"joined"`, `"left"`, or empty string to match both (default: `""`) |
 
 #### ChannelCreatedConfig
 
@@ -297,11 +429,12 @@ Exactly one type-specific config key should be set alongside `id`:
 
 #### SendMessageActionConfig
 
-| Field              | Type   | Description                                                                 |
-| ------------------ | ------ | --------------------------------------------------------------------------- |
-| `channel_id`       | string | Target channel ID. Supports Go templates.                                   |
-| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates. |
-| `body`             | string | Message body as a Go `text/template` string                                 |
+| Field              | Type   | Description                                                                      |
+| ------------------ | ------ | -------------------------------------------------------------------------------- |
+| `channel_id`       | string | Target channel ID. Supports Go templates.                                        |
+| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates.      |
+| `as_bot_id`        | string | _(optional)_ Bot user ID to post as. Defaults to the plugin bot if not specified. |
+| `body`             | string | Message body as a Go `text/template` string                                      |
 
 #### AIPromptActionConfig
 
@@ -396,6 +529,7 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 Action templates receive a `FlowContext` object with the following structure:
 
 ```
+{{.CreatedBy}}          — user ID of the flow creator
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
 {{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
@@ -452,8 +586,9 @@ Previous action outputs are available via `{{.Steps.<action_id>}}`.
 
 > **Note:** Trigger data fields use `.Id` (e.g. `{{.Trigger.Post.Id}}`) following Mattermost model conventions, while step output fields use `.PostID` / `.ChannelID` following Go naming conventions. This difference reflects the underlying Go struct definitions.
 
-| Field      | Access                             |
-| ---------- | ---------------------------------- |
-| Post ID    | `{{.Steps.<action_id>.PostID}}`    |
-| Channel ID | `{{.Steps.<action_id>.ChannelID}}` |
-| Message    | `{{.Steps.<action_id>.Message}}`   |
+| Field      | Access                              |
+| ---------- | ----------------------------------- |
+| Post ID    | `{{.Steps.<action_id>.PostID}}`     |
+| Channel ID | `{{.Steps.<action_id>.ChannelID}}`  |
+| Message    | `{{.Steps.<action_id>.Message}}`    |
+| Truncated  | `{{.Steps.<action_id>.Truncated}}`  |

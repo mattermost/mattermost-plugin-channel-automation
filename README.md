@@ -15,6 +15,9 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 ### Triggers
 
 - **Message Posted** — Fire a flow when a new message appears in a specific channel. Bot posts, system messages, and webhook posts are automatically excluded.
+- **Schedule** — Fire a flow on a recurring interval (e.g. every 30 minutes, every 24 hours).
+- **Membership Changed** — Fire a flow when a user joins or leaves a specific channel.
+- **Channel Created** — Fire a flow when a new public channel is created anywhere on the server.
 
 ### Actions
 
@@ -60,15 +63,18 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 
 ## Trigger Types
 
-| Type             | Description                                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `message_posted` | Fires when a user posts a message in the configured channel. Bot posts, system messages, and webhook posts are ignored. |
+| Type                 | Description                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `message_posted`     | Fires when a user posts a message in the configured channel. Bot posts, system messages, and webhook posts are ignored. |
+| `schedule`           | Fires on a recurring interval. Minimum interval is 5 minutes.                                                           |
+| `membership_changed` | Fires when a user joins or leaves the configured channel. Bot users are excluded.                                       |
+| `channel_created`    | Fires when a new public channel is created. No channel configuration needed.                                            |
 
 ## Action Types
 
 | Type           | Description                                                                                                                           |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `send_message` | Posts a message as the plugin bot. Supports `channel_id`, `reply_to_post_id`, and `body` — all templated.                             |
+| `send_message` | Posts a message as the plugin bot. Supports `channel_id`, `reply_to_post_id`, `as_bot_id`, and `body` — all templated.                |
 | `ai_prompt`    | Sends a rendered prompt to an AI agent via the Mattermost AI Plugin. Requires `provider_type` and `provider_id` in the action config. |
 
 ## Template Context
@@ -80,34 +86,42 @@ All action fields that support templates receive a `FlowContext` with:
 | `{{.Trigger.Post.Id}}`                     | ID of the triggering post                           |
 | `{{.Trigger.Post.Message}}`                | Message text                                        |
 | `{{.Trigger.Post.ChannelId}}`              | Channel where the post was created                  |
+| `{{.Trigger.Post.ThreadId}}`               | Thread/root post ID                                 |
 | `{{.Trigger.Channel.Id}}`                  | Channel ID                                          |
 | `{{.Trigger.Channel.Name}}`                | Channel name                                        |
 | `{{.Trigger.Channel.DisplayName}}`         | Channel display name                                |
 | `{{.Trigger.User.Id}}`                     | User ID of the post author                          |
 | `{{.Trigger.User.Username}}`               | Username                                            |
-| `{{.Trigger.User.Nickname}}`               | Nickname                                            |
+| `{{.Trigger.User.FirstName}}`              | First name                                          |
+| `{{.Trigger.User.LastName}}`               | Last name                                           |
+| `{{.CreatedBy}}`                           | User ID of the flow creator                         |
 | `{{(index .Steps "<action_id>").Message}}` | Output message from a previous action               |
 | `{{(index .Steps "<action_id>").PostID}}`  | Post ID created by a previous `send_message` action |
+| `{{(index .Steps "<action_id>").Truncated}}`| Whether the output message was truncated           |
 
-Sensitive user fields (email, password, auth data) are stripped from the template context.
+Sensitive user fields (email, password, auth data) are stripped from the template context. Nickname is not available.
 
 ## Configuration
 
-| Setting                  | Default | Description                                                                                                 |
-| ------------------------ | ------- | ----------------------------------------------------------------------------------------------------------- |
-| **Max Concurrent Flows** | `4`     | Maximum flow executions running concurrently per plugin instance. Requires a plugin restart to take effect. |
+| Setting                    | Default | Description                                                                                                 |
+| -------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| **Max Concurrent Flows**   | `4`     | Maximum flow executions running concurrently per plugin instance. Requires a plugin restart to take effect. |
+| **Max Flows Per Channel**  | `0`     | Maximum number of flows that can target a single channel. Set to 0 for unlimited.                           |
 
 ## API
 
-The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. All endpoints require system admin permissions.
+The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. Otherwise the user must be a channel admin on every channel referenced by the flow.
 
-| Method   | Path          | Description       |
-| -------- | ------------- | ----------------- |
-| `GET`    | `/flows`      | List all flows    |
-| `POST`   | `/flows`      | Create a new flow |
-| `GET`    | `/flows/{id}` | Get a flow by ID  |
-| `PUT`    | `/flows/{id}` | Update a flow     |
-| `DELETE` | `/flows/{id}` | Delete a flow     |
+| Method   | Path                            | Description                         |
+| -------- | ------------------------------- | ----------------------------------- |
+| `GET`    | `/flows`                        | List all flows                      |
+| `POST`   | `/flows`                        | Create a new flow                   |
+| `GET`    | `/flows/{id}`                   | Get a flow by ID                    |
+| `PUT`    | `/flows/{id}`                   | Update a flow                       |
+| `DELETE` | `/flows/{id}`                   | Delete a flow                       |
+| `GET`    | `/flows/{flow_id}/executions`   | List executions for a flow          |
+| `GET`    | `/executions/{id}`              | Get a single execution record       |
+| `GET`    | `/executions`                   | List recent executions (admin only) |
 
 See [docs/api.md](docs/api.md) for the full API reference with request/response schemas.
 
