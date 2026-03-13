@@ -1,9 +1,11 @@
 package model
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCollectChannelIDs_LiteralChannels(t *testing.T) {
@@ -127,4 +129,30 @@ func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 
 	ids := CollectChannelIDs(f)
 	assert.Equal(t, []string{"ch-notify"}, ids)
+}
+
+func TestParamConstraint_UnmarshalJSON_Shorthand(t *testing.T) {
+	var pc ParamConstraint
+	err := json.Unmarshal([]byte(`["val1", "val2"]`), &pc)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"val1", "val2"}, pc.AllowedValues)
+	assert.Empty(t, pc.FromToolOutput)
+}
+
+func TestParamConstraint_UnmarshalJSON_FullForm(t *testing.T) {
+	input := `{"allowed_values": ["a"], "from_tool_output": [{"tool": "t", "field": "f"}]}`
+	var pc ParamConstraint
+	err := json.Unmarshal([]byte(input), &pc)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a"}, pc.AllowedValues)
+	require.Len(t, pc.FromToolOutput, 1)
+	assert.Equal(t, "t", pc.FromToolOutput[0].Tool)
+	assert.Equal(t, "f", pc.FromToolOutput[0].Field)
+}
+
+func TestParamConstraint_UnmarshalJSON_EmptyArray(t *testing.T) {
+	var pc ParamConstraint
+	err := json.Unmarshal([]byte(`[]`), &pc)
+	require.NoError(t, err)
+	assert.Empty(t, pc.AllowedValues)
 }

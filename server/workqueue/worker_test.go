@@ -353,6 +353,58 @@ func TestWorkerPool_DeletedFlow(t *testing.T) {
 	_ = flowStore
 }
 
+func TestWorkerPool_PanicRecovery(t *testing.T) {
+	callCount := 0
+	act := &testAction{
+		execFn: func() error {
+			callCount++
+			if callCount == 1 {
+				panic("boom")
+			}
+			return nil
+		},
+	}
+
+	wp, store, flowStore := setupWorkerPool(t, 1, act)
+
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+
+	// Enqueue an item that will panic.
+	item1 := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	require.NoError(t, store.Enqueue(item1))
+
+	wp.Start()
+	wp.Notify()
+
+	// Wait for the panicking item to be processed.
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got != nil && got.Status == model.WorkItemStatusFailed
+	}, 5*time.Second, 10*time.Millisecond)
+
+	// Verify it was marked failed with the panic message.
+	got, err := store.Get("w1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, model.WorkItemStatusFailed, got.Status)
+	assert.Contains(t, got.Error, "panic: boom")
+
+	// Enqueue a second item that should succeed, proving the pool survived.
+	item2 := &model.WorkItem{ID: "w2", FlowID: "f1", FlowName: "Flow 1"}
+	require.NoError(t, store.Enqueue(item2))
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w2")
+		return got == nil // completed items are deleted
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// The action was called twice total (once panicking, once succeeding).
+	assert.Equal(t, 2, act.getExecCount())
+}
+
 func TestWorkerPool_DisabledFlow(t *testing.T) {
 	act := &testAction{}
 	wp, store, flowStore := setupWorkerPool(t, 4, act)
