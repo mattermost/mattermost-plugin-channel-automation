@@ -15,6 +15,17 @@ import (
 
 const maxRequestBodySize = 1 << 20 // 1 MB
 
+// writeErrorJSON writes an error response as JSON that the Mattermost client can parse.
+func writeErrorJSON(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"id":          "channel-automation.error",
+		"message":     message,
+		"status_code": statusCode,
+	})
+}
+
 // APIHandler provides HTTP handlers for flow CRUD operations.
 type APIHandler struct {
 	store           model.Store
@@ -105,7 +116,7 @@ func (h *APIHandler) checkChannelFlowLimit(channelID, excludeFlowID string) erro
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
 		return
 	}
 
@@ -118,7 +129,7 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		h.api.LogError("Failed to list flows", "error", err.Error())
-		http.Error(w, "failed to list flows", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to list flows", http.StatusInternalServerError)
 		return
 	}
 
@@ -144,7 +155,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		writeErrorJSON(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -153,33 +164,33 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
 	if f.CreatedBy == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
 		return
 	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeErrorJSON(w, err.Error(), http.StatusConflict)
 		return
 	}
 
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to create flow", "error", err.Error())
-		http.Error(w, "failed to create flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to create flow", http.StatusInternalServerError)
 		return
 	}
 
@@ -200,22 +211,22 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	f, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow", "error", err.Error())
-		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
 		return
 	}
 	if f == nil {
-		http.Error(w, "flow not found", http.StatusNotFound)
+		writeErrorJSON(w, "flow not found", http.StatusNotFound)
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
 		return
 	}
 
 	if err := h.checkFlowPermissions(userID, f); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -231,18 +242,18 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow for update", "error", err.Error())
-		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
 		return
 	}
 	if existing == nil {
-		http.Error(w, "flow not found", http.StatusNotFound)
+		writeErrorJSON(w, "flow not found", http.StatusNotFound)
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		writeErrorJSON(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -253,41 +264,41 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = time.Now().UnixMilli()
 
 	if err := model.ValidateActions(f.Actions); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
 		return
 	}
 
 	// Check permissions on existing flow (must have permission to modify it).
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeErrorJSON(w, err.Error(), http.StatusConflict)
 		return
 	}
 
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to update flow", "error", err.Error())
-		http.Error(w, "failed to update flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to update flow", http.StatusInternalServerError)
 		return
 	}
 
@@ -307,28 +318,28 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow for delete", "error", err.Error())
-		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
 		return
 	}
 	if existing == nil {
-		http.Error(w, "flow not found", http.StatusNotFound)
+		writeErrorJSON(w, "flow not found", http.StatusNotFound)
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
 		return
 	}
 
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
 	if err := h.store.Delete(id); err != nil {
 		h.api.LogError("Failed to delete flow", "error", err.Error())
-		http.Error(w, "failed to delete flow", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to delete flow", http.StatusInternalServerError)
 		return
 	}
 
