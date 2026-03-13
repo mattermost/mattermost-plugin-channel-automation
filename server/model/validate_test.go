@@ -125,10 +125,10 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 	})
 }
 
-func TestValidateTrigger_UnknownType(t *testing.T) {
+func TestValidateTrigger_NoTriggerType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown trigger type")
+	assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 }
 
 func TestValidateActions(t *testing.T) {
@@ -179,8 +179,52 @@ func TestValidateActions(t *testing.T) {
 		assert.Contains(t, err.Error(), "action config must be set")
 	})
 
-	t.Run("empty list is valid", func(t *testing.T) {
+	t.Run("empty list is rejected", func(t *testing.T) {
 		err := ValidateActions([]Action{})
-		require.NoError(t, err)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "at least one action")
+	})
+
+	t.Run("nil list is rejected", func(t *testing.T) {
+		err := ValidateActions(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "at least one action")
+	})
+
+	t.Run("multiple action configs rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:          "multi",
+			SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"},
+			AIPrompt:    &AIPromptActionConfig{Prompt: "test", ProviderType: "agent", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one action config must be set")
+	})
+}
+
+func TestValidateTrigger_MutualExclusion(t *testing.T) {
+	t.Run("two trigger types rejected", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{
+			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
+			Schedule:      &ScheduleConfig{ChannelID: "ch1", Interval: "10m"},
+		}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
+	})
+
+	t.Run("three trigger types rejected", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{
+			MessagePosted:     &MessagePostedConfig{ChannelID: "ch1"},
+			Schedule:          &ScheduleConfig{ChannelID: "ch1", Interval: "10m"},
+			MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"},
+		}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set, got 3")
+	})
+
+	t.Run("no trigger type rejected", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 	})
 }

@@ -190,6 +190,15 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if f.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if len(f.Name) > 100 {
+		http.Error(w, "name must be 100 characters or fewer", http.StatusBadRequest)
+		return
+	}
+
 	if err := model.ValidateActions(f.Actions); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
 		return
@@ -288,6 +297,15 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.CreatedAt = existing.CreatedAt
 	f.CreatedBy = existing.CreatedBy
 	f.UpdatedAt = time.Now().UnixMilli()
+
+	if f.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if len(f.Name) > 100 {
+		http.Error(w, "name must be 100 characters or fewer", http.StatusBadRequest)
+		return
+	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
 		writeErrorJSON(w, err.Error(), http.StatusBadRequest)

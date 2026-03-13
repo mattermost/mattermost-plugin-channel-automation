@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -357,7 +358,8 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2m"}}
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2m"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -430,7 +432,7 @@ func TestAPI_UpdateFlow_Unauthorized(t *testing.T) {
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(`{"name":"x","trigger":{"message_posted":{"channel_id":"ch1"}}}`))
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(`{"name":"x","trigger":{"message_posted":{"channel_id":"ch1"}},"actions":[{"id":"a","send_message":{"channel_id":"ch1","body":"hi"}}]}`))
 	// Deliberately omit Mattermost-User-ID header.
 
 	router.ServeHTTP(w, r)
@@ -577,7 +579,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 		"name": "Updated",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch-new"}},
-		"actions": []
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch-new", "body": "hi"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -978,4 +980,132 @@ func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_EmptyName(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "name is required")
+}
+
+func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	longName := strings.Repeat("a", 101)
+	body := fmt.Sprintf(`{
+		"name": %q,
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`, longName)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "100 characters")
+}
+
+func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "name is required")
+}
+
+func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	longName := strings.Repeat("a", 101)
+	body := fmt.Sprintf(`{
+		"name": %q,
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`, longName)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "100 characters")
+}
+
+func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": []
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "at least one action")
+}
+
+func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Test Flow",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "10m"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "exactly one trigger type")
 }

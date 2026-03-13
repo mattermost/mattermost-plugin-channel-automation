@@ -12,7 +12,10 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-const defaultLimit = 20
+const (
+	defaultLimit = 20
+	maxLimit     = 100
+)
 
 // APIHandler provides HTTP handlers for execution history.
 type APIHandler struct {
@@ -160,6 +163,9 @@ func (h *APIHandler) checkPermission(userID string, f *model.Flow) bool {
 func parseLimit(r *http.Request) int {
 	if s := r.URL.Query().Get("limit"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			if n > maxLimit {
+				return maxLimit
+			}
 			return n
 		}
 	}
