@@ -109,12 +109,15 @@ func (s *Store) listFromIndex(key string, limit int) ([]*model.ExecutionRecord, 
 		return nil, err
 	}
 
-	if limit <= 0 || limit > len(ids) {
+	if limit <= 0 {
 		limit = len(ids)
 	}
 
 	records := make([]*model.ExecutionRecord, 0, limit)
-	for _, id := range ids[:limit] {
+	for _, id := range ids {
+		if len(records) >= limit {
+			break
+		}
 		rec, err := s.Get(id)
 		if err != nil {
 			return nil, err
