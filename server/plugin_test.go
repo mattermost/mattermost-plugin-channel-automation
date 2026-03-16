@@ -136,6 +136,88 @@ func TestHandleGetAgentTools(t *testing.T) {
 	})
 }
 
+func TestHandleGetClientConfig(t *testing.T) {
+	t.Run("unauthenticated request returns 401 via real router", func(t *testing.T) {
+		api := &plugintest.API{}
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.setConfiguration(&configuration{EnableUI: true})
+		p.router = p.initRouter()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		// deliberately omit Mattermost-User-ID header
+
+		p.ServeHTTP(nil, w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("authenticated request succeeds via real router", func(t *testing.T) {
+		api := &plugintest.API{}
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.setConfiguration(&configuration{EnableUI: true})
+		p.router = p.initRouter()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		p.ServeHTTP(nil, w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, true, resp["enable_ui"])
+	})
+
+	t.Run("returns enable_ui false by default", func(t *testing.T) {
+		p := &Plugin{}
+		p.setConfiguration(&configuration{})
+
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/config", p.handleGetClientConfig).Methods(http.MethodGet)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		router.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, false, resp["enable_ui"])
+	})
+
+	t.Run("returns enable_ui true when configured", func(t *testing.T) {
+		p := &Plugin{}
+		p.setConfiguration(&configuration{EnableUI: true})
+
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/config", p.handleGetClientConfig).Methods(http.MethodGet)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		router.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, true, resp["enable_ui"])
+	})
+}
+
 func TestMessageHasBeenPosted_SkipsAIGeneratedPosts(t *testing.T) {
 	// Plugin has nil triggerService — if the early return doesn't fire,
 	// we'll get a nil-pointer panic, proving the filter works.
