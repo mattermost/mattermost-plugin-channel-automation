@@ -50,7 +50,7 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	f, err := h.flowStore.Get(flowID)
 	if err != nil {
 		h.api.LogError("Failed to get flow for execution list", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
 		return
 	}
 	if f == nil {
@@ -67,7 +67,7 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	records, err := h.store.ListByFlow(flowID, limit)
 	if err != nil {
 		h.api.LogError("Failed to list executions", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions")
 		return
 	}
 
