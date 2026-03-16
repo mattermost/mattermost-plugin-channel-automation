@@ -128,7 +128,7 @@ func (h *APIHandler) checkChannelFlowLimit(channelID, excludeFlowID string) erro
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
@@ -176,26 +176,26 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
 	if f.CreatedBy == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	if f.Name == "" {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
 	}
 	if len(f.Name) > 100 {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer", "")
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
 	}
 
@@ -239,13 +239,13 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -271,14 +271,14 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
@@ -289,27 +289,27 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = time.Now().UnixMilli()
 
 	if f.Name == "" {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
 	}
 	if len(f.Name) > 100 {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer")
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer", "")
 		return
 	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -328,7 +328,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error())
+		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
 	}
 
@@ -360,13 +360,13 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 

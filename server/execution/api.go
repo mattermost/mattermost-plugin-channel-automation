@@ -40,7 +40,7 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -54,12 +54,12 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 	if !h.checkPermission(userID, f) {
 		h.api.LogWarn("Permission denied for execution list", "user_id", userID, "flow_id", flowID)
-		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden")
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if record == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "execution not found")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "execution not found", "")
 		return
 	}
 
@@ -107,12 +107,12 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	if f == nil {
 		if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 			h.api.LogWarn("Permission denied for execution (deleted flow)", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
-			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden")
+			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 			return
 		}
 	} else if !h.checkPermission(userID, f) {
 		h.api.LogWarn("Permission denied for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
-		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden")
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 
@@ -125,14 +125,14 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header")
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	// Only system admins can list all executions.
 	if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		h.api.LogWarn("Permission denied for recent executions list", "user_id", userID)
-		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden")
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 

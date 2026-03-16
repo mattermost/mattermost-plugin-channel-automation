@@ -50,7 +50,7 @@ func (p *Plugin) handleGetAgentTools(w http.ResponseWriter, r *http.Request) {
 
 	if p.bridgeClient == nil {
 		p.API.LogWarn("AI plugin bridge not available", "user_id", userID, "agent_id", agentID)
-		httputil.WriteErrorJSON(w, http.StatusServiceUnavailable, "AI plugin bridge not available")
+		httputil.WriteErrorJSON(w, http.StatusServiceUnavailable, "AI plugin bridge not available", "")
 		return
 	}
 

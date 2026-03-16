@@ -10,16 +10,12 @@ import (
 )
 
 // WriteErrorJSON writes a JSON error response using the Mattermost AppError
-// format. An optional detailedError string is included when provided.
-func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string, detailedError ...string) {
-	detail := ""
-	if len(detailedError) > 0 {
-		detail = detailedError[0]
-	}
+// format.
+func WriteErrorJSON(w http.ResponseWriter, statusCode int, message string, detailedError string) {
 	resp := mmmodel.AppError{
 		Id:            errorIDFromStatus(statusCode),
 		Message:       message,
-		DetailedError: detail,
+		DetailedError: detailedError,
 		StatusCode:    statusCode,
 	}
 	w.Header().Set("Content-Type", "application/json")
