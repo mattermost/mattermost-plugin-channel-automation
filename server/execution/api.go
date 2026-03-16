@@ -50,7 +50,7 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	f, err := h.flowStore.Get(flowID)
 	if err != nil {
 		h.api.LogError("Failed to get flow for execution list", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if f == nil {
@@ -67,7 +67,7 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	records, err := h.store.ListByFlow(flowID, limit)
 	if err != nil {
 		h.api.LogError("Failed to list executions", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	record, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get execution record", "user_id", userID, "execution_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", err.Error())
 		return
 	}
 	if record == nil {
@@ -100,7 +100,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	f, err := h.flowStore.Get(record.FlowID)
 	if err != nil {
 		h.api.LogError("Failed to get flow for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	// If the flow was deleted, only system admins can view.
@@ -140,7 +140,7 @@ func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	records, err := h.store.ListRecent(limit)
 	if err != nil {
 		h.api.LogError("Failed to list recent executions", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
 		return
 	}
 

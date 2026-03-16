@@ -78,14 +78,14 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 // handlePermissionError determines the appropriate HTTP status and log level
 // based on whether the permission check failed due to an API/infrastructure
 // error (500) or the user genuinely lacking permissions (403).
-func (h *APIHandler) handlePermissionError(err error, userID, flowID string) (string, int) {
+func (h *APIHandler) handlePermissionError(err error, userID, flowID string) (string, int, string) {
 	var appErr *mmmodel.AppError
 	if errors.As(err, &appErr) {
 		h.api.LogError("Failed to verify permissions", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		return "failed to verify permissions", http.StatusInternalServerError
+		return "failed to verify permissions", http.StatusInternalServerError, err.Error()
 	}
 	h.api.LogWarn("Permission denied", "user_id", userID, "flow_id", flowID, "error", err.Error())
-	return err.Error(), http.StatusForbidden
+	return err.Error(), http.StatusForbidden, ""
 }
 
 // checkChannelFlowLimit verifies that the channel has not reached the
@@ -141,7 +141,7 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		h.api.LogError("Failed to list flows", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list flows")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list flows", err.Error())
 		return
 	}
 
@@ -200,8 +200,8 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
-		msg, code := h.handlePermissionError(err, f.CreatedBy, f.ID)
-		httputil.WriteErrorJSON(w, code, msg)
+		msg, code, detail := h.handlePermissionError(err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "flow_name", f.Name, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
 		return
 	}
 
@@ -235,7 +235,7 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	f, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow", "flow_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if f == nil {
@@ -250,8 +250,8 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(userID, f); err != nil {
-		msg, code := h.handlePermissionError(err, userID, id)
-		httputil.WriteErrorJSON(w, code, msg)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow for update", "flow_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if existing == nil {
@@ -315,15 +315,15 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	// Check permissions on existing flow (must have permission to modify it).
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		msg, code := h.handlePermissionError(err, userID, id)
-		httputil.WriteErrorJSON(w, code, msg)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
-		msg, code := h.handlePermissionError(err, userID, id)
-		httputil.WriteErrorJSON(w, code, msg)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -334,7 +334,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.Save(&f); err != nil {
 		h.api.LogError("Failed to update flow", "user_id", userID, "flow_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update flow", err.Error())
 		return
 	}
 
@@ -356,7 +356,7 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get flow for delete", "flow_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if existing == nil {
@@ -371,14 +371,14 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		msg, code := h.handlePermissionError(err, userID, id)
-		httputil.WriteErrorJSON(w, code, msg)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	if err := h.store.Delete(id); err != nil {
 		h.api.LogError("Failed to delete flow", "user_id", userID, "flow_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete flow")
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete flow", err.Error())
 		return
 	}
 
