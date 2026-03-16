@@ -44,24 +44,25 @@ func (p *Plugin) initRouter() *mux.Router {
 // handleGetAgentTools proxies a request to the AI plugin bridge to retrieve the
 // tools available for a specific agent.
 func (p *Plugin) handleGetAgentTools(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	agentID := mux.Vars(r)["agent_id"]
+
 	if p.bridgeClient == nil {
+		p.API.LogWarn("AI plugin bridge not available", "user_id", userID, "agent_id", agentID)
 		http.Error(w, "AI plugin bridge not available", http.StatusServiceUnavailable)
 		return
 	}
 
-	userID := r.Header.Get("Mattermost-User-ID")
-	agentID := mux.Vars(r)["agent_id"]
-
 	tools, err := p.bridgeClient.GetAgentTools(agentID, userID)
 	if err != nil {
-		p.API.LogError("Failed to get agent tools", "agent_id", agentID, "err", err.Error())
+		p.API.LogError("Failed to get agent tools", "user_id", userID, "agent_id", agentID, "err", err.Error())
 		http.Error(w, "failed to get agent tools", http.StatusBadGateway)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(tools); err != nil {
-		p.API.LogError("Failed to encode response", "error", err.Error())
+		p.API.LogError("Failed to encode response", "user_id", userID, "agent_id", agentID, "error", err.Error())
 	}
 }
 
