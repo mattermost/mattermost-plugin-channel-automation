@@ -316,7 +316,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "1m"}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "30m"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
@@ -326,7 +326,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "at least")
+	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
 func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
@@ -358,7 +358,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2m"}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "30m"}},
 		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
 	}`
 
@@ -368,7 +368,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "at least")
+	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
 func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
@@ -377,13 +377,13 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 	pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},
 	}))
 
 	body := fmt.Sprintf(`{
 		"name": "Updated name",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "10m", "start_at": %d}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2h", "start_at": %d}},
 		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
 	}`, pastStartAt)
 
@@ -1097,7 +1097,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	body := `{
 		"name": "Test Flow",
 		"enabled": true,
-		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "10m"}},
+		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "2h"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 

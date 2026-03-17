@@ -276,7 +276,7 @@ func TestIntegration(t *testing.T) {
 				Trigger: model.Trigger{
 					Schedule: &model.ScheduleConfig{
 						ChannelID: th.Channel.Id,
-						Interval:  "1m",
+						Interval:  "30m",
 					},
 				},
 				Actions: []model.Action{
@@ -366,7 +366,7 @@ func TestIntegration(t *testing.T) {
 			Trigger: model.Trigger{
 				Schedule: &model.ScheduleConfig{
 					ChannelID: th.Channel.Id,
-					Interval:  "10m",
+					Interval:  "1h",
 				},
 			},
 			Actions: []model.Action{
@@ -387,7 +387,7 @@ func TestIntegration(t *testing.T) {
 		assert.NotEmpty(t, created.ID)
 		assert.Equal(t, "scheduled-flow", created.Name)
 		require.NotNil(t, created.Trigger.Schedule)
-		assert.Equal(t, "10m", created.Trigger.Schedule.Interval)
+		assert.Equal(t, "1h", created.Trigger.Schedule.Interval)
 		assert.Equal(t, th.Channel.Id, created.Trigger.Schedule.ChannelID)
 
 		deleteFlow(t, th.ServerURL, token, created.ID)
