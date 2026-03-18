@@ -43,6 +43,11 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
+	case "user_joined_team":
+		if event.Team == nil {
+			return nil, nil
+		}
+		candidateIDs, err = t.store.GetUserJoinedTeamFlowIDs()
 	default:
 		return nil, fmt.Errorf("trigger type %q is registered but has no candidate resolution logic", event.Type)
 	}

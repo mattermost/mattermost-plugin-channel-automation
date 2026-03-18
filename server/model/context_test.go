@@ -83,3 +83,41 @@ func TestNewSafeChannel_PreservesFields(t *testing.T) {
 	assert.Equal(t, "test-channel", safe.Name)
 	assert.Equal(t, "Test Channel", safe.DisplayName)
 }
+
+func TestNewSafeTeam_NilInput(t *testing.T) {
+	assert.Nil(t, NewSafeTeam(nil))
+}
+
+func TestNewSafeTeam_PreservesFields(t *testing.T) {
+	team := &mmmodel.Team{
+		Id:          "team1",
+		Name:        "test-team",
+		DisplayName: "Test Team",
+	}
+	safe := NewSafeTeam(team)
+	require.NotNil(t, safe)
+	assert.Equal(t, "team1", safe.Id)
+	assert.Equal(t, "test-team", safe.Name)
+	assert.Equal(t, "Test Team", safe.DisplayName)
+	assert.Empty(t, safe.DefaultChannelId, "DefaultChannelId should be empty — populated by the caller")
+}
+
+func TestNewSafeTeam_ExcludesSensitiveFields(t *testing.T) {
+	team := &mmmodel.Team{
+		Id:              "team1",
+		Name:            "test-team",
+		DisplayName:     "Test Team",
+		Email:           "team@example.com",
+		AllowedDomains:  "example.com",
+		InviteId:        "secret-invite-id",
+		CompanyName:     "Acme Corp",
+		AllowOpenInvite: true,
+	}
+	safe := NewSafeTeam(team)
+	require.NotNil(t, safe)
+
+	// Only Id, Name, DisplayName should be copied.
+	assert.Equal(t, "team1", safe.Id)
+	assert.Equal(t, "test-team", safe.Name)
+	assert.Equal(t, "Test Team", safe.DisplayName)
+}

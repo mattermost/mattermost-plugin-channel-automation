@@ -18,6 +18,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 - **Schedule** — Fire a flow on a recurring interval (e.g. every 30 minutes, every 24 hours).
 - **Membership Changed** — Fire a flow when a user joins or leaves a specific channel.
 - **Channel Created** — Fire a flow when a new public channel is created anywhere on the server.
+- **User Joined Team** — Fire a flow when a user joins any team. Provides user info and the team's default channel.
 
 ### Actions
 
@@ -69,6 +70,7 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 | `schedule`           | Fires on a recurring interval. Minimum interval is 5 minutes.                                                           |
 | `membership_changed` | Fires when a user joins or leaves the configured channel. Bot users are excluded.                                       |
 | `channel_created`    | Fires when a new public channel is created. No channel configuration needed.                                            |
+| `user_joined_team`   | Fires when a user joins any team. Bot users are excluded. Provides the team's default channel (typically town-square).  |
 
 ## Action Types
 
@@ -94,6 +96,10 @@ All action fields that support templates receive a `FlowContext` with:
 | `{{.Trigger.User.Username}}`               | Username                                            |
 | `{{.Trigger.User.FirstName}}`              | First name                                          |
 | `{{.Trigger.User.LastName}}`               | Last name                                           |
+| `{{.Trigger.Team.Id}}`                     | Team ID                                             |
+| `{{.Trigger.Team.Name}}`                  | Team name                                           |
+| `{{.Trigger.Team.DisplayName}}`           | Team display name                                   |
+| `{{.Trigger.Team.DefaultChannelId}}`      | Default channel ID for the team (typically town-square) |
 | `{{.CreatedBy}}`                           | User ID of the flow creator                         |
 | `{{(index .Steps "<action_id>").Message}}` | Output message from a previous action               |
 | `{{(index .Steps "<action_id>").PostID}}`  | Post ID created by a previous `send_message` action |

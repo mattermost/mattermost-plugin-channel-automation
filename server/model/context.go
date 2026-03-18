@@ -17,6 +17,7 @@ type TriggerData struct {
 	Post       *SafePost       `json:"post,omitempty"`
 	Channel    *SafeChannel    `json:"channel,omitempty"`
 	User       *SafeUser       `json:"user,omitempty"`
+	Team       *SafeTeam       `json:"team,omitempty"`
 	Schedule   *ScheduleInfo   `json:"schedule,omitempty"`
 	Membership *MembershipInfo `json:"membership,omitempty"`
 }
@@ -30,6 +31,15 @@ type MembershipInfo struct {
 type ScheduleInfo struct {
 	FiredAt  int64  `json:"fired_at"` // Unix ms when schedule fired
 	Interval string `json:"interval"` // configured interval
+}
+
+// SafeTeam contains only the team fields needed for template rendering.
+// Sensitive fields (Email, InviteId, AllowedDomains) are excluded.
+type SafeTeam struct {
+	Id               string `json:"id"`
+	Name             string `json:"name"`
+	DisplayName      string `json:"display_name"`
+	DefaultChannelId string `json:"default_channel_id,omitempty"`
 }
 
 // SafePost contains only the post fields needed for template rendering.
@@ -96,6 +106,19 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 		Username:  u.Username,
 		FirstName: u.FirstName,
 		LastName:  u.LastName,
+	}
+}
+
+// NewSafeTeam creates a SafeTeam from a Mattermost Team,
+// stripping all sensitive fields.
+func NewSafeTeam(t *mmmodel.Team) *SafeTeam {
+	if t == nil {
+		return nil
+	}
+	return &SafeTeam{
+		Id:          t.Id,
+		Name:        t.Name,
+		DisplayName: t.DisplayName,
 	}
 }
 

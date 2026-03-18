@@ -39,6 +39,7 @@ func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, erro
 	return nil, nil
 }
 func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error) { return nil, nil }
+func (m *mockFlowStore) GetUserJoinedTeamFlowIDs() ([]string, error) { return nil, nil }
 
 func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugintest.API) {
 	t.Helper()

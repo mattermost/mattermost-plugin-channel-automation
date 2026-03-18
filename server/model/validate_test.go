@@ -125,6 +125,13 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 	})
 }
 
+func TestValidateTrigger_UserJoinedTeam(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{}}, nil)
+		require.NoError(t, err)
+	})
+}
+
 func TestValidateTrigger_NoTriggerType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)

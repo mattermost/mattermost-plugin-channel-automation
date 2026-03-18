@@ -160,6 +160,22 @@ func buildTriggerContext(trigger model.TriggerData) string {
 		b.WriteString("Triggering User: " + name + "\n")
 	}
 
+	if trigger.Team != nil {
+		t := trigger.Team
+		if t.Id != "" {
+			b.WriteString("Team ID: " + t.Id + "\n")
+		}
+		if t.Name != "" {
+			b.WriteString("Team Name: " + t.Name + "\n")
+		}
+		if t.DisplayName != "" {
+			b.WriteString("Team Display Name: " + t.DisplayName + "\n")
+		}
+		if t.DefaultChannelId != "" {
+			b.WriteString("Default Channel ID: " + t.DefaultChannelId + "\n")
+		}
+	}
+
 	if trigger.Schedule != nil {
 		s := trigger.Schedule
 		if s.Interval != "" {
