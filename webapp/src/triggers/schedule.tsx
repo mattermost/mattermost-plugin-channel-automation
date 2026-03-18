@@ -77,7 +77,7 @@ const scheduleTrigger: TriggerConfig = {
                     <label
                         htmlFor='trigger-schedule-interval'
                         style={styles.label}
-                    >{'Interval (Go duration, e.g. 5m, 1h, 24h)'}</label>
+                    >{'Interval (Go duration, min 1h, e.g. 1h, 24h)'}</label>
                     <input
                         id='trigger-schedule-interval'
                         style={styles.input}

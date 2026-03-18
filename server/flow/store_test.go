@@ -297,7 +297,7 @@ func TestStore_ScheduleIndex(t *testing.T) {
 
 	// Save two schedule flows.
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch2", Interval: "30m"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch2", Interval: "1h"}}}))
 
 	flows, err := store.ListScheduled()
 	require.NoError(t, err)
@@ -367,7 +367,7 @@ func TestStore_ScheduleIndex_TriggerTypeChange(t *testing.T) {
 	assert.Empty(t, flows)
 
 	// Change back to schedule — should add to schedule index.
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
 
 	flows, err = store.ListScheduled()
 	require.NoError(t, err)
@@ -378,9 +378,9 @@ func TestStore_ScheduleIndex_TriggerTypeChange(t *testing.T) {
 func TestStore_ScheduleIndex_NoDuplicates(t *testing.T) {
 	store, kv := setupStore(t)
 
-	// Save the same schedule flow twice.
+	// Save the same schedule flow twice with different intervals.
 	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h"}}}))
 
 	flows, err := store.ListScheduled()
 	require.NoError(t, err)
