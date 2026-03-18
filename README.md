@@ -70,7 +70,7 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 | `schedule`           | Fires on a recurring interval. Minimum interval is 5 minutes.                                                           |
 | `membership_changed` | Fires when a user joins or leaves the configured channel. Bot users are excluded.                                       |
 | `channel_created`    | Fires when a new public channel is created. No channel configuration needed.                                            |
-| `user_joined_team`   | Fires when a user joins any team. Bot users are excluded. Provides the team's default channel (typically town-square).  |
+| `user_joined_team`   | Fires when a user joins the configured team. Bot users are excluded. Provides the team's default channel (typically town-square). |
 
 ## Action Types
 

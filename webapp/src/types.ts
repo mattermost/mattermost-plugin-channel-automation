@@ -18,7 +18,7 @@ export interface ChannelCreatedTriggerParams {
 }
 
 export interface UserJoinedTeamTriggerParams {
-    [key: string]: never;
+    team_id: string;
 }
 
 export interface Trigger {

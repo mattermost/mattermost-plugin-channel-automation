@@ -127,8 +127,14 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 
 func TestValidateTrigger_UserJoinedTeam(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{}}, nil)
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}}, nil)
 		require.NoError(t, err)
+	})
+
+	t.Run("missing team_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id")
 	})
 }
 

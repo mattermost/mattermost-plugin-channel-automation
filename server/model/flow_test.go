@@ -128,3 +128,35 @@ func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 	ids := CollectChannelIDs(f)
 	assert.Equal(t, []string{"ch-notify"}, ids)
 }
+
+func TestCollectTeamIDs_LiteralTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Equal(t, []string{"team1"}, ids)
+}
+
+func TestCollectTeamIDs_EmptyTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: ""}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}
+
+func TestCollectTeamIDs_TemplatedTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "{{.SomeVar}}"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}
+
+func TestCollectTeamIDs_NonTeamTrigger(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}

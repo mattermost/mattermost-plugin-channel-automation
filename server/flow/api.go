@@ -52,21 +52,22 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 
 // checkFlowPermissions verifies that userID has permission to manage the flow.
 // System admins are always allowed. Otherwise the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the flow.
+// (SchemeAdmin) on every literal channel referenced in the flow, and a team
+// admin (or default-channel admin) on every literal team referenced.
 //
-// When no concrete channels can be verified (e.g. a channel_created trigger
-// with only templated or AI-only actions), we require system admin permission.
-// The authorization model relies on proving the user is admin on every channel
-// the flow touches. If there are zero channels to verify, we have no evidence
-// the user should be allowed to manage this flow, so we deny rather than
-// silently granting access to what is effectively a global-scope operation.
+// When no concrete channels or teams can be verified (e.g. a channel_created
+// trigger with only templated or AI-only actions), we require system admin
+// permission. The authorization model relies on proving the user is admin on
+// every resource the flow touches. If there are zero resources to verify, we
+// deny rather than silently granting access to a global-scope operation.
 func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		return nil
 	}
 	channelIDs := model.CollectChannelIDs(f)
-	if len(channelIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
+	teamIDs := model.CollectTeamIDs(f)
+	if len(channelIDs) == 0 && len(teamIDs) == 0 {
+		return fmt.Errorf("system admin permission is required for flows without explicit channel or team references")
 	}
 	for _, chID := range channelIDs {
 		member, appErr := h.api.GetChannelMember(chID, userID)
@@ -81,6 +82,46 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 		if !member.SchemeAdmin {
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
+	}
+	for _, teamID := range teamIDs {
+		if err := h.checkTeamPermission(userID, teamID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkTeamPermission verifies the user is either a team admin or a channel
+// admin on the team's default channel (town-square).
+func (h *APIHandler) checkTeamPermission(userID, teamID string) error {
+	// Check team admin first.
+	teamMember, appErr := h.api.GetTeamMember(teamID, userID)
+	if appErr != nil {
+		if appErr.StatusCode >= http.StatusInternalServerError {
+			return fmt.Errorf("failed to verify team permissions: %w", appErr)
+		}
+		// 4xx means user is not a team member; fall through to default channel check.
+	} else if teamMember.SchemeAdmin {
+		return nil
+	}
+
+	// Fall back to checking default channel admin.
+	defaultChannel, appErr := h.api.GetChannelByName(teamID, mmmodel.DefaultChannelName, false)
+	if appErr != nil {
+		if appErr.StatusCode >= http.StatusInternalServerError {
+			return fmt.Errorf("failed to verify team permissions: %w", appErr)
+		}
+		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
+	}
+	chMember, appErr := h.api.GetChannelMember(defaultChannel.Id, userID)
+	if appErr != nil {
+		if appErr.StatusCode >= http.StatusInternalServerError {
+			return fmt.Errorf("failed to verify team permissions: %w", appErr)
+		}
+		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
+	}
+	if !chMember.SchemeAdmin {
+		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
 	}
 	return nil
 }

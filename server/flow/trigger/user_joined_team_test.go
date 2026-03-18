@@ -15,9 +15,9 @@ func TestUserJoinedTeamTrigger_Type(t *testing.T) {
 	assert.Equal(t, "user_joined_team", tr.Type())
 }
 
-func TestUserJoinedTeamTrigger_Matches_Valid(t *testing.T) {
+func TestUserJoinedTeamTrigger_Matches_CorrectTeam(t *testing.T) {
 	tr := &trigger.UserJoinedTeamTrigger{}
-	trig := &model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}
+	trig := &model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}}
 	event := &model.Event{
 		Type: "user_joined_team",
 		Team: &mmmodel.Team{Id: "team1"},
@@ -26,9 +26,20 @@ func TestUserJoinedTeamTrigger_Matches_Valid(t *testing.T) {
 	assert.True(t, tr.Matches(trig, event))
 }
 
+func TestUserJoinedTeamTrigger_Matches_WrongTeam(t *testing.T) {
+	tr := &trigger.UserJoinedTeamTrigger{}
+	trig := &model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}}
+	event := &model.Event{
+		Type: "user_joined_team",
+		Team: &mmmodel.Team{Id: "team2"},
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
 func TestUserJoinedTeamTrigger_Matches_NilTeam(t *testing.T) {
 	tr := &trigger.UserJoinedTeamTrigger{}
-	trig := &model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}
+	trig := &model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}}
 	event := &model.Event{
 		Type: "user_joined_team",
 		Team: nil,

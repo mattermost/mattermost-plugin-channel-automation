@@ -124,7 +124,7 @@ func (s *testFlowStore) GetChannelCreatedFlowIDs() ([]string, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) GetUserJoinedTeamFlowIDs() ([]string, error) {
+func (s *testFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) {
 	return nil, nil
 }
 
