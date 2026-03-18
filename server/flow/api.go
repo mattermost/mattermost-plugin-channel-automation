@@ -11,21 +11,11 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
 const maxRequestBodySize = 1 << 20 // 1 MB
-
-// writeErrorJSON writes an error response as JSON that the Mattermost client can parse.
-func writeErrorJSON(w http.ResponseWriter, message string, statusCode int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"id":          "channel-automation.error",
-		"message":     message,
-		"status_code": statusCode,
-	})
-}
 
 // APIHandler provides HTTP handlers for flow CRUD operations.
 type APIHandler struct {
@@ -85,17 +75,17 @@ func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
 	return nil
 }
 
-// writePermissionError writes the appropriate HTTP error based on whether
-// the permission check failed due to an API/infrastructure error (500) or
-// the user genuinely lacking permissions (403).
-func (h *APIHandler) writePermissionError(w http.ResponseWriter, err error) {
+// handlePermissionError determines the appropriate HTTP status and log level
+// based on whether the permission check failed due to an API/infrastructure
+// error (500) or the user genuinely lacking permissions (403).
+func (h *APIHandler) handlePermissionError(err error, userID, flowID string) (string, int, string) {
 	var appErr *mmmodel.AppError
 	if errors.As(err, &appErr) {
-		h.api.LogError("Failed to verify permissions", "error", err.Error())
-		http.Error(w, "failed to verify permissions", http.StatusInternalServerError)
-		return
+		h.api.LogError("Failed to verify permissions", "user_id", userID, "flow_id", flowID, "error", err.Error())
+		return "failed to verify permissions", http.StatusInternalServerError, err.Error()
 	}
-	http.Error(w, err.Error(), http.StatusForbidden)
+	h.api.LogWarn("Permission denied", "user_id", userID, "flow_id", flowID, "error", err.Error())
+	return err.Error(), http.StatusForbidden, ""
 }
 
 // checkChannelFlowLimit verifies that the channel has not reached the
@@ -138,7 +128,7 @@ func (h *APIHandler) checkChannelFlowLimit(channelID, excludeFlowID string) erro
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -150,8 +140,8 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 		flows, err = h.store.List()
 	}
 	if err != nil {
-		h.api.LogError("Failed to list flows", "error", err.Error())
-		writeErrorJSON(w, "failed to list flows", http.StatusInternalServerError)
+		h.api.LogError("Failed to list flows", "user_id", userID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list flows", err.Error())
 		return
 	}
 
@@ -177,7 +167,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		writeErrorJSON(w, "invalid request body", http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
@@ -186,43 +176,43 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
 	if f.CreatedBy == "" {
-		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	if f.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
 	}
 	if len(f.Name) > 100 {
-		http.Error(w, "name must be 100 characters or fewer", http.StatusBadRequest)
-		return
-	}
-
-	if err := model.ValidateActions(f.Actions); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer", "")
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	if err := model.ValidateActions(f.Actions); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
-		h.writePermissionError(w, err)
+		msg, code, detail := h.handlePermissionError(err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusConflict)
+		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to create flow", "error", err.Error())
-		writeErrorJSON(w, "failed to create flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "flow_name", f.Name, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
 		return
 	}
 
@@ -244,24 +234,24 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 
 	f, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow", "error", err.Error())
-		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to get flow", "flow_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if f == nil {
-		writeErrorJSON(w, "flow not found", http.StatusNotFound)
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	if err := h.checkFlowPermissions(userID, f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
-		h.writePermissionError(w, err)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -276,19 +266,19 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow for update", "error", err.Error())
-		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to get flow for update", "flow_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if existing == nil {
-		writeErrorJSON(w, "flow not found", http.StatusNotFound)
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Flow
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
-		writeErrorJSON(w, "invalid request body", http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
@@ -299,52 +289,52 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.UpdatedAt = time.Now().UnixMilli()
 
 	if f.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
 	}
 	if len(f.Name) > 100 {
-		http.Error(w, "name must be 100 characters or fewer", http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name must be 100 characters or fewer", "")
 		return
 	}
 
 	if err := model.ValidateActions(f.Actions); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusBadRequest)
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	// Check permissions on existing flow (must have permission to modify it).
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
-		h.writePermissionError(w, err)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
-		h.writePermissionError(w, err)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusConflict)
+		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to update flow", "error", err.Error())
-		writeErrorJSON(w, "failed to update flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to update flow", "user_id", userID, "flow_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update flow", err.Error())
 		return
 	}
 
@@ -365,30 +355,30 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow for delete", "error", err.Error())
-		writeErrorJSON(w, "failed to get flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to get flow for delete", "flow_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if existing == nil {
-		writeErrorJSON(w, "flow not found", http.StatusNotFound)
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		writeErrorJSON(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
-		h.writePermissionError(w, err)
+		msg, code, detail := h.handlePermissionError(err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	if err := h.store.Delete(id); err != nil {
-		h.api.LogError("Failed to delete flow", "error", err.Error())
-		writeErrorJSON(w, "failed to delete flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to delete flow", "user_id", userID, "flow_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete flow", err.Error())
 		return
 	}
 
@@ -398,7 +388,7 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 
 	if h.historyStore != nil {
 		if err := h.historyStore.PurgeFlow(id); err != nil {
-			h.api.LogError("Failed to purge execution history", "flow_id", id, "error", err.Error())
+			h.api.LogError("Failed to purge execution history", "user_id", userID, "flow_id", id, "error", err.Error())
 		}
 	}
 
