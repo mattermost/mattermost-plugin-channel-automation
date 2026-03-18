@@ -583,6 +583,90 @@ func TestStore_ChannelCreatedIndex_NoChannelTriggerIndex(t *testing.T) {
 	assert.Empty(t, flows)
 }
 
+func TestStore_UserJoinedTeamIndex(t *testing.T) {
+	store, kv := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+
+	ids, err := kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"f1", "f2"}, ids)
+
+	require.NoError(t, store.Delete("f1"))
+	ids, err = kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f2"}, ids)
+
+	require.NoError(t, store.Delete("f2"))
+	ids, err = kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	// Key should be cleaned up from KV store.
+	kv.mu.Lock()
+	_, exists := kv.data[userJoinedTeamIndexKey]
+	kv.mu.Unlock()
+	assert.False(t, exists)
+}
+
+func TestStore_UserJoinedTeamIndex_NoDuplicates(t *testing.T) {
+	store, kv := setupStore(t)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+
+	kvStore := store.(*KVStore)
+	ids, err := kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	kv.mu.Lock()
+	indexData := kv.data[userJoinedTeamIndexKey]
+	kv.mu.Unlock()
+
+	var rawIDs []string
+	require.NoError(t, json.Unmarshal(indexData, &rawIDs))
+	assert.Equal(t, []string{"f1"}, rawIDs)
+}
+
+func TestStore_UserJoinedTeamIndex_TriggerTypeChange(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+
+	ids, err := kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	// Change to message_posted — should remove from user_joined_team index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+
+	ids, err = kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	// Change back to user_joined_team — should add to index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+
+	ids, err = kvStore.GetUserJoinedTeamFlowIDs()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+}
+
+func TestStore_UserJoinedTeamIndex_NoChannelTriggerIndex(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// user_joined_team flows should NOT appear in the channel-trigger index.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}}}))
+
+	flows, err := store.ListByTriggerChannel("any")
+	require.NoError(t, err)
+	assert.Empty(t, flows)
+}
+
 func TestStore_FlowIndex_Consistency(t *testing.T) {
 	store, kv := setupStore(t)
 

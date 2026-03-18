@@ -7,6 +7,7 @@ import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
+import 'triggers/user_joined_team';
 import type {Flow} from 'types';
 import {getTriggerType} from 'types';
 

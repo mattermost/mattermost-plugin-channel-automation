@@ -8,5 +8,6 @@ type Event struct {
 	Post             *mmmodel.Post
 	Channel          *mmmodel.Channel
 	User             *mmmodel.User
+	Team             *mmmodel.Team
 	MembershipAction string // "joined" or "left" for membership_changed events
 }
