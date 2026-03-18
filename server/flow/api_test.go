@@ -1173,3 +1173,95 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "exactly one trigger type")
 }
+
+func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeamMember", "team1", "user1").Return(
+		&mmmodel.TeamMember{SchemeAdmin: true}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_UserJoinedTeam_ChannelAdminFallbackAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	// Not a team admin.
+	api.On("GetTeamMember", "team1", "user1").Return(
+		&mmmodel.TeamMember{SchemeAdmin: false}, nil,
+	)
+	// But is a channel admin on town-square.
+	api.On("GetChannelByName", "team1", mmmodel.DefaultChannelName, false).Return(
+		&mmmodel.Channel{Id: "town-square-id"}, nil,
+	)
+	api.On("GetChannelMember", "town-square-id", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_UserJoinedTeam_NeitherAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	// Not a team admin.
+	api.On("GetTeamMember", "team1", "user1").Return(
+		&mmmodel.TeamMember{SchemeAdmin: false}, nil,
+	)
+	// Not a channel admin on town-square either.
+	api.On("GetChannelByName", "team1", mmmodel.DefaultChannelName, false).Return(
+		&mmmodel.Channel{Id: "town-square-id"}, nil,
+	)
+	api.On("GetChannelMember", "town-square-id", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "admin permissions")
+}

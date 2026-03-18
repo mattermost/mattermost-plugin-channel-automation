@@ -27,38 +27,41 @@ const userJoinedTeamTrigger: TriggerConfig = {
     label: 'User Joined Team',
 
     defaultFormState(): TriggerFormState {
-        return {};
+        return {team_id: ''};
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     fromTrigger(trigger: Trigger): TriggerFormState {
-        return {};
+        return {team_id: trigger.user_joined_team?.team_id ?? ''};
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     toTrigger(state: TriggerFormState): Trigger {
-        return {user_joined_team: {}};
+        return {user_joined_team: {team_id: state.team_id}};
     },
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     formatSummary(trigger: Trigger): string {
-        return 'on any team';
+        return `on team ${trigger.user_joined_team?.team_id ?? ''}`;
     },
 
     templateVariables,
 
     renderFields(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         state: TriggerFormState,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         onChange: (field: string, value: string) => void,
         styles: Record<string, React.CSSProperties>,
     ): React.ReactNode {
         return (
             <div style={styles.formGroup}>
-                <p style={{fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0}}>
-                    {'This trigger fires when a user joins any team. Bot users are excluded. The team\'s default channel ID is available in the template context.'}
-                </p>
+                <label
+                    htmlFor='trigger-user-joined-team-team-id'
+                    style={styles.label}
+                >{'Team ID'}</label>
+                <input
+                    id='trigger-user-joined-team-team-id'
+                    style={styles.input}
+                    type='text'
+                    value={state.team_id}
+                    onChange={(e) => onChange('team_id', e.target.value)}
+                />
             </div>
         );
     },

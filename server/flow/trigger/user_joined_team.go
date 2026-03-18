@@ -13,5 +13,8 @@ func (t *UserJoinedTeamTrigger) Matches(trigger *model.Trigger, event *model.Eve
 	if trigger.UserJoinedTeam == nil {
 		return false
 	}
-	return event.Team != nil
+	if event.Team == nil {
+		return false
+	}
+	return trigger.UserJoinedTeam.TeamID == event.Team.Id
 }

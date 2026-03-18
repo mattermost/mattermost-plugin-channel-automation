@@ -442,10 +442,12 @@ Empty object — no fields required. The trigger fires on any new public channel
 
 #### UserJoinedTeamConfig
 
-Empty object — no fields required. The trigger fires when any user joins any team.
+| Field     | Type   | Description              |
+| --------- | ------ | ------------------------ |
+| `team_id` | string | Team to watch (required) |
 
 ```json
-{ "user_joined_team": {} }
+{ "user_joined_team": { "team_id": "team-id-1" } }
 ```
 
 ### Action
@@ -503,7 +505,7 @@ Fires when a new public channel (type `"O"`) is created. DMs, group messages, an
 
 ### `user_joined_team`
 
-Fires when a user joins any team. Bot users are automatically excluded. This is a global trigger — no configuration is needed. The trigger data includes the user and the team. Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID (town-square) is available via `{{.Trigger.Team.DefaultChannelId}}`.
+Fires when a user joins the configured team. Bot users are automatically excluded. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`.
 
 ---
 

@@ -19,8 +19,9 @@ type Flow struct {
 type ChannelCreatedConfig struct{}
 
 // UserJoinedTeamConfig holds trigger config for the user_joined_team trigger type.
-// No fields are needed — the trigger fires on any user joining any team.
-type UserJoinedTeamConfig struct{}
+type UserJoinedTeamConfig struct {
+	TeamID string `json:"team_id"`
+}
 
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {

@@ -310,13 +310,29 @@ func TestTriggerService_FindMatchingFlows_UserJoinedTeam(t *testing.T) {
 		ID:      "f1",
 		Name:    "On Team Join",
 		Enabled: true,
-		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}},
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("any-team"))
+	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
 	require.Len(t, flows, 1)
 	assert.Equal(t, "f1", flows[0].ID)
+}
+
+func TestTriggerService_FindMatchingFlows_UserJoinedTeam_WrongTeam(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Name:    "On Team Join",
+		Enabled: true,
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+	}))
+
+	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team2"))
+	require.NoError(t, err)
+	assert.Nil(t, flows)
 }
 
 func TestTriggerService_FindMatchingFlows_UserJoinedTeam_Disabled(t *testing.T) {
@@ -327,10 +343,10 @@ func TestTriggerService_FindMatchingFlows_UserJoinedTeam_Disabled(t *testing.T) 
 		ID:      "f1",
 		Name:    "Disabled",
 		Enabled: false,
-		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}},
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("any-team"))
+	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
 	assert.Nil(t, flows)
 }
@@ -352,16 +368,16 @@ func TestTriggerService_FindMatchingFlows_UserJoinedTeam_MultipleFlows(t *testin
 		ID:      "f1",
 		Name:    "Flow 1",
 		Enabled: true,
-		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}},
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Flow 2",
 		Enabled: true,
-		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{}},
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("any-team"))
+	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
 	require.Len(t, flows, 2)
 }

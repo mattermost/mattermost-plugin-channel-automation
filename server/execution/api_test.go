@@ -38,8 +38,8 @@ func (m *mockFlowStore) GetFlowIDsForChannel(_ string) ([]string, error) {
 func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error) { return nil, nil }
-func (m *mockFlowStore) GetUserJoinedTeamFlowIDs() ([]string, error) { return nil, nil }
+func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error)            { return nil, nil }
+func (m *mockFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) { return nil, nil }
 
 // expectLogCalls registers permissive LogError and LogWarn expectations that
 // accept any number of arguments. This covers enriched log calls that include

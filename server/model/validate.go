@@ -75,7 +75,9 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 			return fmt.Errorf("channel_created trigger requires team_id")
 		}
 	case t.UserJoinedTeam != nil:
-		// No fields to validate — fires on any user joining any team.
+		if t.UserJoinedTeam.TeamID == "" {
+			return fmt.Errorf("user_joined_team trigger requires team_id")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}
