@@ -53,6 +53,7 @@ type Action struct {
 	ID          string                   `json:"id"`
 	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
 	AIPrompt    *AIPromptActionConfig    `json:"ai_prompt,omitempty"`
+	SendDM      *SendDMActionConfig      `json:"send_dm,omitempty"`
 }
 
 // SendMessageActionConfig holds config for the send_message action type.
@@ -70,4 +71,11 @@ type AIPromptActionConfig struct {
 	ProviderType string   `json:"provider_type"`
 	ProviderID   string   `json:"provider_id"`
 	AllowedTools []string `json:"allowed_tools,omitempty"`
+}
+
+// SendDMActionConfig holds config for the send_dm action type.
+type SendDMActionConfig struct {
+	UserID  string `json:"user_id"`
+	Body    string `json:"body"`
+	AsBotID string `json:"as_bot_id"`
 }

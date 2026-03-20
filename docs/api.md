@@ -437,6 +437,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow.   |
 | `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                       |
 | `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                       |
+| `send_dm`      | [SendDMActionConfig](#senddmactionconfig)           | _(optional)_ Sends a direct message to a user from a bot                                                                           |
 
 #### SendMessageActionConfig
 
@@ -458,6 +459,14 @@ Exactly one type-specific config key should be set alongside `id`:
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+
+#### SendDMActionConfig
+
+| Field        | Type   | Description                                                              |
+| ------------ | ------ | ------------------------------------------------------------------------ |
+| `user_id`    | string | Target user ID to send the DM to. Supports Go templates.                |
+| `body`       | string | Message body as a Go `text/template` string                              |
+| `as_bot_id`  | string | Bot user ID to send the DM as. Supports Go templates. Must be a bot.    |
 
 ---
 
@@ -500,6 +509,10 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+
+### `send_dm`
+
+Sends a direct message to a user from a specified bot. The `user_id`, `body`, and `as_bot_id` fields are rendered as Go templates with the flow context. The bot identity is validated (must be an actual bot user).
 
 ---
 

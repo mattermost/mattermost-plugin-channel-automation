@@ -23,6 +23,7 @@ interface ActionForm {
     prompt: string;
     provider_id: string;
     allowed_tools: string;
+    user_id: string;
 }
 
 const styles = {
@@ -171,7 +172,7 @@ const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', user_id: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -187,6 +188,22 @@ function actionToForm(a: Action): ActionForm {
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tools: (a.ai_prompt.allowed_tools ?? []).join(', '),
+            user_id: '',
+        };
+    }
+    if (a.send_dm) {
+        return {
+            id: a.id,
+            type: 'send_dm',
+            channel_id: '',
+            reply_to_post_id: '',
+            as_bot_id: a.send_dm.as_bot_id ?? '',
+            body: a.send_dm.body ?? '',
+            system_prompt: '',
+            prompt: '',
+            provider_id: '',
+            allowed_tools: '',
+            user_id: a.send_dm.user_id ?? '',
         };
     }
     if (a.send_message) {
@@ -201,9 +218,10 @@ function actionToForm(a: Action): ActionForm {
             prompt: '',
             provider_id: '',
             allowed_tools: '',
+            user_id: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: '', user_id: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -440,6 +458,16 @@ const FlowEditorView: React.FC = () => {
                     }
                     return action;
                 }
+                if (a.type === 'send_dm') {
+                    return {
+                        id: a.id,
+                        send_dm: {
+                            user_id: a.user_id,
+                            body: a.body,
+                            as_bot_id: a.as_bot_id,
+                        },
+                    };
+                }
                 const action: Action = {
                     id: a.id,
                     send_message: {
@@ -579,6 +607,7 @@ const FlowEditorView: React.FC = () => {
                         >
                             <option value='send_message'>{'send_message'}</option>
                             <option value='ai_prompt'>{'ai_prompt'}</option>
+                            <option value='send_dm'>{'send_dm'}</option>
                         </select>
                     </div>
                     {action.type === 'send_message' && (
@@ -710,6 +739,60 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                             <details style={styles.details}>
                                 <summary style={styles.summary}>{'Output of this action'}</summary>
                                 <pre style={styles.pre}>{`{
+  "Message": "string"
+}
+
+Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
+                            </details>
+                        </>
+                    )}
+                    {action.type === 'send_dm' && (
+                        <>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-user-id`}
+                                    style={styles.label}
+                                >{'User ID (Go template)'}</label>
+                                <input
+                                    id={`action-${index}-user-id`}
+                                    style={styles.input}
+                                    type='text'
+                                    placeholder={'e.g. {{.Trigger.User.Id}}'}
+                                    value={action.user_id}
+                                    onChange={(e) => handleActionChange(index, 'user_id', e.target.value)}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-dm-body`}
+                                    style={styles.label}
+                                >{'Body (Go template)'}</label>
+                                <textarea
+                                    id={`action-${index}-dm-body`}
+                                    style={styles.textarea}
+                                    value={action.body}
+                                    onChange={(e) => handleActionChange(index, 'body', e.target.value)}
+                                />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-dm-as-bot-id`}
+                                    style={styles.label}
+                                >{'Bot User ID (required)'}</label>
+                                <input
+                                    id={`action-${index}-dm-as-bot-id`}
+                                    style={styles.input}
+                                    type='text'
+                                    placeholder={'Bot user ID'}
+                                    value={action.as_bot_id}
+                                    onChange={(e) => handleActionChange(index, 'as_bot_id', e.target.value)}
+                                />
+                            </div>
+                            <details style={styles.details}>
+                                <summary style={styles.summary}>{'Output of this action'}</summary>
+                                <pre style={styles.pre}>{`{
+  "PostID": "string",
+  "ChannelID": "string",
   "Message": "string"
 }
 

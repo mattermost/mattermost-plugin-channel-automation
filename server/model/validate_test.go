@@ -213,6 +213,52 @@ func TestValidateActions(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one action config must be set")
 	})
+
+	t.Run("three action configs rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:          "multi",
+			SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"},
+			AIPrompt:    &AIPromptActionConfig{Prompt: "test", ProviderType: "agent", ProviderID: "bot1"},
+			SendDM:      &SendDMActionConfig{UserID: "u1", Body: "hi", AsBotID: "b1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exactly one action config must be set, got 3")
+	})
+
+	t.Run("valid send_dm action", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:     "dm-welcome",
+			SendDM: &SendDMActionConfig{UserID: "u1", Body: "Welcome!", AsBotID: "bot1"},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("send_dm missing user_id", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:     "dm1",
+			SendDM: &SendDMActionConfig{UserID: "", Body: "hi", AsBotID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send_dm requires user_id")
+	})
+
+	t.Run("send_dm missing body", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:     "dm1",
+			SendDM: &SendDMActionConfig{UserID: "u1", Body: "", AsBotID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send_dm requires body")
+	})
+
+	t.Run("send_dm missing as_bot_id", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:     "dm1",
+			SendDM: &SendDMActionConfig{UserID: "u1", Body: "hi", AsBotID: ""},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "send_dm requires as_bot_id")
+	})
 }
 
 func TestValidateTrigger_MutualExclusion(t *testing.T) {
