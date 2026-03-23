@@ -10,6 +10,28 @@ All endpoints additionally check permissions: **System Admins** (`manage_system`
 
 ## Endpoints
 
+### Get client configuration
+
+```
+GET /config
+```
+
+Returns the client-relevant plugin configuration. Any authenticated user may call this endpoint — no additional permission checks are performed.
+
+**Response:** `200 OK`
+
+```json
+{
+    "enable_ui": false
+}
+```
+
+| Field       | Type    | Description                                                                 |
+| ----------- | ------- | --------------------------------------------------------------------------- |
+| `enable_ui` | boolean | Whether the Channel Automation UI is enabled in the webapp product switcher |
+
+---
+
 ### List flows
 
 ```

@@ -37,9 +37,25 @@ func (p *Plugin) initRouter() *mux.Router {
 	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)
 	execAPI.RegisterRoutes(apiRouter)
 
+	apiRouter.HandleFunc("/config", p.handleGetClientConfig).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
 
 	return router
+}
+
+// clientConfig is the subset of configuration returned to webapp clients.
+type clientConfig struct {
+	EnableUI bool `json:"enable_ui"`
+}
+
+// handleGetClientConfig returns the client-relevant plugin configuration.
+func (p *Plugin) handleGetClientConfig(w http.ResponseWriter, _ *http.Request) {
+	cfg := p.getConfiguration()
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(clientConfig{EnableUI: cfg.EnableUI}); err != nil {
+		p.API.LogError("Failed to encode client config", "error", err.Error())
+	}
 }
 
 // handleGetAgentTools proxies a request to the AI plugin bridge to retrieve the

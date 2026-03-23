@@ -77,3 +77,11 @@ export async function getAgentTools(agentId: string): Promise<AIToolInfo[]> {
     const tools = await doFetch<AIToolInfo[] | null>(`${BASE_URL}/agents/${agentId}/tools`);
     return tools ?? [];
 }
+
+export interface ClientConfig {
+    enable_ui: boolean;
+}
+
+export async function getConfig(): Promise<ClientConfig> {
+    return doFetch<ClientConfig>(`${BASE_URL}/config`);
+}

@@ -20,6 +20,7 @@ import (
 type configuration struct {
 	MaxConcurrentFlowsLimit int
 	MaxFlowsPerChannelLimit int
+	EnableUI                bool
 }
 
 // MaxFlowsPerChannel implements flow.Configuration.
