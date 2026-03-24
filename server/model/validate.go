@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const minScheduleInterval = 5 * time.Minute
+const minScheduleInterval = 1 * time.Hour
 
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
@@ -55,7 +55,7 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 			return fmt.Errorf("schedule trigger has invalid interval: %w", err)
 		}
 		if d < minScheduleInterval {
-			return fmt.Errorf("schedule trigger interval must be at least %s", minScheduleInterval)
+			return fmt.Errorf("schedule trigger interval must be at least %dh", int(minScheduleInterval.Hours()))
 		}
 		startAtChanged := existing == nil || existing.Schedule == nil ||
 			time.UnixMilli(existing.Schedule.StartAt).Truncate(time.Minute) != time.UnixMilli(t.Schedule.StartAt).Truncate(time.Minute)

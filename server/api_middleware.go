@@ -4,13 +4,16 @@ import (
 	"net/http"
 
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
+
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 )
 
 func (p *Plugin) MattermostAuthorizationRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID := r.Header.Get("Mattermost-User-ID")
 		if userID == "" {
-			http.Error(w, "Not authorized", http.StatusUnauthorized)
+			p.API.LogWarn("Unauthorized request: missing Mattermost-User-ID header", "method", r.Method, "path", r.URL.Path)
+			httputil.WriteErrorJSON(w, http.StatusUnauthorized, "Not authorized", "")
 			return
 		}
 
@@ -23,7 +26,8 @@ func (p *Plugin) SystemAdminRequired(next http.Handler) http.Handler {
 		userID := r.Header.Get("Mattermost-User-ID")
 
 		if !p.client.User.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			p.API.LogWarn("System admin permission denied", "user_id", userID, "method", r.Method, "path", r.URL.Path)
+			httputil.WriteErrorJSON(w, http.StatusForbidden, "Forbidden", "")
 			return
 		}
 

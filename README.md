@@ -67,7 +67,7 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 | Type                 | Description                                                                                                             |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `message_posted`     | Fires when a user posts a message in the configured channel. Bot posts, system messages, and webhook posts are ignored. |
-| `schedule`           | Fires on a recurring interval. Minimum interval is 5 minutes.                                                           |
+| `schedule`           | Fires on a recurring interval. Minimum interval is 1 hour.                                                              |
 | `membership_changed` | Fires when a user joins or leaves the configured channel. Bot users are excluded.                                       |
 | `channel_created`    | Fires when a new public channel is created. No channel configuration needed.                                            |
 | `user_joined_team`   | Fires when a user joins the configured team. Bot users are excluded. Provides the team's default channel (typically town-square). |

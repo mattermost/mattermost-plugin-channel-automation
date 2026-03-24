@@ -9,6 +9,7 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -39,7 +40,7 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -48,24 +49,25 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 	// Check the user has permission to view this flow.
 	f, err := h.flowStore.Get(flowID)
 	if err != nil {
-		h.api.LogError("Failed to get flow for execution list", "error", err.Error())
-		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to get flow for execution list", "user_id", userID, "flow_id", flowID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	if f == nil {
-		http.Error(w, "flow not found", http.StatusNotFound)
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
 	if !h.checkPermission(userID, f) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		h.api.LogWarn("Permission denied for execution list", "user_id", userID, "flow_id", flowID)
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 
 	limit := parseLimit(r)
 	records, err := h.store.ListByFlow(flowID, limit)
 	if err != nil {
-		h.api.LogError("Failed to list executions", "error", err.Error())
-		http.Error(w, "failed to list executions", http.StatusInternalServerError)
+		h.api.LogError("Failed to list executions", "user_id", userID, "flow_id", flowID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
 		return
 	}
 
@@ -78,37 +80,39 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	id := mux.Vars(r)["id"]
 	record, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get execution record", "error", err.Error())
-		http.Error(w, "failed to get execution", http.StatusInternalServerError)
+		h.api.LogError("Failed to get execution record", "user_id", userID, "execution_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", err.Error())
 		return
 	}
 	if record == nil {
-		http.Error(w, "execution not found", http.StatusNotFound)
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "execution not found", "")
 		return
 	}
 
 	// Check the user has permission to view the parent flow.
 	f, err := h.flowStore.Get(record.FlowID)
 	if err != nil {
-		h.api.LogError("Failed to get flow for execution", "error", err.Error())
-		http.Error(w, "failed to get flow", http.StatusInternalServerError)
+		h.api.LogError("Failed to get flow for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
 		return
 	}
 	// If the flow was deleted, only system admins can view.
 	if f == nil {
 		if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			h.api.LogWarn("Permission denied for execution (deleted flow)", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
+			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 			return
 		}
 	} else if !h.checkPermission(userID, f) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		h.api.LogWarn("Permission denied for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 
@@ -121,21 +125,22 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
-		http.Error(w, "missing user ID", http.StatusUnauthorized)
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
 	// Only system admins can list all executions.
 	if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+		h.api.LogWarn("Permission denied for recent executions list", "user_id", userID)
+		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 		return
 	}
 
 	limit := parseLimit(r)
 	records, err := h.store.ListRecent(limit)
 	if err != nil {
-		h.api.LogError("Failed to list recent executions", "error", err.Error())
-		http.Error(w, "failed to list executions", http.StatusInternalServerError)
+		h.api.LogError("Failed to list recent executions", "user_id", userID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
 		return
 	}
 

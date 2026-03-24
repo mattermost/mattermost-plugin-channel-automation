@@ -10,6 +10,28 @@ All endpoints additionally check permissions: **System Admins** (`manage_system`
 
 ## Endpoints
 
+### Get client configuration
+
+```
+GET /config
+```
+
+Returns the client-relevant plugin configuration. Any authenticated user may call this endpoint — no additional permission checks are performed.
+
+**Response:** `200 OK`
+
+```json
+{
+    "enable_ui": false
+}
+```
+
+| Field       | Type    | Description                                                                 |
+| ----------- | ------- | --------------------------------------------------------------------------- |
+| `enable_ui` | boolean | Whether the Channel Automation UI is enabled in the webapp product switcher |
+
+---
+
 ### List flows
 
 ```
@@ -400,7 +422,7 @@ Exactly one key should be set, indicating the trigger type:
 | Field        | Type    | Description                                                                          |
 | ------------ | ------- | ------------------------------------------------------------------------------------ |
 | `channel_id` | string  | Channel associated with the schedule (required)                                      |
-| `interval`   | string  | Go duration string, e.g. `"1h"`, `"30m"` (required, minimum 5m)                     |
+| `interval`   | string  | Go duration string, e.g. `"1h"`, `"24h"` (required, minimum 1h)                     |
 | `start_at`   | integer | _(optional)_ Future UTC timestamp in milliseconds since epoch. Must be in the future; omit or set to 0 to start immediately. |
 
 #### MembershipChangedConfig
@@ -470,7 +492,7 @@ Fires when a new message is posted in the specified channel.
 
 ### `schedule`
 
-Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDuration` string (e.g. `"5m"`, `"1h"`, `"24h"`). The minimum interval is 5 minutes.
+Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDuration` string (e.g. `"1h"`, `"24h"`). The minimum interval is 1 hour.
 
 If `start_at` is provided, it must be a future UTC timestamp in milliseconds. The first execution is scheduled at that time. Otherwise, the schedule starts immediately.
 

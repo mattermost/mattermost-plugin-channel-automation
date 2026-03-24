@@ -23,7 +23,7 @@ func TestValidateTrigger_MessagePosted(t *testing.T) {
 
 func TestValidateTrigger_Schedule(t *testing.T) {
 	t.Run("valid minimal", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "5m"}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}, nil)
 		require.NoError(t, err)
 	})
 
@@ -33,7 +33,7 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "5m"}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "1h"}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "channel_id")
 	})
@@ -51,21 +51,21 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("interval too small", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1m"}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}, nil)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "at least")
+		assert.Contains(t, err.Error(), "at least 1h")
 	})
 
 	t.Run("start_at in the past", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
 	})
 
 	t.Run("update with unchanged past start_at is valid", func(t *testing.T) {
 		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
 		err := ValidateTrigger(updated, existing)
 		require.NoError(t, err)
 	})
@@ -76,15 +76,15 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 		// treated as unchanged.
 		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
 		truncated := time.UnixMilli(pastStartAt).Truncate(time.Minute).UnixMilli()
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: truncated}}
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: truncated}}
 		err := ValidateTrigger(updated, existing)
 		require.NoError(t, err)
 	})
 
 	t.Run("update with new past start_at is rejected", func(t *testing.T) {
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-2 * time.Hour).UnixMilli()}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-2 * time.Hour).UnixMilli()}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}
 		err := ValidateTrigger(updated, existing)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
@@ -240,7 +240,7 @@ func TestValidateTrigger_MutualExclusion(t *testing.T) {
 	t.Run("two trigger types rejected", func(t *testing.T) {
 		err := ValidateTrigger(&Trigger{
 			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
-			Schedule:      &ScheduleConfig{ChannelID: "ch1", Interval: "10m"},
+			Schedule:      &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
 		}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
@@ -249,7 +249,7 @@ func TestValidateTrigger_MutualExclusion(t *testing.T) {
 	t.Run("three trigger types rejected", func(t *testing.T) {
 		err := ValidateTrigger(&Trigger{
 			MessagePosted:     &MessagePostedConfig{ChannelID: "ch1"},
-			Schedule:          &ScheduleConfig{ChannelID: "ch1", Interval: "10m"},
+			Schedule:          &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
 			MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"},
 		}, nil)
 		require.Error(t, err)

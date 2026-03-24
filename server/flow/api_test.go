@@ -29,13 +29,29 @@ func (c *testConfig) MaxFlowsPerChannel() int {
 	return c.maxFlowsPerChannel
 }
 
+// expectLogCalls registers permissive LogError and LogWarn expectations that
+// accept any number of arguments. This covers enriched log calls that include
+// user_id, flow_id, and other context fields.
+func expectLogCalls(api *plugintest.API) {
+	// LogError with 3, 5, 7, or 9 args (msg + 1-4 key-value pairs).
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	// LogWarn with 3, 5, 7, or 9 args.
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+}
+
 func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	t.Helper()
 
 	store, _ := setupStore(t)
 
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
 	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
@@ -316,7 +332,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	body := `{
 		"name": "Schedule Flow",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "1m"}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "30m"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
 	}`
 
@@ -326,7 +342,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "at least")
+	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
 func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
@@ -358,7 +374,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	body := `{
 		"name": "Updated",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2m"}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "30m"}},
 		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
 	}`
 
@@ -368,7 +384,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "at least")
+	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
 func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
@@ -377,13 +393,13 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 	pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: pastStartAt}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},
 	}))
 
 	body := fmt.Sprintf(`{
 		"name": "Updated name",
 		"enabled": true,
-		"trigger": {"schedule": {"channel_id": "ch1", "interval": "10m", "start_at": %d}},
+		"trigger": {"schedule": {"channel_id": "ch1", "interval": "2h", "start_at": %d}},
 		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
 	}`, pastStartAt)
 
@@ -460,7 +476,7 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 	store, _ := setupStore(t)
 
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
 	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
@@ -475,7 +491,7 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 
 func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
@@ -501,7 +517,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 
 func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
@@ -530,7 +546,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 
 func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		nil, mmmodel.NewAppError("GetChannelMember", "not_found", nil, "", http.StatusNotFound),
@@ -556,7 +572,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 
 func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Allow existing flow's channel.
 	api.On("GetChannelMember", "ch1", "user1").Return(
@@ -593,7 +609,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 
 func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 	// No GetChannelMember expectation — system admin should skip channel checks.
 
@@ -619,7 +635,7 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 
 func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, store := setupAPIWithCustomMock(t, api)
@@ -649,7 +665,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 
 func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Only the trigger channel should be checked; the templated action channel is skipped.
 	api.On("GetChannelMember", "ch1", "user1").Return(
@@ -678,7 +694,7 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 
 func TestAPI_CreateFlow_ChannelCreated_NonAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
@@ -701,7 +717,7 @@ func TestAPI_CreateFlow_ChannelCreated_NonAdminDenied(t *testing.T) {
 
 func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
@@ -724,7 +740,7 @@ func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonAdminDenied(t *testing.T)
 
 func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, _ := setupAPIWithCustomMock(t, api)
@@ -746,7 +762,7 @@ func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 
 func TestAPI_ListFlows_ChannelCreated_HiddenFromNonAdmin(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
@@ -957,7 +973,7 @@ func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
 
 func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	store, _ := setupStore(t)
@@ -1097,7 +1113,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	body := `{
 		"name": "Test Flow",
 		"enabled": true,
-		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "10m"}},
+		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "2h"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 

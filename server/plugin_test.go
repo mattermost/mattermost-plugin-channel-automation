@@ -26,7 +26,11 @@ import (
 
 func TestServeHTTP(t *testing.T) {
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		api := &plugintest.API{}
+		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+
 		plugin := Plugin{}
+		plugin.SetAPI(api)
 		router := mux.NewRouter()
 		router.Use(plugin.MattermostAuthorizationRequired)
 		router.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +65,11 @@ func TestHandleGetAgentTools(t *testing.T) {
 	userID := mmmodel.NewId()
 
 	t.Run("nil bridge client returns 503", func(t *testing.T) {
+		api := &plugintest.API{}
+		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+
 		p := &Plugin{}
+		p.SetAPI(api)
 
 		router := mux.NewRouter()
 		router.HandleFunc("/api/v1/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
@@ -114,6 +122,7 @@ func TestHandleGetAgentTools(t *testing.T) {
 	t.Run("bridge client error returns 502", func(t *testing.T) {
 		api := &plugintest.API{}
 		api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+		api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 		api.On("PluginHTTP", mock.Anything).Return(&http.Response{
 			StatusCode: http.StatusUnauthorized,
 			Body:       io.NopCloser(strings.NewReader(`{"error":"unauthorized"}`)),
@@ -133,6 +142,88 @@ func TestHandleGetAgentTools(t *testing.T) {
 		router.ServeHTTP(w, r)
 
 		assert.Equal(t, http.StatusBadGateway, w.Code)
+	})
+}
+
+func TestHandleGetClientConfig(t *testing.T) {
+	t.Run("unauthenticated request returns 401 via real router", func(t *testing.T) {
+		api := &plugintest.API{}
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.setConfiguration(&configuration{EnableUI: true})
+		p.router = p.initRouter()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		// deliberately omit Mattermost-User-ID header
+
+		p.ServeHTTP(nil, w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("authenticated request succeeds via real router", func(t *testing.T) {
+		api := &plugintest.API{}
+		p := &Plugin{}
+		p.SetAPI(api)
+		p.setConfiguration(&configuration{EnableUI: true})
+		p.router = p.initRouter()
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		p.ServeHTTP(nil, w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, true, resp["enable_ui"])
+	})
+
+	t.Run("returns enable_ui false by default", func(t *testing.T) {
+		p := &Plugin{}
+		p.setConfiguration(&configuration{})
+
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/config", p.handleGetClientConfig).Methods(http.MethodGet)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		router.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, false, resp["enable_ui"])
+	})
+
+	t.Run("returns enable_ui true when configured", func(t *testing.T) {
+		p := &Plugin{}
+		p.setConfiguration(&configuration{EnableUI: true})
+
+		router := mux.NewRouter()
+		router.HandleFunc("/api/v1/config", p.handleGetClientConfig).Methods(http.MethodGet)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+		r.Header.Set("Mattermost-User-ID", mmmodel.NewId())
+
+		router.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.Unmarshal(w.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, true, resp["enable_ui"])
 	})
 }
 

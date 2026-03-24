@@ -1,3 +1,4 @@
+import {getConfig} from 'client';
 import manifest from 'manifest';
 import type {Store} from 'redux';
 
@@ -12,6 +13,16 @@ import type {PluginRegistry} from 'types/mattermost-webapp';
 export default class Plugin {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     public async initialize(registry: PluginRegistry, store: Store<GlobalState>) {
+        try {
+            const config = await getConfig();
+            if (!config.enable_ui) {
+                return;
+            }
+        } catch {
+            // If config fetch fails, default to not registering (safe default).
+            return;
+        }
+
         registry.registerProduct(
             `/plug/${manifest.id}`,
             Icon,

@@ -140,7 +140,7 @@ func TestScheduleManager_StartSkipsNonScheduleAndDisabled(t *testing.T) {
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Enabled: false,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}))
 
 	sm := NewScheduleManager(api, store, enq, notif)
@@ -241,7 +241,7 @@ func TestScheduleManager_SyncFlowStopsOldJob(t *testing.T) {
 	existingFlow := &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
 	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
@@ -265,7 +265,7 @@ func TestScheduleManager_FireSchedule(t *testing.T) {
 
 	sm := NewScheduleManager(api, store, enq, notif)
 
-	sm.fireSchedule("flow1", "Test Flow", "10m")
+	sm.fireSchedule("flow1", "Test Flow", "1h")
 
 	enq.mu.Lock()
 	require.Len(t, enq.items, 1)
@@ -275,7 +275,7 @@ func TestScheduleManager_FireSchedule(t *testing.T) {
 	assert.Equal(t, "flow1", item.FlowID)
 	assert.Equal(t, "Test Flow", item.FlowName)
 	require.NotNil(t, item.TriggerData.Schedule)
-	assert.Equal(t, "10m", item.TriggerData.Schedule.Interval)
+	assert.Equal(t, "1h", item.TriggerData.Schedule.Interval)
 	assert.NotZero(t, item.TriggerData.Schedule.FiredAt)
 
 	notif.mu.Lock()
@@ -302,7 +302,7 @@ func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
 	var calls []string
 	sm.scheduleFn = fakeScheduleFunc(&calls)
 
-	// Simulate an existing job for a schedule flow with a 10m interval.
+	// Simulate an existing job for a schedule flow with a 1h interval.
 	oldJob := &fakeCloser{}
 	sm.mu.Lock()
 	sm.jobs["f1"] = oldJob
@@ -313,12 +313,12 @@ func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
 	existingFlow := &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
 	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "30m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h"}},
 	})
 	require.NoError(t, err)
 
@@ -354,12 +354,12 @@ func TestScheduleManager_SyncFlowUpdatedStartAtStopsOldJob(t *testing.T) {
 	existingFlow := &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
 	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}},
 	})
 	require.NoError(t, err)
 
@@ -385,12 +385,12 @@ func TestScheduleManager_SyncFlowDisabledStopsJob(t *testing.T) {
 	existingFlow := &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
 	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Enabled: false,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	})
 	require.NoError(t, err)
 
@@ -421,13 +421,13 @@ func TestScheduleManager_SyncFlowNoOpWhenScheduleUnchanged(t *testing.T) {
 		ID:      "f1",
 		Name:    "Old Name",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}},
 	}
 	err := sm.SyncFlow(existingFlow, &model.Flow{
 		ID:      "f1",
 		Name:    "New Name",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "10m", StartAt: 1700000000000}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}},
 	})
 	require.NoError(t, err)
 
@@ -456,7 +456,7 @@ func TestScheduleManager_SyncFlowCreateNewSchedule(t *testing.T) {
 	err := sm.SyncFlow(nil, &model.Flow{
 		ID:      "f1",
 		Enabled: true,
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "5m"}},
+		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	})
 	require.NoError(t, err)
 

@@ -41,6 +41,22 @@ func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, erro
 func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error)            { return nil, nil }
 func (m *mockFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) { return nil, nil }
 
+// expectLogCalls registers permissive LogError and LogWarn expectations that
+// accept any number of arguments. This covers enriched log calls that include
+// user_id, flow_id, execution_id, and other context fields.
+func expectLogCalls(api *plugintest.API) {
+	// LogError with 3, 5, 7, or 9 args (msg + 1-4 key-value pairs).
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	// LogWarn with 3, 5, 7, or 9 args.
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+}
+
 func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugintest.API) {
 	t.Helper()
 
@@ -48,7 +64,7 @@ func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugin
 	flowStore := &mockFlowStore{flows: make(map[string]*model.Flow)}
 
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(false).Maybe()
 	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
@@ -135,7 +151,7 @@ func TestExecutionAPI_ListByFlow_FlowNotFound(t *testing.T) {
 
 func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
@@ -216,7 +232,7 @@ func TestExecutionAPI_Get_Success(t *testing.T) {
 
 func TestExecutionAPI_Get_DeletedFlow_RequiresSystemAdmin(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
 	router, execStore, _ := setupAPIHandlerWithCustomMock(t, api)
@@ -234,7 +250,7 @@ func TestExecutionAPI_Get_DeletedFlow_RequiresSystemAdmin(t *testing.T) {
 
 func TestExecutionAPI_Get_DeletedFlow_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, execStore, _ := setupAPIHandlerWithCustomMock(t, api)
@@ -279,7 +295,7 @@ func TestExecutionAPI_ListRecent_SystemAdminOnly(t *testing.T) {
 
 func TestExecutionAPI_ListRecent_Success(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	// Need a real execution store backed by KV mocks.
@@ -327,7 +343,7 @@ func TestExecutionAPI_ListRecent_Success(t *testing.T) {
 			return nil
 		},
 	)
-	kvAPI.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(kvAPI)
 
 	execStore := NewStore(kvAPI, &sync.Mutex{})
 	flowStore := &mockFlowStore{flows: make(map[string]*model.Flow)}
