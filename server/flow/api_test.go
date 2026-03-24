@@ -1176,7 +1176,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 
 func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetTeamMember", "team1", "user1").Return(
 		&mmmodel.TeamMember{SchemeAdmin: true}, nil,
@@ -1201,7 +1201,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 
 func TestAPI_CreateFlow_UserJoinedTeam_ChannelAdminFallbackAllowed(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Not a team admin.
 	api.On("GetTeamMember", "team1", "user1").Return(
@@ -1234,7 +1234,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_ChannelAdminFallbackAllowed(t *testing.T)
 
 func TestAPI_CreateFlow_UserJoinedTeam_NeitherAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Not a team admin.
 	api.On("GetTeamMember", "team1", "user1").Return(
@@ -1268,7 +1268,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_NeitherAdminDenied(t *testing.T) {
 
 func TestAPI_CreateFlow_UserJoinedTeam_GetTeamMember500(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetTeamMember", "team1", "user1").Return(
 		nil, &mmmodel.AppError{StatusCode: http.StatusInternalServerError, Message: "db down"},
@@ -1293,7 +1293,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_GetTeamMember500(t *testing.T) {
 
 func TestAPI_CreateFlow_UserJoinedTeam_GetChannelByName500(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Not a team admin.
 	api.On("GetTeamMember", "team1", "user1").Return(
@@ -1323,7 +1323,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_GetChannelByName500(t *testing.T) {
 
 func TestAPI_CreateFlow_UserJoinedTeam_GetChannelMember500(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
+	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Not a team admin.
 	api.On("GetTeamMember", "team1", "user1").Return(
