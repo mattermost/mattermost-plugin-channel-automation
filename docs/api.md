@@ -409,6 +409,7 @@ Exactly one key should be set, indicating the trigger type:
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
 | `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
+| `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | _(optional)_ Fires when a user joins any team                     |
 
 #### MessagePostedConfig
 
@@ -437,6 +438,17 @@ Empty object — no fields required. The trigger fires on any new public channel
 
 ```json
 { "channel_created": {} }
+```
+
+#### UserJoinedTeamConfig
+
+| Field       | Type   | Description                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------ |
+| `team_id`   | string | Team to watch (required)                                                             |
+| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`)      |
+
+```json
+{ "user_joined_team": { "team_id": "team-id-1", "user_type": "user" } }
 ```
 
 ### Action
@@ -492,6 +504,10 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
 
+### `user_joined_team`
+
+Fires when a user joins the configured team. Bot users are automatically excluded. The optional `user_type` field filters by user role: `"user"` matches only regular users, `"guest"` matches only guests, and `""` (default) matches both. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`. The user's guest status is available via `{{.Trigger.User.IsGuest}}`.
+
 ---
 
 ## Action types
@@ -519,7 +535,8 @@ Action templates receive a `FlowContext` object with the following structure:
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
 {{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
-{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created)
+{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created, user_joined_team)
+{{.Trigger.Team}}       — the team the user joined (user_joined_team only)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)
 {{.Trigger.Membership}} — membership change metadata (membership_changed only)
 {{.Steps.<action_id>}}  — output from a previous action step
@@ -544,7 +561,9 @@ Action templates receive a `FlowContext` object with the following structure:
 | Name         | `{{.Trigger.Channel.Name}}`        |
 | Display Name | `{{.Trigger.Channel.DisplayName}}` |
 
-**User** _(message_posted, membership_changed, channel_created):_
+**User** _(message_posted, membership_changed, channel_created, user_joined_team):_
+
+> **Note:** For `user_joined_team` triggers, `{{.Trigger.Channel}}` is **not** available. Use `{{.Trigger.Team.DefaultChannelId}}` to reference the team's default channel.
 
 | Field      | Access                        |
 | ---------- | ----------------------------- |
@@ -552,12 +571,22 @@ Action templates receive a `FlowContext` object with the following structure:
 | Username   | `{{.Trigger.User.Username}}`  |
 | First Name | `{{.Trigger.User.FirstName}}` |
 | Last Name  | `{{.Trigger.User.LastName}}`  |
+| Is Guest   | `{{.Trigger.User.IsGuest}}`   |
 
 **Membership** _(membership_changed trigger only):_
 
 | Field  | Access                            |
 | ------ | --------------------------------- |
 | Action | `{{.Trigger.Membership.Action}}`  |
+
+**Team** _(user_joined_team trigger only):_
+
+| Field        | Access                           |
+| ------------ | -------------------------------- |
+| ID           | `{{.Trigger.Team.Id}}`           |
+| Name         | `{{.Trigger.Team.Name}}`         |
+| Display Name       | `{{.Trigger.Team.DisplayName}}`       |
+| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}`  |
 
 **Schedule** _(schedule trigger only):_
 

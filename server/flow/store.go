@@ -12,13 +12,14 @@ import (
 )
 
 const (
-	flowKeyPrefix                = "flow:"
-	flowIndexKey                 = "flow_index"
-	triggerIndexPrefix           = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
-	channelTriggerIndexPrefix    = "ct:"    // all trigger types by channel (3 + 26 = 29)
-	membershipTriggerIndexPrefix = "ti:mc:" // membership_changed by channel (6 + 26 = 32)
-	scheduleIndexKey             = "sched_index"
-	channelCreatedIndexKey       = "cc_index"
+	flowKeyPrefix                    = "flow:"
+	flowIndexKey                     = "flow_index"
+	triggerIndexPrefix               = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
+	channelTriggerIndexPrefix        = "ct:"    // all trigger types by channel (3 + 26 = 29)
+	membershipTriggerIndexPrefix     = "ti:mc:" // membership_changed by channel (6 + 26 = 32)
+	scheduleIndexKey                 = "sched_index"
+	channelCreatedIndexKey           = "cc_index"
+	userJoinedTeamTriggerIndexPrefix = "ti:ujt:" // user_joined_team by team (7 + 26 = 33)
 )
 
 // KVStore implements Store using the Mattermost plugin KV store.
@@ -198,6 +199,18 @@ func (s *KVStore) Save(f *model.Flow) error {
 		}
 	}
 
+	// Update user-joined-team trigger index.
+	if old != nil && old.Trigger.UserJoinedTeam != nil && old.Trigger.UserJoinedTeam.TeamID != "" {
+		if err := s.removeUserJoinedTeamTriggerIndex(old.Trigger.UserJoinedTeam.TeamID, f.ID); err != nil {
+			return err
+		}
+	}
+	if f.Trigger.UserJoinedTeam != nil && f.Trigger.UserJoinedTeam.TeamID != "" {
+		if err := s.addUserJoinedTeamTriggerIndex(f.Trigger.UserJoinedTeam.TeamID, f.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -244,6 +257,12 @@ func (s *KVStore) Delete(id string) error {
 
 	if f.Trigger.ChannelCreated != nil {
 		if err := s.removeFromChannelCreatedIndex(id); err != nil {
+			return err
+		}
+	}
+
+	if f.Trigger.UserJoinedTeam != nil && f.Trigger.UserJoinedTeam.TeamID != "" {
+		if err := s.removeUserJoinedTeamTriggerIndex(f.Trigger.UserJoinedTeam.TeamID, id); err != nil {
 			return err
 		}
 	}
@@ -686,4 +705,82 @@ func (s *KVStore) removeFromChannelCreatedIndex(id string) error {
 		}
 	}
 	return s.setChannelCreatedIndex(filtered)
+}
+
+// --- User-joined-team trigger index helpers ---
+
+func makeUserJoinedTeamTriggerIndexKey(teamID string) string {
+	return userJoinedTeamTriggerIndexPrefix + teamID
+}
+
+// GetFlowIDsForUserJoinedTeam returns flow IDs triggered by user-joined-team events for the given team.
+func (s *KVStore) GetFlowIDsForUserJoinedTeam(teamID string) ([]string, error) {
+	return s.getUserJoinedTeamTriggerIndex(teamID)
+}
+
+func (s *KVStore) getUserJoinedTeamTriggerIndex(teamID string) ([]string, error) {
+	key := makeUserJoinedTeamTriggerIndexKey(teamID)
+	data, appErr := s.api.KVGet(key)
+	if appErr != nil {
+		return nil, fmt.Errorf("failed to get user joined team trigger index: %w", appErr)
+	}
+	if data == nil {
+		return nil, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user joined team trigger index: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *KVStore) setUserJoinedTeamTriggerIndex(teamID string, ids []string) error {
+	key := makeUserJoinedTeamTriggerIndexKey(teamID)
+	if len(ids) == 0 {
+		if appErr := s.api.KVDelete(key); appErr != nil {
+			return fmt.Errorf("failed to delete user joined team trigger index: %w", appErr)
+		}
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal user joined team trigger index: %w", err)
+	}
+	if appErr := s.api.KVSet(key, data); appErr != nil {
+		return fmt.Errorf("failed to save user joined team trigger index: %w", appErr)
+	}
+	return nil
+}
+
+func (s *KVStore) addUserJoinedTeamTriggerIndex(teamID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getUserJoinedTeamTriggerIndex(teamID)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(ids, flowID) {
+		return nil
+	}
+	ids = append(ids, flowID)
+	return s.setUserJoinedTeamTriggerIndex(teamID, ids)
+}
+
+func (s *KVStore) removeUserJoinedTeamTriggerIndex(teamID, flowID string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getUserJoinedTeamTriggerIndex(teamID)
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != flowID {
+			filtered = append(filtered, id)
+		}
+	}
+	return s.setUserJoinedTeamTriggerIndex(teamID, filtered)
 }

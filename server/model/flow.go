@@ -38,12 +38,19 @@ type MembershipChangedConfig struct {
 // No fields are needed — the trigger fires on any new public channel.
 type ChannelCreatedConfig struct{}
 
+// UserJoinedTeamConfig holds trigger config for the user_joined_team trigger type.
+type UserJoinedTeamConfig struct {
+	TeamID   string `json:"team_id"`
+	UserType string `json:"user_type,omitempty"` // "user", "guest", or "" (both)
+}
+
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
 	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
 	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
+	UserJoinedTeam    *UserJoinedTeamConfig    `json:"user_joined_team,omitempty"`
 }
 
 // TriggerChannelID returns the channel ID from the flow's trigger config,
@@ -64,16 +71,19 @@ func (f *Flow) TriggerChannelID() string {
 // Type returns the trigger type based on which config is present.
 func (t *Trigger) Type() string {
 	if t.MessagePosted != nil {
-		return "message_posted"
+		return TriggerTypeMessagePosted
 	}
 	if t.Schedule != nil {
-		return "schedule"
+		return TriggerTypeSchedule
 	}
 	if t.MembershipChanged != nil {
-		return "membership_changed"
+		return TriggerTypeMembershipChanged
 	}
 	if t.ChannelCreated != nil {
-		return "channel_created"
+		return TriggerTypeChannelCreated
+	}
+	if t.UserJoinedTeam != nil {
+		return TriggerTypeUserJoinedTeam
 	}
 	return ""
 }
@@ -147,4 +157,16 @@ func CollectChannelIDs(f *Flow) []string {
 	}
 
 	return ids
+}
+
+// CollectTeamIDs returns all unique, literal (non-template) team IDs
+// referenced in the flow's trigger.
+func CollectTeamIDs(f *Flow) []string {
+	if f.Trigger.UserJoinedTeam != nil {
+		id := f.Trigger.UserJoinedTeam.TeamID
+		if id != "" && !strings.Contains(id, "{{") {
+			return []string{id}
+		}
+	}
+	return nil
 }
