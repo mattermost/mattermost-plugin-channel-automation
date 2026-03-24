@@ -148,6 +148,7 @@ func TestHandleGetAgentTools(t *testing.T) {
 func TestHandleGetClientConfig(t *testing.T) {
 	t.Run("unauthenticated request returns 401 via real router", func(t *testing.T) {
 		api := &plugintest.API{}
+		api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 		p := &Plugin{}
 		p.SetAPI(api)
 		p.setConfiguration(&configuration{EnableUI: true})
