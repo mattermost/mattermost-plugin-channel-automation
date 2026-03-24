@@ -7,7 +7,7 @@ import (
 // MembershipChangedTrigger matches when a user joins or leaves the configured channel.
 type MembershipChangedTrigger struct{}
 
-func (t *MembershipChangedTrigger) Type() string { return "membership_changed" }
+func (t *MembershipChangedTrigger) Type() string { return model.TriggerTypeMembershipChanged }
 
 func (t *MembershipChangedTrigger) Matches(trigger *model.Trigger, event *model.Event) bool {
 	if trigger.MembershipChanged == nil {

@@ -2,13 +2,11 @@ package flow
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
-	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
@@ -41,94 +39,6 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/flows/{id}", h.handleDeleteFlow).Methods(http.MethodDelete)
 }
 
-// checkFlowPermissions verifies that userID has permission to manage the flow.
-// System admins are always allowed. Otherwise the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the flow, and a team
-// admin (or default-channel admin) on every literal team referenced.
-//
-// When no concrete channels or teams can be verified (e.g. a channel_created
-// trigger with only templated or AI-only actions), we require system admin
-// permission. The authorization model relies on proving the user is admin on
-// every resource the flow touches. If there are zero resources to verify, we
-// deny rather than silently granting access to a global-scope operation.
-func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
-	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		return nil
-	}
-	channelIDs := model.CollectChannelIDs(f)
-	teamIDs := model.CollectTeamIDs(f)
-	if len(channelIDs) == 0 && len(teamIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for flows without explicit channel or team references")
-	}
-	for _, chID := range channelIDs {
-		member, appErr := h.api.GetChannelMember(chID, userID)
-		if appErr != nil {
-			// 4xx errors (not found, unauthorized) mean the user is not a member;
-			// 5xx errors are infrastructure failures that should surface differently.
-			if appErr.StatusCode >= http.StatusInternalServerError {
-				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
-			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
-		}
-		if !member.SchemeAdmin {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
-		}
-	}
-	for _, teamID := range teamIDs {
-		if err := h.checkTeamPermission(userID, teamID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkTeamPermission verifies the user is either a team admin or a channel
-// admin on the team's default channel (town-square).
-func (h *APIHandler) checkTeamPermission(userID, teamID string) error {
-	// Check team admin first.
-	teamMember, appErr := h.api.GetTeamMember(teamID, userID)
-	if appErr != nil {
-		if appErr.StatusCode >= http.StatusInternalServerError {
-			return fmt.Errorf("failed to verify team permissions: %w", appErr)
-		}
-		// 4xx means user is not a team member; fall through to default channel check.
-	} else if teamMember.SchemeAdmin {
-		return nil
-	}
-
-	// Fall back to checking default channel admin.
-	defaultChannel, appErr := h.api.GetChannelByName(teamID, mmmodel.DefaultChannelName, false)
-	if appErr != nil {
-		if appErr.StatusCode >= http.StatusInternalServerError {
-			return fmt.Errorf("failed to verify team permissions: %w", appErr)
-		}
-		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
-	}
-	chMember, appErr := h.api.GetChannelMember(defaultChannel.Id, userID)
-	if appErr != nil {
-		if appErr.StatusCode >= http.StatusInternalServerError {
-			return fmt.Errorf("failed to verify team permissions: %w", appErr)
-		}
-		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
-	}
-	if !chMember.SchemeAdmin {
-		return fmt.Errorf("you do not have admin permissions on one or more teams referenced by this flow")
-	}
-	return nil
-}
-
-// writePermissionError writes the appropriate HTTP error based on whether
-// the permission check failed due to an API/infrastructure error (500) or
-// the user genuinely lacking permissions (403).
-func (h *APIHandler) writePermissionError(w http.ResponseWriter, err error) {
-	var appErr *mmmodel.AppError
-	if errors.As(err, &appErr) {
-		h.api.LogError("Failed to verify permissions", "error", err.Error())
-		http.Error(w, "failed to verify permissions", http.StatusInternalServerError)
-		return
-	}
-	http.Error(w, err.Error(), http.StatusForbidden)
-}
 // checkChannelFlowLimit verifies that the channel has not reached the
 // per-channel flow limit. excludeFlowID is used during updates so the
 // flow being modified does not count against itself.

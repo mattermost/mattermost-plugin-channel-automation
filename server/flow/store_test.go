@@ -84,7 +84,7 @@ func TestStore_SaveAndGet(t *testing.T) {
 	assert.Equal(t, "flow1", got.ID)
 	assert.Equal(t, "Test Flow", got.Name)
 	assert.True(t, got.Enabled)
-	assert.Equal(t, "message_posted", got.Trigger.Type())
+	assert.Equal(t, model.TriggerTypeMessagePosted, got.Trigger.Type())
 	require.NotNil(t, got.Trigger.MessagePosted)
 	assert.Equal(t, "ch1", got.Trigger.MessagePosted.ChannelID)
 	require.Len(t, got.Actions, 1)
@@ -670,6 +670,28 @@ func TestStore_UserJoinedTeamIndex_DifferentTeams(t *testing.T) {
 	ids, err = kvStore.GetFlowIDsForUserJoinedTeam("team2")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"f2"}, ids)
+}
+
+func TestStore_UserJoinedTeamIndex_UpdateTeam(t *testing.T) {
+	store, _ := setupStore(t)
+	kvStore := store.(*KVStore)
+
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}}}))
+
+	ids, err := kvStore.GetFlowIDsForUserJoinedTeam("team1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
+
+	// Update flow to watch team2.
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team2"}}}))
+
+	ids, err = kvStore.GetFlowIDsForUserJoinedTeam("team1")
+	require.NoError(t, err)
+	assert.Nil(t, ids)
+
+	ids, err = kvStore.GetFlowIDsForUserJoinedTeam("team2")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"f1"}, ids)
 }
 
 func TestStore_UserJoinedTeamIndex_NoChannelTriggerIndex(t *testing.T) {

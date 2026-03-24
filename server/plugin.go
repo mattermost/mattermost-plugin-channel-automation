@@ -174,7 +174,7 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	}
 
 	event := &model.Event{
-		Type: "message_posted",
+		Type: model.TriggerTypeMessagePosted,
 		Post: post,
 	}
 
@@ -266,7 +266,7 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 	}
 
 	event := &model.Event{
-		Type:             "membership_changed",
+		Type:             model.TriggerTypeMembershipChanged,
 		Channel:          channel,
 		User:             user,
 		MembershipAction: action,
@@ -328,7 +328,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 	}
 
 	event := &model.Event{
-		Type:    "channel_created",
+		Type:    model.TriggerTypeChannelCreated,
 		Channel: channel,
 	}
 
@@ -384,6 +384,9 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 }
 
 // UserHasJoinedTeam is invoked after a user joins a team.
+// The actor parameter (who performed the action) is ignored — we always
+// resolve the joining user from teamMember.UserId, matching the pattern
+// used by UserHasJoinedChannel/UserHasLeftChannel.
 func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMember, _ *mmmodel.User) {
 	if teamMember.UserId == p.botUserID {
 		return
@@ -398,24 +401,24 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 		return
 	}
 
-	team, appErr := p.API.GetTeam(teamMember.TeamId)
-	if appErr != nil {
-		p.API.LogError("Failed to get team for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
-		return
-	}
-
 	event := &model.Event{
-		Type: "user_joined_team",
+		Type: model.TriggerTypeUserJoinedTeam,
+		Team: &mmmodel.Team{Id: teamMember.TeamId},
 		User: user,
-		Team: team,
 	}
 
 	flows, err := p.triggerService.FindMatchingFlows(event)
 	if err != nil {
-		p.API.LogError("Failed to find flows for team join", "err", err.Error())
+		p.API.LogError("Failed to find flows for team join", "team_id", teamMember.TeamId, "user_id", teamMember.UserId, "err", err.Error())
 		return
 	}
 	if len(flows) == 0 {
+		return
+	}
+
+	team, appErr := p.API.GetTeam(teamMember.TeamId)
+	if appErr != nil {
+		p.API.LogError("Failed to get team for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
 		return
 	}
 
@@ -423,7 +426,7 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 
 	defaultChannel, appErr := p.API.GetChannelByName(teamMember.TeamId, mmmodel.DefaultChannelName, false)
 	if appErr != nil {
-		p.API.LogError("Failed to get default channel for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
+		p.API.LogWarn("Failed to get default channel for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
 	} else {
 		safeTeam.DefaultChannelId = defaultChannel.Id
 	}

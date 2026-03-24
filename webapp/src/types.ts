@@ -19,6 +19,7 @@ export interface ChannelCreatedTriggerParams {
 
 export interface UserJoinedTeamTriggerParams {
     team_id: string;
+    user_type?: string; // "user", "guest", or undefined (both)
 }
 
 export interface Trigger {

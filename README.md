@@ -18,7 +18,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 - **Schedule** — Fire a flow on a recurring interval (e.g. every 30 minutes, every 24 hours).
 - **Membership Changed** — Fire a flow when a user joins or leaves a specific channel.
 - **Channel Created** — Fire a flow when a new public channel is created anywhere on the server.
-- **User Joined Team** — Fire a flow when a user joins any team. Provides user info and the team's default channel.
+- **User Joined Team** — Fire a flow when a user joins any team. Optionally filter by user type (regular users or guests). Provides user info and the team's default channel.
 
 ### Actions
 
@@ -96,6 +96,7 @@ All action fields that support templates receive a `FlowContext` with:
 | `{{.Trigger.User.Username}}`               | Username                                            |
 | `{{.Trigger.User.FirstName}}`              | First name                                          |
 | `{{.Trigger.User.LastName}}`               | Last name                                           |
+| `{{.Trigger.User.IsGuest}}`               | Whether the user is a guest                         |
 | `{{.Trigger.Team.Id}}`                     | Team ID                                             |
 | `{{.Trigger.Team.Name}}`                  | Team name                                           |
 | `{{.Trigger.Team.DisplayName}}`           | Team display name                                   |
