@@ -28,22 +28,22 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 	var err error
 
 	switch event.Type {
-	case "message_posted":
+	case model.TriggerTypeMessagePosted:
 		if event.Post == nil {
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetFlowIDsForChannel(event.Post.ChannelId)
-	case "membership_changed":
+	case model.TriggerTypeMembershipChanged:
 		if event.Channel == nil {
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetFlowIDsForMembershipChannel(event.Channel.Id)
-	case "channel_created":
+	case model.TriggerTypeChannelCreated:
 		if event.Channel == nil {
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
-	case "user_joined_team":
+	case model.TriggerTypeUserJoinedTeam:
 		if event.Team == nil {
 			return nil, nil
 		}

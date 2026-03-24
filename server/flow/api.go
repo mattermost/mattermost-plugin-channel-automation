@@ -133,10 +133,10 @@ func (h *APIHandler) writePermissionError(w http.ResponseWriter, err error) {
 	var appErr *mmmodel.AppError
 	if errors.As(err, &appErr) {
 		h.api.LogError("Failed to verify permissions", "error", err.Error())
-		http.Error(w, "failed to verify permissions", http.StatusInternalServerError)
+		writeErrorJSON(w, "failed to verify permissions", http.StatusInternalServerError)
 		return
 	}
-	http.Error(w, err.Error(), http.StatusForbidden)
+	writeErrorJSON(w, err.Error(), http.StatusForbidden)
 }
 
 // checkChannelFlowLimit verifies that the channel has not reached the
@@ -251,7 +251,6 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		h.writePermissionError(w, err)
 		return
 	}
@@ -301,7 +300,6 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(userID, f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		h.writePermissionError(w, err)
 		return
 	}
@@ -366,14 +364,12 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	// Check permissions on existing flow (must have permission to modify it).
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		h.writePermissionError(w, err)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := h.checkFlowPermissions(userID, &f); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		h.writePermissionError(w, err)
 		return
 	}
@@ -422,7 +418,6 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		writeErrorJSON(w, err.Error(), http.StatusForbidden)
 		h.writePermissionError(w, err)
 		return
 	}

@@ -75,6 +75,9 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 		if t.UserJoinedTeam.TeamID == "" {
 			return fmt.Errorf("user_joined_team trigger requires team_id")
 		}
+		if ut := t.UserJoinedTeam.UserType; ut != "" && ut != "user" && ut != "guest" {
+			return fmt.Errorf("user_joined_team trigger user_type must be \"user\", \"guest\", or empty (both)")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}

@@ -7,7 +7,7 @@ import (
 // MessagePostedTrigger matches when a message is posted in the configured channel.
 type MessagePostedTrigger struct{}
 
-func (t *MessagePostedTrigger) Type() string { return "message_posted" }
+func (t *MessagePostedTrigger) Type() string { return model.TriggerTypeMessagePosted }
 
 func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Event) bool {
 	if event.Post == nil {

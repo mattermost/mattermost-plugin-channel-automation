@@ -40,7 +40,8 @@ type ChannelCreatedConfig struct{}
 
 // UserJoinedTeamConfig holds trigger config for the user_joined_team trigger type.
 type UserJoinedTeamConfig struct {
-	TeamID string `json:"team_id"`
+	TeamID   string `json:"team_id"`
+	UserType string `json:"user_type,omitempty"` // "user", "guest", or "" (both)
 }
 
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
@@ -70,19 +71,19 @@ func (f *Flow) TriggerChannelID() string {
 // Type returns the trigger type based on which config is present.
 func (t *Trigger) Type() string {
 	if t.MessagePosted != nil {
-		return "message_posted"
+		return TriggerTypeMessagePosted
 	}
 	if t.Schedule != nil {
-		return "schedule"
+		return TriggerTypeSchedule
 	}
 	if t.MembershipChanged != nil {
-		return "membership_changed"
+		return TriggerTypeMembershipChanged
 	}
 	if t.ChannelCreated != nil {
-		return "channel_created"
+		return TriggerTypeChannelCreated
 	}
 	if t.UserJoinedTeam != nil {
-		return "user_joined_team"
+		return TriggerTypeUserJoinedTeam
 	}
 	return ""
 }

@@ -420,12 +420,13 @@ Empty object — no fields required. The trigger fires on any new public channel
 
 #### UserJoinedTeamConfig
 
-| Field     | Type   | Description              |
-| --------- | ------ | ------------------------ |
-| `team_id` | string | Team to watch (required) |
+| Field       | Type   | Description                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------ |
+| `team_id`   | string | Team to watch (required)                                                             |
+| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`)      |
 
 ```json
-{ "user_joined_team": { "team_id": "team-id-1" } }
+{ "user_joined_team": { "team_id": "team-id-1", "user_type": "user" } }
 ```
 
 ### Action
@@ -483,7 +484,7 @@ Fires when a new public channel (type `"O"`) is created. DMs, group messages, an
 
 ### `user_joined_team`
 
-Fires when a user joins the configured team. Bot users are automatically excluded. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`.
+Fires when a user joins the configured team. Bot users are automatically excluded. The optional `user_type` field filters by user role: `"user"` matches only regular users, `"guest"` matches only guests, and `""` (default) matches both. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`. The user's guest status is available via `{{.Trigger.User.IsGuest}}`.
 
 ---
 
@@ -548,6 +549,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | Username   | `{{.Trigger.User.Username}}`  |
 | First Name | `{{.Trigger.User.FirstName}}` |
 | Last Name  | `{{.Trigger.User.LastName}}`  |
+| Is Guest   | `{{.Trigger.User.IsGuest}}`   |
 
 **Membership** _(membership_changed trigger only):_
 
@@ -561,8 +563,8 @@ Action templates receive a `FlowContext` object with the following structure:
 | ------------ | -------------------------------- |
 | ID           | `{{.Trigger.Team.Id}}`           |
 | Name         | `{{.Trigger.Team.Name}}`         |
-| Display Name       | `{{.Trigger.Team.DisplayName}}`      |
-| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}` |
+| Display Name       | `{{.Trigger.Team.DisplayName}}`       |
+| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}`  |
 
 **Schedule** _(schedule trigger only):_
 

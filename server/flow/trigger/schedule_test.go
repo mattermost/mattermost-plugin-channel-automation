@@ -11,13 +11,13 @@ import (
 
 func TestScheduleTrigger_Type(t *testing.T) {
 	tr := &trigger.ScheduleTrigger{}
-	assert.Equal(t, "schedule", tr.Type())
+	assert.Equal(t, model.TriggerTypeSchedule, tr.Type())
 }
 
 func TestScheduleTrigger_Matches_AlwaysFalse(t *testing.T) {
 	tr := &trigger.ScheduleTrigger{}
 	trig := &model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "5m"}}
-	event := &model.Event{Type: "schedule"}
+	event := &model.Event{Type: model.TriggerTypeSchedule}
 
 	assert.False(t, tr.Matches(trig, event))
 }

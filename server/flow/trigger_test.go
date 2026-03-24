@@ -22,14 +22,14 @@ func newTestRegistry() *Registry {
 
 func newMessagePostedEvent(channelID string) *model.Event {
 	return &model.Event{
-		Type: "message_posted",
+		Type: model.TriggerTypeMessagePosted,
 		Post: &mmmodel.Post{ChannelId: channelID},
 	}
 }
 
 func newMembershipChangedEvent(channelID, action string) *model.Event {
 	return &model.Event{
-		Type:             "membership_changed",
+		Type:             model.TriggerTypeMembershipChanged,
 		Channel:          &mmmodel.Channel{Id: channelID},
 		MembershipAction: action,
 	}
@@ -219,14 +219,14 @@ func TestTriggerService_FindMatchingFlows_MembershipChanged_NilChannel(t *testin
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: "membership_changed", Channel: nil})
+	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeMembershipChanged, Channel: nil})
 	require.NoError(t, err)
 	assert.Nil(t, flows)
 }
 
 func newChannelCreatedEvent(channelID string) *model.Event {
 	return &model.Event{
-		Type:    "channel_created",
+		Type:    model.TriggerTypeChannelCreated,
 		Channel: &mmmodel.Channel{Id: channelID},
 	}
 }
@@ -268,7 +268,7 @@ func TestTriggerService_FindMatchingFlows_ChannelCreated_NilChannel(t *testing.T
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: "channel_created", Channel: nil})
+	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeChannelCreated, Channel: nil})
 	require.NoError(t, err)
 	assert.Nil(t, flows)
 }
@@ -297,7 +297,7 @@ func TestTriggerService_FindMatchingFlows_ChannelCreated_MultipleFlows(t *testin
 
 func newUserJoinedTeamEvent(teamID string) *model.Event {
 	return &model.Event{
-		Type: "user_joined_team",
+		Type: model.TriggerTypeUserJoinedTeam,
 		Team: &mmmodel.Team{Id: teamID},
 	}
 }
@@ -355,7 +355,7 @@ func TestTriggerService_FindMatchingFlows_UserJoinedTeam_NilTeam(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: "user_joined_team", Team: nil})
+	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeUserJoinedTeam, Team: nil})
 	require.NoError(t, err)
 	assert.Nil(t, flows)
 }

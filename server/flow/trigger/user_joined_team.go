@@ -7,7 +7,7 @@ import (
 // UserJoinedTeamTrigger matches when a user joins any team.
 type UserJoinedTeamTrigger struct{}
 
-func (t *UserJoinedTeamTrigger) Type() string { return "user_joined_team" }
+func (t *UserJoinedTeamTrigger) Type() string { return model.TriggerTypeUserJoinedTeam }
 
 func (t *UserJoinedTeamTrigger) Matches(trigger *model.Trigger, event *model.Event) bool {
 	if trigger.UserJoinedTeam == nil {
@@ -16,5 +16,16 @@ func (t *UserJoinedTeamTrigger) Matches(trigger *model.Trigger, event *model.Eve
 	if event.Team == nil {
 		return false
 	}
-	return trigger.UserJoinedTeam.TeamID == event.Team.Id
+	if trigger.UserJoinedTeam.TeamID != event.Team.Id {
+		return false
+	}
+	if ut := trigger.UserJoinedTeam.UserType; ut != "" && event.User != nil {
+		if ut == "guest" && !event.User.IsGuest() {
+			return false
+		}
+		if ut == "user" && event.User.IsGuest() {
+			return false
+		}
+	}
+	return true
 }

@@ -276,7 +276,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		},
 	)
 	// Register LogDebug/LogError for varying argument counts across hooks.
-	for _, method := range []string{"LogDebug", "LogError"} {
+	for _, method := range []string{"LogDebug", "LogError", "LogWarn"} {
 		for _, n := range []int{3, 5, 7, 9, 11, 13, 15} {
 			args := make([]any, n)
 			for i := range args {
@@ -287,15 +287,19 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 	}
 	api.On("GetChannel", mock.Anything).Return(&mmmodel.Channel{Id: "ch1", Name: "test", DisplayName: "Test"}, nil)
 	api.On("GetUser", mock.Anything).Return(&mmmodel.User{Id: "user1", Username: "testuser"}, nil)
+	api.On("GetTeam", mock.Anything).Return(&mmmodel.Team{Id: "team1", Name: "testteam", DisplayName: "Test Team"}, nil).Maybe()
+	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(&mmmodel.Channel{Id: "town-square-id", Name: mmmodel.DefaultChannelName}, nil).Maybe()
 
 	registry := flow.NewRegistry()
 	switch triggerType {
-	case "message_posted":
+	case model.TriggerTypeMessagePosted:
 		registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
-	case "channel_created":
+	case model.TriggerTypeChannelCreated:
 		registry.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
-	case "membership_changed":
+	case model.TriggerTypeMembershipChanged:
 		registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
+	case model.TriggerTypeUserJoinedTeam:
+		registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 	}
 
 	flowStore := flow.NewStore(api, &sync.Mutex{})
@@ -320,7 +324,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 }
 
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "message_posted")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
 	// Save a flow triggered by messages in ch1.
 	f := &model.Flow{
@@ -343,7 +347,7 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 }
 
 func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "channel_created")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeChannelCreated)
 
 	f := &model.Flow{
 		ID:      "f1",
@@ -364,7 +368,7 @@ func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 }
 
 func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "membership_changed")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMembershipChanged)
 
 	f := &model.Flow{
 		ID:      "f1",
@@ -377,6 +381,52 @@ func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
 
 	member := &mmmodel.ChannelMember{UserId: "user1", ChannelId: "ch1"}
 	p.handleMembershipChange(member, "joined")
+
+	require.Eventually(t, func() bool {
+		item, _ := wqStore.ClaimNext()
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestUserHasJoinedTeam_SkipsBotUser(t *testing.T) {
+	// The botUserID short-circuit fires before GetUser, so no API mock needed.
+	p := &Plugin{botUserID: "bot-id"}
+
+	member := &mmmodel.TeamMember{UserId: "bot-id", TeamId: "team1"}
+
+	assert.NotPanics(t, func() {
+		p.UserHasJoinedTeam(nil, member, nil)
+	})
+}
+
+func TestUserHasJoinedTeam_SkipsIsBotUser(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetUser", "bot-user-id").Return(&mmmodel.User{Id: "bot-user-id", IsBot: true}, nil)
+
+	p := &Plugin{botUserID: "other-bot"}
+	p.SetAPI(api)
+
+	member := &mmmodel.TeamMember{UserId: "bot-user-id", TeamId: "team1"}
+
+	assert.NotPanics(t, func() {
+		p.UserHasJoinedTeam(nil, member, nil)
+	})
+}
+
+func TestUserHasJoinedTeam_ProcessesNormalUser(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeUserJoinedTeam)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Team Join Flow",
+		Enabled: true,
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
+	}
+	require.NoError(t, p.flowStore.Save(f))
+
+	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
+	p.UserHasJoinedTeam(nil, member, nil)
 
 	require.Eventually(t, func() bool {
 		item, _ := wqStore.ClaimNext()

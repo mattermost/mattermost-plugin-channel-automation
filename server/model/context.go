@@ -60,10 +60,16 @@ type SafeChannel struct {
 // SafeUser contains only the user fields needed for template rendering.
 // Sensitive fields (email, AuthData, password, NotifyProps) are excluded.
 type SafeUser struct {
-	Id        string `json:"id"`
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	Id          string `json:"id"`
+	Username    string `json:"username"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	IsGuestUser bool   `json:"is_guest,omitempty"`
+}
+
+// IsGuest returns whether the user has the guest role.
+func (u *SafeUser) IsGuest() bool {
+	return u.IsGuestUser
 }
 
 // NewSafePost creates a SafePost from a Mattermost Post.
@@ -102,10 +108,11 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 		return nil
 	}
 	return &SafeUser{
-		Id:        u.Id,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		Id:          u.Id,
+		Username:    u.Username,
+		FirstName:   u.FirstName,
+		LastName:    u.LastName,
+		IsGuestUser: u.IsGuest(),
 	}
 }
 
