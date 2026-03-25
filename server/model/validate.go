@@ -79,16 +79,11 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 
 // ValidateSendMessageChannel checks that every send_message action in the flow
 // targets the same channel that the trigger is bound to. For triggers with a
-// channel_id (message_posted, membership_changed), the action channel must be
-// either the literal trigger channel ID or a template containing
+// channel_id (message_posted, schedule, membership_changed), the action channel
+// must be either the literal trigger channel ID or a template containing
 // ".Trigger.Channel.Id". For channel_created (no trigger channel ID), only the
-// template form is accepted. Schedule triggers are exempt.
+// template form is accepted.
 func ValidateSendMessageChannel(f *Flow) error {
-	// Schedule triggers have no "triggering channel" at runtime — skip.
-	if f.Trigger.Schedule != nil {
-		return nil
-	}
-
 	triggerChannelID := f.TriggerChannelID()
 
 	for i, a := range f.Actions {

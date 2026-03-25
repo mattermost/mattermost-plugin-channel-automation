@@ -276,10 +276,18 @@ func TestValidateSendMessageChannel(t *testing.T) {
 		assert.Contains(t, err.Error(), "must use the template expression")
 	})
 
-	t.Run("schedule trigger skips validation", func(t *testing.T) {
+	t.Run("schedule trigger enforces channel restriction", func(t *testing.T) {
 		f := &Flow{
 			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "any-ch", Body: "hi"}}},
+		}
+		require.Error(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("schedule trigger allows matching channel", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 		}
 		require.NoError(t, ValidateSendMessageChannel(f))
 	})
