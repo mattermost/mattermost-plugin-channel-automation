@@ -122,7 +122,7 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	}
 	triggerData := model.TriggerData{
 		Post: &model.SafePost{Id: "post1", ChannelId: "ch1"},
-		User: &model.SafeUser{Id: "user1"},
+		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
 	_, err := executor.Execute(f, triggerData)
@@ -185,10 +185,13 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	_, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
-	// Posts: [trigger context (system), user prompt]
-	require.Len(t, bc.lastReq.Posts, 2)
-	assert.Contains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
-	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[1].Message)
+	// Posts: [trigger metadata (system), user-generated content (user), user prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 3)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "some text") // user content not in system prompt
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "some text")
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "<user_data>")
+	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[2].Message)
 }
 
 func TestFlowExecutor_UnknownActionType(t *testing.T) {
@@ -230,7 +233,7 @@ func TestFlowExecutor_PermissionDenied(t *testing.T) {
 	}
 	triggerData := model.TriggerData{
 		Post: &model.SafePost{Id: "post1", ChannelId: "ch1"},
-		User: &model.SafeUser{Id: "user1"},
+		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
 	_, err := executor.Execute(f, triggerData)

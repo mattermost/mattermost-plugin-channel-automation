@@ -15,7 +15,7 @@ import (
 func TestRenderTemplate_SimpleVariable(t *testing.T) {
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
-			User: &model.SafeUser{Username: "alice"},
+			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
 		Steps: make(map[string]model.StepOutput),
 	}
@@ -100,7 +100,7 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 	ctx := &model.FlowContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
-			User: &model.SafeUser{Username: "alice"},
+			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
 		Steps: make(map[string]model.StepOutput),
 	}
