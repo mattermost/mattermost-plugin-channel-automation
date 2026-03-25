@@ -105,11 +105,19 @@ type AIPromptActionConfig struct {
 	AllowedTools []string `json:"allowed_tools,omitempty"`
 }
 
+// SendDMActionConfig holds config for the send_dm action type.
+type SendDMActionConfig struct {
+	UserID  string `json:"user_id"`
+	Body    string `json:"body"`
+	AsBotID string `json:"as_bot_id"`
+}
+
 // Action defines a single step in a flow. Exactly one config pointer should be set.
 type Action struct {
 	ID          string                   `json:"id"`
 	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
 	AIPrompt    *AIPromptActionConfig    `json:"ai_prompt,omitempty"`
+	SendDM      *SendDMActionConfig      `json:"send_dm,omitempty"`
 }
 
 // Type returns the action type based on which config is present.
@@ -119,6 +127,9 @@ func (a *Action) Type() string {
 	}
 	if a.AIPrompt != nil {
 		return "ai_prompt"
+	}
+	if a.SendDM != nil {
+		return "send_dm"
 	}
 	return ""
 }

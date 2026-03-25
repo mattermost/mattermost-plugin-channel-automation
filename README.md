@@ -24,6 +24,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 
 - **Send Message** — Post a message as the plugin bot, with optional threading support.
 - **AI Prompt** — Send a rendered prompt to an AI agent provided by the [Mattermost AI Plugin](https://github.com/mattermost/mattermost-plugin-ai) and capture the response.
+- **Send DM** — Send a direct message to a user from a specified bot.
 
 ## Getting Started
 
@@ -78,6 +79,7 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `send_message` | Posts a message as the plugin bot. Supports `channel_id`, `reply_to_post_id`, `as_bot_id`, and `body` — all templated.                |
 | `ai_prompt`    | Sends a rendered prompt to an AI agent via the Mattermost AI Plugin. Requires `provider_type` and `provider_id` in the action config. |
+| `send_dm`      | Sends a DM to a user from a specified bot. Requires `user_id`, `body`, and `as_bot_id` — all templated.                               |
 
 ## Template Context
 

@@ -64,10 +64,17 @@ export interface AIPromptActionParams {
     allowed_tools?: string[];
 }
 
+export interface SendDMActionParams {
+    user_id: string;
+    body: string;
+    as_bot_id: string;
+}
+
 export interface Action {
     id: string;
     send_message?: SendMessageActionParams;
     ai_prompt?: AIPromptActionParams;
+    send_dm?: SendDMActionParams;
 }
 
 export interface AIBotInfo {

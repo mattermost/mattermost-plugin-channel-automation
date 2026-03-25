@@ -111,11 +111,26 @@ func ValidateActions(actions []Action) error {
 		if a.AIPrompt != nil {
 			configCount++
 		}
+		if a.SendDM != nil {
+			configCount++
+		}
 		if configCount == 0 {
 			return fmt.Errorf("action %d: exactly one action config must be set", i)
 		}
 		if configCount > 1 {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
+		}
+
+		if a.SendDM != nil {
+			if a.SendDM.UserID == "" {
+				return fmt.Errorf("action %d: send_dm requires user_id", i)
+			}
+			if a.SendDM.Body == "" {
+				return fmt.Errorf("action %d: send_dm requires body", i)
+			}
+			if a.SendDM.AsBotID == "" {
+				return fmt.Errorf("action %d: send_dm requires as_bot_id", i)
+			}
 		}
 	}
 	return nil
