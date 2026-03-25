@@ -184,7 +184,12 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
-		_ = wp.store.Fail(item.ID)
+		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
+			wp.api.LogError("Failed to remove work item after creator lookup error",
+				"work_item_id", item.ID,
+				"err", storeErr.Error(),
+			)
+		}
 		wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
 		return
 	}
@@ -244,7 +249,13 @@ func (wp *WorkerPool) disableFlowForInactiveCreator(f *model.Flow, item *model.W
 		)
 	}
 
-	_ = wp.store.Fail(item.ID)
+	if storeErr := wp.store.Fail(item.ID); storeErr != nil {
+		wp.api.LogError("Failed to remove work item after disabling flow",
+			"work_item_id", item.ID,
+			"flow_id", f.ID,
+			"err", storeErr.Error(),
+		)
+	}
 	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
 }
 
