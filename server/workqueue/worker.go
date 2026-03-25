@@ -2,6 +2,7 @@ package workqueue
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -165,6 +166,34 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 
+	// Check that the flow creator is still an active user.
+	creator, appErr := wp.api.GetUser(f.CreatedBy)
+	if appErr != nil {
+		if appErr.StatusCode == http.StatusNotFound {
+			// Creator has been permanently deleted — disable the flow.
+			wp.disableFlowForInactiveCreator(f, item)
+			return
+		}
+
+		// Transient API error — fail this execution but leave the flow enabled.
+		reason := fmt.Sprintf("failed to look up flow creator %q: %s", f.CreatedBy, appErr.Error())
+		wp.api.LogError("Failed to verify flow creator",
+			"work_item_id", item.ID,
+			"flow_id", f.ID,
+			"flow_name", f.Name,
+			"created_by", f.CreatedBy,
+			"err", appErr.Error(),
+		)
+		_ = wp.store.Fail(item.ID, reason)
+		wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
+		return
+	}
+	if creator.DeleteAt != 0 {
+		// Creator has been deactivated — disable the flow.
+		wp.disableFlowForInactiveCreator(f, item)
+		return
+	}
+
 	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
 	completedAt := time.Now().UnixMilli()
 
@@ -197,6 +226,26 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 
 	wp.saveExecutionRecord(item, ctx, execErr, completedAt)
+}
+
+func (wp *WorkerPool) disableFlowForInactiveCreator(f *model.Flow, item *model.WorkItem) {
+	reason := "flow creator account has been deactivated or deleted"
+	wp.api.LogWarn("Disabling flow: creator no longer active",
+		"flow_id", f.ID,
+		"flow_name", f.Name,
+		"created_by", f.CreatedBy,
+	)
+
+	f.Enabled = false
+	if saveErr := wp.flowStore.Save(f); saveErr != nil {
+		wp.api.LogError("Failed to disable flow with inactive creator",
+			"flow_id", f.ID,
+			"err", saveErr.Error(),
+		)
+	}
+
+	_ = wp.store.Fail(item.ID, reason)
+	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
 }
 
 func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.FlowContext, execErr error, completedAt int64) {
