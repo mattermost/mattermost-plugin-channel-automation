@@ -589,6 +589,92 @@ func TestSendMessageAction_Execute_AsBotID_UserNotFound(t *testing.T) {
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
+func TestSendMessageAction_Execute_ChannelGuardrail_BlocksDifferentChannel(t *testing.T) {
+	api := &plugintest.API{}
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch-other",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "ch-trigger"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "restricted to the triggering channel")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestSendMessageAction_Execute_ChannelGuardrail_AllowsSameChannel(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "ch-trigger", mmmodel.PermissionCreatePost).Return(true)
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "new-post-id",
+		ChannelId: "ch-trigger",
+		Message:   "hello",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "ch-trigger",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "ch-trigger"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "ch-trigger", output.ChannelID)
+}
+
+func TestSendMessageAction_Execute_ChannelGuardrail_SkippedWhenNoTriggerChannel(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionToChannel", "creator-id", "any-ch", mmmodel.PermissionCreatePost).Return(true)
+	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
+		Id:        "new-post-id",
+		ChannelId: "any-ch",
+		Message:   "hello",
+	}, nil)
+
+	a := NewSendMessageAction(api, "bot-id")
+	act := &model.Action{
+		ID: "act1",
+		SendMessage: &model.SendMessageActionConfig{
+			ChannelID: "any-ch",
+			Body:      "hello",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy: "creator-id",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "any-ch", output.ChannelID)
+}
+
 func TestSendMessageAction_Execute_PermissionDenied_TemplatedChannel(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator-id", "resolved-ch", mmmodel.PermissionCreatePost).Return(false)

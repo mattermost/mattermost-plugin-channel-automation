@@ -32,10 +32,10 @@ func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.Completi
 
 func TestFlowExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(true)
+	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
 		Id:        "p1",
-		ChannelId: "ch2",
+		ChannelId: "ch1",
 		Message:   "Hello alice",
 	}, nil)
 
@@ -49,7 +49,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
-			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch2", Body: "Hello {{.Trigger.User.Username}}"}},
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "Hello {{.Trigger.User.Username}}"}},
 		},
 	}
 	triggerData := model.TriggerData{
@@ -134,12 +134,12 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 
 func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(true)
+	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
 		return p.Message == "AI said: hello from AI"
 	})).Return(&mmmodel.Post{
 		Id:        "p1",
-		ChannelId: "ch2",
+		ChannelId: "ch1",
 		Message:   "AI said: hello from AI",
 	}, nil)
 	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
@@ -170,7 +170,7 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 			{
 				ID: "send_step",
 				SendMessage: &model.SendMessageActionConfig{
-					ChannelID: "ch2",
+					ChannelID: "ch1",
 					Body:      `AI said: {{(index .Steps "ai_step").Message}}`,
 				},
 			},
@@ -192,6 +192,34 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	assert.Contains(t, bc.lastReq.Posts[1].Message, "some text")
 	assert.Contains(t, bc.lastReq.Posts[1].Message, "<user_data>")
 	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[2].Message)
+}
+
+func TestFlowExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T) {
+	api := &plugintest.API{}
+
+	registry := NewRegistry()
+	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
+
+	executor := NewFlowExecutor(registry)
+
+	f := &model.Flow{
+		ID:        "flow1",
+		Name:      "Test",
+		CreatedBy: "creator1",
+		Actions: []model.Action{
+			{ID: "act1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch-other", Body: "hello"}},
+		},
+	}
+	triggerData := model.TriggerData{
+		Post:    &model.SafePost{Id: "post1", ChannelId: "ch1"},
+		Channel: &model.SafeChannel{Id: "ch1"},
+		User:    &model.SafeUser{Id: "user1", Username: "alice"},
+	}
+
+	_, err := executor.Execute(f, triggerData)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "restricted to the triggering channel")
+	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
 func TestFlowExecutor_UnknownActionType(t *testing.T) {
