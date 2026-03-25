@@ -114,6 +114,7 @@ func (s *Store) listFromIndex(key string, limit int) ([]*model.ExecutionRecord, 
 	}
 
 	records := make([]*model.ExecutionRecord, 0, limit)
+	var staleIDs []string
 	for _, id := range ids {
 		if len(records) >= limit {
 			break
@@ -123,11 +124,44 @@ func (s *Store) listFromIndex(key string, limit int) ([]*model.ExecutionRecord, 
 			return nil, err
 		}
 		if rec == nil {
-			continue // expired via TTL
+			// Expired record, need cleanup from the index (TTL)
+			staleIDs = append(staleIDs, id)
+			continue
 		}
 		records = append(records, rec)
 	}
+
+	if len(staleIDs) > 0 {
+		s.removeStaleFromIndex(key, staleIDs)
+	}
+
 	return records, nil
+}
+
+// removeStaleFromIndex removes expired IDs from an index. Best-effort:
+// errors are silently ignored since the read already succeeded.
+func (s *Store) removeStaleFromIndex(key string, staleIDs []string) {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getIndex(key)
+	if err != nil || len(ids) == 0 {
+		return
+	}
+
+	staleSet := make(map[string]struct{}, len(staleIDs))
+	for _, id := range staleIDs {
+		staleSet[id] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, stale := staleSet[id]; !stale {
+			filtered = append(filtered, id)
+		}
+	}
+
+	_ = s.setIndex(key, filtered)
 }
 
 func (s *Store) getIndex(key string) ([]string, error) {
@@ -154,13 +188,14 @@ func (s *Store) setIndex(key string, ids []string) error {
 		return nil
 	}
 
-	// Indexes don't need TTL — they're bounded by cap and cleaned on purge.
-	// Records themselves expire, so stale index entries just resolve to nil.
+	// Indexes share the same TTL as records. Since prependToIndex rewrites
+	// the index on every save, the TTL resets each time. When a flow goes
+	// inactive, the index expires alongside its last records.
 	data, err := json.Marshal(ids)
 	if err != nil {
 		return fmt.Errorf("failed to marshal index %s: %w", key, err)
 	}
-	if appErr := s.api.KVSet(key, data); appErr != nil {
+	if appErr := s.api.KVSetWithExpiry(key, data, recordTTLSeconds); appErr != nil {
 		return fmt.Errorf("failed to save index %s: %w", key, appErr)
 	}
 	return nil
