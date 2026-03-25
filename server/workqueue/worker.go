@@ -129,7 +129,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 				"flow_id", item.FlowID,
 				"err", errMsg,
 			)
-			if err := wp.store.Fail(item.ID, errMsg); err != nil {
+			if err := wp.store.Fail(item.ID); err != nil {
 				wp.api.LogError("Failed to mark work item as failed after panic",
 					"work_item_id", item.ID,
 					"err", err.Error(),
@@ -145,7 +145,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			"flow_id", item.FlowID,
 			"err", err.Error(),
 		)
-		if storeErr := wp.store.Fail(item.ID, err.Error()); storeErr != nil {
+		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
 			wp.api.LogError("Failed to mark work item as failed",
 				"work_item_id", item.ID,
 				"err", storeErr.Error(),
@@ -184,7 +184,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
-		_ = wp.store.Fail(item.ID, reason)
+		_ = wp.store.Fail(item.ID)
 		wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
 		return
 	}
@@ -204,7 +204,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			"flow_name", item.FlowName,
 			"err", execErr.Error(),
 		)
-		if storeErr := wp.store.Fail(item.ID, execErr.Error()); storeErr != nil {
+		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
 			wp.api.LogError("Failed to mark work item as failed",
 				"work_item_id", item.ID,
 				"err", storeErr.Error(),
@@ -244,7 +244,7 @@ func (wp *WorkerPool) disableFlowForInactiveCreator(f *model.Flow, item *model.W
 		)
 	}
 
-	_ = wp.store.Fail(item.ID, reason)
+	_ = wp.store.Fail(item.ID)
 	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
 }
 

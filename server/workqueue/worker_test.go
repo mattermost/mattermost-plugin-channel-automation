@@ -321,12 +321,10 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 
 	wp.Stop()
 
-	// Item should be marked as failed.
+	// Item should be deleted (failure details live in the execution record).
 	got, err := store.Get("w1")
 	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Equal(t, model.WorkItemStatusFailed, got.Status)
-	assert.Contains(t, got.Error, "action failed")
+	assert.Nil(t, got)
 }
 
 func TestWorkerPool_DeletedFlow(t *testing.T) {
@@ -379,18 +377,11 @@ func TestWorkerPool_PanicRecovery(t *testing.T) {
 	wp.Start()
 	wp.Notify()
 
-	// Wait for the panicking item to be processed.
+	// Wait for the panicking item to be deleted.
 	require.Eventually(t, func() bool {
 		got, _ := store.Get("w1")
-		return got != nil && got.Status == model.WorkItemStatusFailed
+		return got == nil
 	}, 5*time.Second, 10*time.Millisecond)
-
-	// Verify it was marked failed with the panic message.
-	got, err := store.Get("w1")
-	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Equal(t, model.WorkItemStatusFailed, got.Status)
-	assert.Contains(t, got.Error, "panic: boom")
 
 	// Enqueue a second item that should succeed, proving the pool survived.
 	item2 := &model.WorkItem{ID: "w2", FlowID: "f1", FlowName: "Flow 1"}
@@ -436,7 +427,7 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		got, _ := store.Get("w1")
-		return got != nil && got.Status == model.WorkItemStatusFailed
+		return got == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
 	wp.Stop()
@@ -448,11 +439,6 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	f, _ := flowStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
-
-	// Work item should contain the lookup error.
-	got, _ := store.Get("w1")
-	require.NotNil(t, got)
-	assert.Contains(t, got.Error, "failed to look up flow creator")
 }
 
 func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
@@ -483,7 +469,7 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		got, _ := store.Get("w1")
-		return got != nil && got.Status == model.WorkItemStatusFailed
+		return got == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
 	wp.Stop()
@@ -495,11 +481,6 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	f, _ := flowStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
-
-	// Work item should contain the reason.
-	got, _ := store.Get("w1")
-	require.NotNil(t, got)
-	assert.Contains(t, got.Error, "creator account has been deactivated or deleted")
 }
 
 func TestWorkerPool_CreatorDeactivated(t *testing.T) {
@@ -530,7 +511,7 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		got, _ := store.Get("w1")
-		return got != nil && got.Status == model.WorkItemStatusFailed
+		return got == nil
 	}, 5*time.Second, 10*time.Millisecond)
 
 	wp.Stop()
@@ -542,11 +523,6 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	f, _ := flowStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
-
-	// Work item should contain the reason.
-	got, _ := store.Get("w1")
-	require.NotNil(t, got)
-	assert.Contains(t, got.Error, "creator account has been deactivated or deleted")
 }
 
 func TestWorkerPool_DisabledFlow(t *testing.T) {
