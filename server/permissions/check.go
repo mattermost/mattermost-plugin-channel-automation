@@ -12,19 +12,47 @@ import (
 )
 
 // CheckFlowPermissions verifies that userID has permission to manage the flow.
-// System admins are always allowed. Otherwise the user must be a channel admin
+// System admins are always allowed. For channel_created flows the user must be
+// a team admin on the trigger's team, and all literal channel references must
+// belong to that team. For other flows the user must be a channel admin
 // (SchemeAdmin) on every literal channel referenced in the flow.
 //
-// When no concrete channels can be verified (e.g. a channel_created trigger
-// with only templated or AI-only actions), we require system admin permission.
-// The authorization model relies on proving the user is admin on every channel
-// the flow touches. If there are zero channels to verify, we have no evidence
-// the user should be allowed to manage this flow, so we deny rather than
-// silently granting access to what is effectively a global-scope operation.
+// When no concrete channels can be verified (e.g. only templated or AI-only
+// actions on a non-channel_created trigger), we require system admin permission.
 func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		return nil
 	}
+
+	// channel_created flows use team-level authorization.
+	// We call GetTeam first because HasPermissionToTeam is boolean-only and
+	// cannot distinguish infrastructure failures from genuine permission denials.
+	if f.Trigger.ChannelCreated != nil {
+		teamID := f.Trigger.ChannelCreated.TeamID
+		if _, appErr := api.GetTeam(teamID); appErr != nil {
+			if appErr.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("failed to verify team: %w", appErr)
+			}
+			return fmt.Errorf("team %s not found or not accessible", teamID)
+		}
+		if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
+			return fmt.Errorf("you must be a team admin on the team specified in the channel_created trigger")
+		}
+		for _, chID := range model.CollectChannelIDs(f) {
+			ch, appErr := api.GetChannel(chID)
+			if appErr != nil {
+				if appErr.StatusCode >= http.StatusInternalServerError {
+					return fmt.Errorf("failed to verify channel team membership: %w", appErr)
+				}
+				return fmt.Errorf("channel %s not found or not accessible", chID)
+			}
+			if ch.TeamId != teamID {
+				return fmt.Errorf("channel %s does not belong to the team specified in the channel_created trigger", chID)
+			}
+		}
+		return nil
+	}
+
 	channelIDs := model.CollectChannelIDs(f)
 	if len(channelIDs) == 0 {
 		return fmt.Errorf("system admin permission is required for flows without explicit channel references")

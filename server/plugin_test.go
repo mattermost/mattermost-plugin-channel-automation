@@ -441,12 +441,12 @@ func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 		ID:      "f1",
 		Name:    "Test Flow",
 		Enabled: true,
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
 	}
 	require.NoError(t, p.flowStore.Save(f))
 
-	ch := &mmmodel.Channel{Id: "ch-new", Name: "new-channel", DisplayName: "New Channel", Type: mmmodel.ChannelTypeOpen, CreatorId: "user1"}
+	ch := &mmmodel.Channel{Id: "ch-new", Name: "new-channel", DisplayName: "New Channel", Type: mmmodel.ChannelTypeOpen, TeamId: "team1", CreatorId: "user1"}
 	p.ChannelHasBeenCreated(nil, ch)
 
 	require.Eventually(t, func() bool {

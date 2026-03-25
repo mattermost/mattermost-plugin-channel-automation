@@ -170,16 +170,17 @@ func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestExecutionAPI_ListByFlow_ZeroChannelsRequiresAdmin(t *testing.T) {
+func TestExecutionAPI_ListByFlow_ChannelCreatedRequiresTeamAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	router, _, flowStore := setupAPIHandlerWithCustomMock(t, api)
-	// A channel_created trigger has no explicit channel references.
 	flowStore.flows["f1"] = &model.Flow{
 		ID:      "f1",
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}
 
 	w := httptest.NewRecorder()

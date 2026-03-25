@@ -125,6 +125,19 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 	})
 }
 
+func TestValidateTrigger_ChannelCreated(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("missing team_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id")
+	})
+}
+
 func TestValidateTrigger_NoTriggerType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)

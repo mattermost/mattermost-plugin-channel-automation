@@ -67,7 +67,9 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 			return fmt.Errorf("membership_changed trigger action must be \"joined\", \"left\", or empty (both)")
 		}
 	case t.ChannelCreated != nil:
-		// No fields to validate — fires on any new public channel.
+		if t.ChannelCreated.TeamID == "" {
+			return fmt.Errorf("channel_created trigger requires team_id")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}

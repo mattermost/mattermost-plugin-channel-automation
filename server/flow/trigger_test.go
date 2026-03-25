@@ -223,10 +223,10 @@ func TestTriggerService_FindMatchingFlows_MembershipChanged_NilChannel(t *testin
 	assert.Nil(t, flows)
 }
 
-func newChannelCreatedEvent(channelID string) *model.Event {
+func newChannelCreatedEvent(channelID, teamID string) *model.Event {
 	return &model.Event{
 		Type:    "channel_created",
-		Channel: &mmmodel.Channel{Id: channelID},
+		Channel: &mmmodel.Channel{Id: channelID, TeamId: teamID},
 	}
 }
 
@@ -238,10 +238,10 @@ func TestTriggerService_FindMatchingFlows_ChannelCreated(t *testing.T) {
 		ID:      "f1",
 		Name:    "On Channel Created",
 		Enabled: true,
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
 	require.Len(t, flows, 1)
 	assert.Equal(t, "f1", flows[0].ID)
@@ -255,10 +255,10 @@ func TestTriggerService_FindMatchingFlows_ChannelCreated_Disabled(t *testing.T) 
 		ID:      "f1",
 		Name:    "Disabled",
 		Enabled: false,
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
 	assert.Nil(t, flows)
 }
@@ -280,16 +280,16 @@ func TestTriggerService_FindMatchingFlows_ChannelCreated_MultipleFlows(t *testin
 		ID:      "f1",
 		Name:    "Flow 1",
 		Enabled: true,
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
 		Name:    "Flow 2",
 		Enabled: true,
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel"))
+	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
 	require.Len(t, flows, 2)
 }

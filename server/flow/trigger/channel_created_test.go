@@ -17,18 +17,29 @@ func TestChannelCreatedTrigger_Type(t *testing.T) {
 
 func TestChannelCreatedTrigger_Matches_WithChannel(t *testing.T) {
 	tr := &trigger.ChannelCreatedTrigger{}
-	trig := &model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}
+	trig := &model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}
 	event := &model.Event{
 		Type:    "channel_created",
-		Channel: &mmmodel.Channel{Id: "ch1"},
+		Channel: &mmmodel.Channel{Id: "ch1", TeamId: "team1"},
 	}
 
 	assert.True(t, tr.Matches(trig, event))
 }
 
+func TestChannelCreatedTrigger_Matches_WrongTeam(t *testing.T) {
+	tr := &trigger.ChannelCreatedTrigger{}
+	trig := &model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}
+	event := &model.Event{
+		Type:    "channel_created",
+		Channel: &mmmodel.Channel{Id: "ch1", TeamId: "team2"},
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
 func TestChannelCreatedTrigger_Matches_NilChannel(t *testing.T) {
 	tr := &trigger.ChannelCreatedTrigger{}
-	trig := &model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}
+	trig := &model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}
 	event := &model.Event{
 		Type:    "channel_created",
 		Channel: nil,
@@ -42,7 +53,7 @@ func TestChannelCreatedTrigger_Matches_NilConfig(t *testing.T) {
 	trig := &model.Trigger{}
 	event := &model.Event{
 		Type:    "channel_created",
-		Channel: &mmmodel.Channel{Id: "ch1"},
+		Channel: &mmmodel.Channel{Id: "ch1", TeamId: "team1"},
 	}
 
 	assert.False(t, tr.Matches(trig, event))
