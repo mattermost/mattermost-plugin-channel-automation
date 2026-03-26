@@ -1,15 +1,18 @@
 package workqueue
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
 
 // WorkerPool processes work items from the queue using a bounded pool
@@ -171,7 +174,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	if appErr != nil {
 		if appErr.StatusCode == http.StatusNotFound {
 			// Creator has been permanently deleted — disable the flow.
-			wp.disableFlowForInactiveCreator(f, item)
+			wp.disableFlow(f, item, "flow creator account has been deactivated or deleted")
 			return
 		}
 
@@ -195,7 +198,36 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 	if creator.DeleteAt != 0 {
 		// Creator has been deactivated — disable the flow.
-		wp.disableFlowForInactiveCreator(f, item)
+		wp.disableFlow(f, item, "flow creator account has been deactivated or deleted")
+		return
+	}
+
+	// Verify the creator still has the required permissions (e.g. channel
+	// admin, team admin, or system admin) — the same check performed at
+	// flow creation time.
+	if permErr := permissions.CheckFlowPermissions(wp.api, f.CreatedBy, f); permErr != nil {
+		var appErr *mmmodel.AppError
+		if errors.As(permErr, &appErr) {
+			// Transient API error — fail this execution but leave the flow enabled.
+			wp.api.LogError("Failed to verify flow creator permissions",
+				"work_item_id", item.ID,
+				"flow_id", f.ID,
+				"flow_name", f.Name,
+				"created_by", f.CreatedBy,
+				"err", permErr.Error(),
+			)
+			if storeErr := wp.store.Fail(item.ID); storeErr != nil {
+				wp.api.LogError("Failed to remove work item after permission check error",
+					"work_item_id", item.ID,
+					"err", storeErr.Error(),
+				)
+			}
+			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify flow creator permissions: %s", permErr.Error()), time.Now().UnixMilli())
+			return
+		}
+
+		// Creator lost the required permissions — disable the flow.
+		wp.disableFlow(f, item, fmt.Sprintf("flow creator no longer has the required permissions: %s", permErr.Error()))
 		return
 	}
 
@@ -233,12 +265,12 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	wp.saveExecutionRecord(item, ctx, execErr, completedAt)
 }
 
-func (wp *WorkerPool) disableFlowForInactiveCreator(f *model.Flow, item *model.WorkItem) {
-	reason := "flow creator account has been deactivated or deleted"
-	wp.api.LogWarn("Disabling flow: creator no longer active",
+func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason string) {
+	wp.api.LogWarn("Disabling flow",
 		"flow_id", f.ID,
 		"flow_name", f.Name,
 		"created_by", f.CreatedBy,
+		"reason", reason,
 	)
 
 	f.Enabled = false

@@ -135,6 +135,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("GetUser", mock.Anything).Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true)
 
 	registry := flow.NewRegistry()
 	registry.RegisterAction(act)
@@ -523,6 +524,106 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	f, _ := flowStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
+}
+
+func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
+	act := &testAction{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", "demoted-user").Return(&mmmodel.User{DeleteAt: 0}, nil)
+	// User is no longer a system admin.
+	api.On("HasPermissionTo", "demoted-user", mock.Anything).Return(false)
+	// User is no longer a channel admin.
+	api.On("GetChannelMember", "ch1", "demoted-user").Return(&mmmodel.ChannelMember{SchemeAdmin: false}, nil)
+
+	registry := flow.NewRegistry()
+	registry.RegisterAction(act)
+	executor := flow.NewFlowExecutor(registry)
+	flowStore := newTestFlowStore()
+
+	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = flowStore.Save(&model.Flow{
+		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "demoted-user",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+	})
+
+	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// Action should never have been called.
+	assert.Equal(t, 0, act.getExecCount())
+
+	// Flow should be disabled — creator lost permissions.
+	f, _ := flowStore.Get("f1")
+	require.NotNil(t, f)
+	assert.False(t, f.Enabled)
+}
+
+func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
+	act := &testAction{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", "some-user").Return(&mmmodel.User{DeleteAt: 0}, nil)
+	// User is not a system admin.
+	api.On("HasPermissionTo", "some-user", mock.Anything).Return(false)
+	// GetChannelMember returns a 500 — transient infrastructure error.
+	api.On("GetChannelMember", "ch1", "some-user").Return(nil, mmmodel.NewAppError("GetChannelMember", "app.channel.get_member.app_error", nil, "", 500))
+
+	registry := flow.NewRegistry()
+	registry.RegisterAction(act)
+	executor := flow.NewFlowExecutor(registry)
+	flowStore := newTestFlowStore()
+
+	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = flowStore.Save(&model.Flow{
+		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+	})
+
+	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// Action should never have been called.
+	assert.Equal(t, 0, act.getExecCount())
+
+	// Flow should remain enabled — this is a transient error.
+	f, _ := flowStore.Get("f1")
+	require.NotNil(t, f)
+	assert.True(t, f.Enabled)
 }
 
 func TestWorkerPool_DisabledFlow(t *testing.T) {
