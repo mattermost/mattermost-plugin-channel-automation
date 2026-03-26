@@ -4,7 +4,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// ChannelCreatedTrigger matches when a new public channel is created.
+// ChannelCreatedTrigger matches when a new public channel is created on the trigger's team.
 type ChannelCreatedTrigger struct{}
 
 func (t *ChannelCreatedTrigger) Type() string { return "channel_created" }
@@ -13,5 +13,8 @@ func (t *ChannelCreatedTrigger) Matches(trigger *model.Trigger, event *model.Eve
 	if trigger.ChannelCreated == nil {
 		return false
 	}
-	return event.Channel != nil
+	if event.Channel == nil {
+		return false
+	}
+	return event.Channel.TeamId == trigger.ChannelCreated.TeamID
 }

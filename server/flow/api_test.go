@@ -71,7 +71,7 @@ func TestAPI_CreateFlow(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -259,7 +259,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 		"name": "Updated",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch2"}},
-		"actions": [{"id": "new-action", "send_message": {"channel_id": "ch3", "body": "updated"}}]
+		"actions": [{"id": "new-action", "send_message": {"channel_id": "ch2", "body": "updated"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -503,7 +503,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -520,9 +520,6 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
-	)
-	api.On("GetChannelMember", "ch2", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
 
@@ -532,7 +529,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -558,7 +555,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 		"name": "Test Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -619,7 +616,7 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 		"name": "Admin Flow",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -650,7 +647,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 		"name": "Updated by admin",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch-new"}},
-		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch3", "body": "hello"}}]
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch-new", "body": "hello"}}]
 	}`
 
 	w := httptest.NewRecorder()
@@ -692,17 +689,19 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_NonAdminDenied(t *testing.T) {
+func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Global Flow",
+		"name": "Team Flow",
 		"enabled": true,
-		"trigger": {"channel_created": {}},
+		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
 	}`
 
@@ -712,20 +711,22 @@ func TestAPI_CreateFlow_ChannelCreated_NonAdminDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "system admin")
+	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonAdminDenied(t *testing.T) {
+func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
 		"name": "AI on new channels",
 		"enabled": true,
-		"trigger": {"channel_created": {}},
+		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "agent", "provider_id": "bot1"}}]
 	}`
 
@@ -735,7 +736,7 @@ func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonAdminDenied(t *testing.T)
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "system admin")
+	assert.Contains(t, w.Body.String(), "team admin")
 }
 
 func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
@@ -746,9 +747,9 @@ func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Global Flow",
+		"name": "Team Flow",
 		"enabled": true,
-		"trigger": {"channel_created": {}},
+		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
 	}`
 
@@ -760,13 +761,60 @@ func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_ListFlows_ChannelCreated_HiddenFromNonAdmin(t *testing.T) {
+func TestAPI_CreateFlow_ChannelCreated_TeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {"team_id": "team1"}},
+		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
+	// With the temporary channel guardrail, channel_created triggers must use
+	// the template expression for send_message channel_id.
+	router, _, _ := setupAPI(t)
+
+	body := `{
+		"name": "Team Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {"team_id": "team1"}},
+		"actions": [{"id": "announce", "send_message": {"channel_id": "ch-other", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "must use the template expression")
+}
+
+func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
@@ -776,11 +824,11 @@ func TestAPI_ListFlows_ChannelCreated_HiddenFromNonAdmin(t *testing.T) {
 		Name:    "Normal Flow",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	// A channel_created flow — should be hidden from non-admin.
+	// A channel_created flow — should be hidden from non-team-admin.
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f2",
-		Name:    "Global Flow",
-		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}},
+		Name:    "Team Flow",
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
 	w := httptest.NewRecorder()
@@ -984,9 +1032,9 @@ func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 
 	// channel_created flows have no trigger channel, so they bypass the limit.
 	body := `{
-		"name": "Global Flow",
+		"name": "Team Flow",
 		"enabled": true,
-		"trigger": {"channel_created": {}},
+		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
 	}`
 

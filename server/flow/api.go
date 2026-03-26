@@ -2,7 +2,6 @@ package flow
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
 
 const maxRequestBodySize = 1 << 20 // 1 MB
@@ -38,54 +38,6 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/flows/{id}", h.handleGetFlow).Methods(http.MethodGet)
 	r.HandleFunc("/flows/{id}", h.handleUpdateFlow).Methods(http.MethodPut)
 	r.HandleFunc("/flows/{id}", h.handleDeleteFlow).Methods(http.MethodDelete)
-}
-
-// checkFlowPermissions verifies that userID has permission to manage the flow.
-// System admins are always allowed. Otherwise the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the flow.
-//
-// When no concrete channels can be verified (e.g. a channel_created trigger
-// with only templated or AI-only actions), we require system admin permission.
-// The authorization model relies on proving the user is admin on every channel
-// the flow touches. If there are zero channels to verify, we have no evidence
-// the user should be allowed to manage this flow, so we deny rather than
-// silently granting access to what is effectively a global-scope operation.
-func (h *APIHandler) checkFlowPermissions(userID string, f *model.Flow) error {
-	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		return nil
-	}
-	channelIDs := model.CollectChannelIDs(f)
-	if len(channelIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
-	}
-	for _, chID := range channelIDs {
-		member, appErr := h.api.GetChannelMember(chID, userID)
-		if appErr != nil {
-			// 4xx errors (not found, unauthorized) mean the user is not a member;
-			// 5xx errors are infrastructure failures that should surface differently.
-			if appErr.StatusCode >= http.StatusInternalServerError {
-				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
-			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
-		}
-		if !member.SchemeAdmin {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
-		}
-	}
-	return nil
-}
-
-// handlePermissionError determines the appropriate HTTP status and log level
-// based on whether the permission check failed due to an API/infrastructure
-// error (500) or the user genuinely lacking permissions (403).
-func (h *APIHandler) handlePermissionError(err error, userID, flowID string) (string, int, string) {
-	var appErr *mmmodel.AppError
-	if errors.As(err, &appErr) {
-		h.api.LogError("Failed to verify permissions", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		return "failed to verify permissions", http.StatusInternalServerError, err.Error()
-	}
-	h.api.LogWarn("Permission denied", "user_id", userID, "flow_id", flowID, "error", err.Error())
-	return err.Error(), http.StatusForbidden, ""
 }
 
 // checkChannelFlowLimit verifies that the channel has not reached the
@@ -150,7 +102,7 @@ func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		visible := make([]*model.Flow, 0, len(flows))
 		for _, f := range flows {
-			if h.checkFlowPermissions(userID, f) == nil {
+			if permissions.CheckFlowPermissions(h.api, userID, f) == nil {
 				visible = append(visible, f)
 			}
 		}
@@ -199,8 +151,13 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checkFlowPermissions(f.CreatedBy, &f); err != nil {
-		msg, code, detail := h.handlePermissionError(err, f.CreatedBy, f.ID)
+	if err := model.ValidateSendMessageChannel(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	if err := permissions.CheckFlowPermissions(h.api, f.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -249,8 +206,8 @@ func (h *APIHandler) handleGetFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checkFlowPermissions(userID, f); err != nil {
-		msg, code, detail := h.handlePermissionError(err, userID, id)
+	if err := permissions.CheckFlowPermissions(h.api, userID, f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -302,6 +259,11 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := model.ValidateSendMessageChannel(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
 	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
@@ -314,15 +276,15 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check permissions on existing flow (must have permission to modify it).
-	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		msg, code, detail := h.handlePermissionError(err, userID, id)
+	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	// Check permissions on new flow configuration (must have permission on new channels).
-	if err := h.checkFlowPermissions(userID, &f); err != nil {
-		msg, code, detail := h.handlePermissionError(err, userID, id)
+	if err := permissions.CheckFlowPermissions(h.api, userID, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -370,8 +332,8 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checkFlowPermissions(userID, existing); err != nil {
-		msg, code, detail := h.handlePermissionError(err, userID, id)
+	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}

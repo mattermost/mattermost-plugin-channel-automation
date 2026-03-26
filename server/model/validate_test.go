@@ -125,6 +125,19 @@ func TestValidateTrigger_MembershipChanged(t *testing.T) {
 	})
 }
 
+func TestValidateTrigger_ChannelCreated(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("missing team_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id")
+	})
+}
+
 func TestValidateTrigger_NoTriggerType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)
@@ -199,6 +212,92 @@ func TestValidateActions(t *testing.T) {
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one action config must be set")
+	})
+}
+
+func TestValidateSendMessageChannel(t *testing.T) {
+	t.Run("message_posted with matching literal channel", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("message_posted with trigger channel template", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("message_posted with trigger channel template with spaces", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{ .Trigger.Channel.Id }}", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("message_posted with different literal channel rejected", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch-other", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must reference the triggering channel")
+	})
+
+	t.Run("membership_changed with matching literal channel", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("channel_created with template", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("channel_created with literal channel rejected", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "some-ch", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must use the template expression")
+	})
+
+	t.Run("schedule trigger enforces channel restriction", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "any-ch", Body: "hi"}}},
+		}
+		require.Error(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("schedule trigger allows matching channel", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("non-send_message actions are ignored", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", AIPrompt: &AIPromptActionConfig{Prompt: "test", ProviderType: "agent", ProviderID: "bot1"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
 	})
 }
 

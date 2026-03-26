@@ -33,6 +33,11 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 		return nil, fmt.Errorf("failed to render channel_id template: %w", err)
 	}
 
+	// Remove this block to allow sending messages to arbitrary channels.
+	if ctx.Trigger.Channel != nil && channelID != ctx.Trigger.Channel.Id {
+		return nil, fmt.Errorf("send_message is restricted to the triggering channel %q, but action targets channel %q", ctx.Trigger.Channel.Id, channelID)
+	}
+
 	if ctx.CreatedBy == "" {
 		return nil, fmt.Errorf("flow has no creator; cannot verify channel permissions")
 	}

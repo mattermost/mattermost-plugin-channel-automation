@@ -171,34 +171,14 @@ func (s *Store) Complete(id string) error {
 	return s.removeFromIndex(runningIndexKey, id)
 }
 
-// Fail removes a work item from the running index and updates it with
-// a failed status and error message.
-func (s *Store) Fail(id string, errMsg string) error {
-	item, err := s.Get(id)
-	if err != nil {
-		return err
-	}
-	if item == nil {
-		// Item already gone; clean index just in case.
-		_ = s.removeFromIndex(runningIndexKey, id)
-		return nil
+// Fail removes a work item from the running index and deletes it from
+// the KV store. Failure details are captured in the execution record
+// by the caller, so the work item itself is no longer needed.
+func (s *Store) Fail(id string) error {
+	if appErr := s.api.KVDelete(workItemKeyPrefix + id); appErr != nil {
+		return fmt.Errorf("failed to delete work item %s: %w", id, appErr)
 	}
 
-	item.Status = model.WorkItemStatusFailed
-	item.Error = errMsg
-
-	data, err := json.Marshal(item)
-	if err != nil {
-		return fmt.Errorf("failed to marshal work item %s: %w", id, err)
-	}
-
-	if appErr := s.api.KVSet(workItemKeyPrefix+id, data); appErr != nil {
-		return fmt.Errorf("failed to update work item %s: %w", id, appErr)
-	}
-
-	// Remove from running index last. If this fails, the item stays in the
-	// running index but is already marked failed. ResetRunningToPending
-	// would move it to pending (a harmless retry is better than an orphan).
 	return s.removeFromIndex(runningIndexKey, id)
 }
 
