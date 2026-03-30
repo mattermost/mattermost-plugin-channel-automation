@@ -76,12 +76,16 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "AI says hello", output.Message)
 	assert.Equal(t, "ai-bot", bc.lastAgent)
-	// Posts: [trigger context (system), user prompt]
-	require.Len(t, bc.lastReq.Posts, 2)
+	// Posts: [trigger metadata (system), user-generated post content (user), user prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 3)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
-	assert.Contains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "Hello world") // post message must NOT be in system prompt
 	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
-	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[1].Message)
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "Hello world")
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "<user_data>")
+	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
+	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[2].Message)
 }
 
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
@@ -99,7 +103,7 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
-			User: &model.SafeUser{Username: "alice"},
+			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
 		Steps: make(map[string]model.StepOutput),
 	}
@@ -109,12 +113,15 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "Service response", output.Message)
 	assert.Equal(t, "openai", bc.lastService)
-	// Posts: [trigger context (system), user prompt]
-	require.Len(t, bc.lastReq.Posts, 2)
+	// Posts: [trigger metadata (system), user-generated content (user), user prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 3)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
-	assert.Contains(t, bc.lastReq.Posts[0].Message, "Triggering User: alice")
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "Triggering User ID: user1")
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "alice")
 	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
-	assert.Equal(t, "Tell me about alice", bc.lastReq.Posts[1].Message)
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "Triggering Username: alice")
+	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
+	assert.Equal(t, "Tell me about alice", bc.lastReq.Posts[2].Message)
 }
 
 func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
@@ -322,7 +329,7 @@ func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 	}
 	ctx := &model.FlowContext{
 		Trigger: model.TriggerData{
-			User: &model.SafeUser{Username: "alice"},
+			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
 		Steps: make(map[string]model.StepOutput),
 	}
@@ -331,14 +338,18 @@ func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "response", output.Message)
-	// Posts: [user system prompt, trigger context (system), user prompt]
-	require.Len(t, bc.lastReq.Posts, 3)
+	// Posts: [custom system prompt, trigger metadata (system), user-generated content (user), user prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 4)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
 	assert.Equal(t, "You are a helpful assistant for alice.", bc.lastReq.Posts[0].Message)
 	assert.Equal(t, "system", bc.lastReq.Posts[1].Role)
-	assert.Contains(t, bc.lastReq.Posts[1].Message, "[Trigger Context]")
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "<trigger_context>")
+	assert.Contains(t, bc.lastReq.Posts[1].Message, "Triggering User ID: user1")
+	assert.NotContains(t, bc.lastReq.Posts[1].Message, "alice")
 	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
-	assert.Equal(t, "Summarize this.", bc.lastReq.Posts[2].Message)
+	assert.Contains(t, bc.lastReq.Posts[2].Message, "Triggering Username: alice")
+	assert.Equal(t, "user", bc.lastReq.Posts[3].Role)
+	assert.Equal(t, "Summarize this.", bc.lastReq.Posts[3].Message)
 }
 
 func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) {
@@ -366,7 +377,7 @@ func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) 
 	require.Len(t, bc.lastReq.Posts, 2)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
 	assert.Contains(t, bc.lastReq.Posts[0].Message, "Complete only the specific task")
-	assert.NotContains(t, bc.lastReq.Posts[0].Message, "[Trigger Context]")
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
 	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
 	assert.Equal(t, "Hello", bc.lastReq.Posts[1].Message)
 }
@@ -395,12 +406,13 @@ func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 
 func TestBuildTriggerContext(t *testing.T) {
 	t.Run("empty trigger", func(t *testing.T) {
-		got := buildTriggerContext(model.TriggerData{})
-		assert.Empty(t, got)
+		meta, userContent := buildTriggerContext(model.TriggerData{})
+		assert.Empty(t, meta)
+		assert.Empty(t, userContent)
 	})
 
-	t.Run("post trigger", func(t *testing.T) {
-		got := buildTriggerContext(model.TriggerData{
+	t.Run("post trigger separates metadata from user content", func(t *testing.T) {
+		meta, userContent := buildTriggerContext(model.TriggerData{
 			Post: &model.SafePost{
 				Id:        "post123",
 				ThreadId:  "thread456",
@@ -417,41 +429,62 @@ func TestBuildTriggerContext(t *testing.T) {
 				Username: "sysadmin",
 			},
 		})
-		assert.Contains(t, got, "[Trigger Context]")
-		assert.Contains(t, got, "Post ID: post123")
-		assert.Contains(t, got, "Thread ID: thread456")
-		assert.Contains(t, got, "Channel ID: chan789")
-		assert.Contains(t, got, "Post Message:\nAlert: server is down")
-		assert.Contains(t, got, "Channel Name: incidents")
-		assert.Contains(t, got, "Channel Display Name: Incidents")
-		assert.Contains(t, got, "Triggering User: sysadmin (ID: user1)")
-		// Channel ID should not be duplicated (already in post section)
-		assert.Equal(t, 1, strings.Count(got, "Channel ID:"))
+		// Metadata (system-safe) should contain only IDs
+		assert.Contains(t, meta, "<trigger_context>")
+		assert.Contains(t, meta, "Post ID: post123")
+		assert.Contains(t, meta, "Thread ID: thread456")
+		assert.Contains(t, meta, "Channel ID: chan789")
+		assert.Contains(t, meta, "Triggering User ID: user1")
+		assert.Equal(t, 1, strings.Count(meta, "Channel ID:"))
+		assert.Contains(t, meta, "Channel Name: incidents")
+		// User-generated fields must NOT be in metadata
+		assert.NotContains(t, meta, "Alert: server is down")
+		assert.NotContains(t, meta, "Incidents")
+		assert.NotContains(t, meta, "sysadmin")
+
+		// User content should contain user-generated fields with untrusted warning
+		assert.Contains(t, userContent, "Alert: server is down")
+		assert.Contains(t, userContent, "Channel Display Name: Incidents")
+		assert.NotContains(t, userContent, "Channel Name: incidents")
+		assert.Contains(t, userContent, "Triggering Username: sysadmin")
+		assert.Contains(t, userContent, "<user_data>")
 	})
 
 	t.Run("schedule trigger", func(t *testing.T) {
-		got := buildTriggerContext(model.TriggerData{
+		meta, userContent := buildTriggerContext(model.TriggerData{
 			Schedule: &model.ScheduleInfo{
 				Interval: "daily",
 				FiredAt:  1700000000000,
 			},
 		})
-		assert.Contains(t, got, "[Trigger Context]")
-		assert.Contains(t, got, "Schedule Interval: daily")
-		assert.Contains(t, got, "Fired At: 1700000000000")
-		assert.NotContains(t, got, "Post ID")
-		assert.NotContains(t, got, "Triggering User")
+		assert.Contains(t, meta, "<trigger_context>")
+		assert.Contains(t, meta, "Schedule Interval: daily")
+		assert.Contains(t, meta, "Fired At: 1700000000000")
+		assert.NotContains(t, meta, "Post ID")
+		assert.NotContains(t, meta, "Triggering User")
+		assert.Empty(t, userContent)
 	})
 
 	t.Run("channel only trigger", func(t *testing.T) {
-		got := buildTriggerContext(model.TriggerData{
+		meta, userContent := buildTriggerContext(model.TriggerData{
 			Channel: &model.SafeChannel{
 				Id:   "chan1",
 				Name: "general",
 			},
 		})
-		assert.Contains(t, got, "Channel ID: chan1")
-		assert.Contains(t, got, "Channel Name: general")
+		assert.Contains(t, meta, "Channel ID: chan1")
+		assert.Contains(t, meta, "Channel Name: general")
+		assert.Empty(t, userContent)
+	})
+
+	t.Run("post with empty message produces no user content", func(t *testing.T) {
+		meta, userContent := buildTriggerContext(model.TriggerData{
+			Post: &model.SafePost{
+				Id: "post123",
+			},
+		})
+		assert.Contains(t, meta, "Post ID: post123")
+		assert.Empty(t, userContent)
 	})
 }
 
@@ -493,20 +526,33 @@ func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 
-	// Should have trigger context + scope instruction system message + user prompt
-	require.Len(t, bc.lastReq.Posts, 2)
-	triggerCtx := bc.lastReq.Posts[0]
-	assert.Equal(t, "system", triggerCtx.Role)
-	assert.Contains(t, triggerCtx.Message, "Post ID: post123")
-	assert.Contains(t, triggerCtx.Message, "Thread ID: thread456")
-	assert.Contains(t, triggerCtx.Message, "Channel ID: chan789")
-	assert.Contains(t, triggerCtx.Message, "Postgres is down in production")
-	assert.Contains(t, triggerCtx.Message, "Triggering User: sysadmin (ID: user1)")
-	assert.Contains(t, triggerCtx.Message, "Channel Name: incidents")
-	assert.Contains(t, triggerCtx.Message, "Complete only the specific task")
+	// Should have: trigger metadata (system) + user-generated post (user) + user prompt (user)
+	require.Len(t, bc.lastReq.Posts, 3)
 
-	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
-	assert.Equal(t, "Handle this incident", bc.lastReq.Posts[1].Message)
+	// System message: only trusted IDs
+	triggerMeta := bc.lastReq.Posts[0]
+	assert.Equal(t, "system", triggerMeta.Role)
+	assert.Contains(t, triggerMeta.Message, "Post ID: post123")
+	assert.Contains(t, triggerMeta.Message, "Thread ID: thread456")
+	assert.Contains(t, triggerMeta.Message, "Channel ID: chan789")
+	assert.Contains(t, triggerMeta.Message, "Triggering User ID: user1")
+	assert.Contains(t, triggerMeta.Message, "Complete only the specific task")
+	assert.Contains(t, triggerMeta.Message, "Channel Name: incidents")
+	// User-generated fields must NOT be in system prompt
+	assert.NotContains(t, triggerMeta.Message, "Postgres is down in production")
+	assert.NotContains(t, triggerMeta.Message, "Incidents")
+	assert.NotContains(t, triggerMeta.Message, "sysadmin")
+
+	// User message: all user-generated content with untrusted warning
+	userGenerated := bc.lastReq.Posts[1]
+	assert.Equal(t, "user", userGenerated.Role)
+	assert.Contains(t, userGenerated.Message, "Postgres is down in production")
+	assert.Contains(t, userGenerated.Message, "Channel Display Name: Incidents")
+	assert.Contains(t, userGenerated.Message, "Triggering Username: sysadmin")
+	assert.Contains(t, userGenerated.Message, "<user_data>")
+
+	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
+	assert.Equal(t, "Handle this incident", bc.lastReq.Posts[2].Message)
 }
 
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {

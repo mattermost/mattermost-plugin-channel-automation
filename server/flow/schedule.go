@@ -143,9 +143,10 @@ func (sm *ScheduleManager) startJob(f *model.Flow) error {
 	flowID := f.ID
 	flowName := f.Name
 	intervalStr := f.Trigger.Schedule.Interval
+	channelID := f.Trigger.Schedule.ChannelID
 
 	job, err := sm.scheduleFn(sm.api, key, waitFn, func() {
-		sm.fireSchedule(flowID, flowName, intervalStr)
+		sm.fireSchedule(flowID, flowName, intervalStr, channelID)
 	})
 	if err != nil {
 		return err
@@ -174,12 +175,13 @@ func (sm *ScheduleManager) stopJob(flowID string) {
 	}
 }
 
-func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval string) {
+func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval, channelID string) {
 	item := &model.WorkItem{
 		ID:       mmmodel.NewId(),
 		FlowID:   flowID,
 		FlowName: flowName,
 		TriggerData: model.TriggerData{
+			Channel: &model.SafeChannel{Id: channelID},
 			Schedule: &model.ScheduleInfo{
 				FiredAt:  time.Now().UnixMilli(),
 				Interval: interval,

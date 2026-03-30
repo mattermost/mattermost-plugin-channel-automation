@@ -500,8 +500,8 @@ func TestStore_ChannelCreatedIndex(t *testing.T) {
 	store, kv := setupStore(t)
 	kvStore := store.(*KVStore)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f2", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
 
 	ids, err := kvStore.GetChannelCreatedFlowIDs()
 	require.NoError(t, err)
@@ -528,8 +528,8 @@ func TestStore_ChannelCreatedIndex_NoDuplicates(t *testing.T) {
 	store, kv := setupStore(t)
 
 	// Save the same channel_created flow twice.
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
 
 	kvStore := store.(*KVStore)
 	ids, err := kvStore.GetChannelCreatedFlowIDs()
@@ -551,7 +551,7 @@ func TestStore_ChannelCreatedIndex_TriggerTypeChange(t *testing.T) {
 	kvStore := store.(*KVStore)
 
 	// Start with a channel_created flow.
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
 
 	ids, err := kvStore.GetChannelCreatedFlowIDs()
 	require.NoError(t, err)
@@ -565,7 +565,7 @@ func TestStore_ChannelCreatedIndex_TriggerTypeChange(t *testing.T) {
 	assert.Nil(t, ids)
 
 	// Change back to channel_created — should add to channel_created index.
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
 
 	ids, err = kvStore.GetChannelCreatedFlowIDs()
 	require.NoError(t, err)
@@ -576,7 +576,7 @@ func TestStore_ChannelCreatedIndex_NoChannelTriggerIndex(t *testing.T) {
 	store, _ := setupStore(t)
 
 	// channel_created flows should NOT appear in the channel-trigger index (they have no channel ID).
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}}}))
 
 	flows, err := store.ListByTriggerChannel("any")
 	require.NoError(t, err)

@@ -173,6 +173,19 @@ func TestExecutionStore_ListFromIndex_SkipsExpired(t *testing.T) {
 	records, err := store.ListByFlow("f1", 3)
 	require.NoError(t, err)
 	assert.Len(t, records, 3)
+
+	// Stale entries should have been compacted from the index.
+	kv.mu.Lock()
+	data := kv.data[flowIndexPrefix+"f1"]
+	kv.mu.Unlock()
+
+	var ids []string
+	require.NoError(t, json.Unmarshal(data, &ids))
+	assert.Len(t, ids, 3, "index should have been compacted to remove stale entries")
+	for _, id := range ids {
+		assert.NotEqual(t, "x2", id)
+		assert.NotEqual(t, "x4", id)
+	}
 }
 
 func TestExecutionStore_PurgeFlow(t *testing.T) {
