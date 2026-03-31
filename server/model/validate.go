@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -67,11 +68,49 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 			return fmt.Errorf("membership_changed trigger action must be \"joined\", \"left\", or empty (both)")
 		}
 	case t.ChannelCreated != nil:
-		// No fields to validate — fires on any new public channel.
+		if t.ChannelCreated.TeamID == "" {
+			return fmt.Errorf("channel_created trigger requires team_id")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}
 	return nil
+}
+
+// ValidateSendMessageChannel checks that every send_message action in the flow
+// targets the same channel that the trigger is bound to. For triggers with a
+// channel_id (message_posted, schedule, membership_changed), the action channel
+// must be either the literal trigger channel ID or a template containing
+// ".Trigger.Channel.Id". For channel_created (no trigger channel ID), only the
+// template form is accepted.
+func ValidateSendMessageChannel(f *Flow) error {
+	triggerChannelID := f.TriggerChannelID()
+
+	for i, a := range f.Actions {
+		if a.SendMessage == nil {
+			continue
+		}
+		chID := a.SendMessage.ChannelID
+		if isTriggerChannelTemplate(chID) {
+			continue
+		}
+		// triggerChannelID is empty for triggers that are not tied to a channel (channel_created).
+		// In that case only the template form is valid — fail early with a clear message.
+		if triggerChannelID == "" {
+			return fmt.Errorf("action %d: send_message channel_id must use the template expression \"{{.Trigger.Channel.Id}}\" for this trigger type", i)
+		}
+		if chID == triggerChannelID {
+			continue
+		}
+		return fmt.Errorf("action %d: send_message channel_id must reference the triggering channel (use %q or the template expression \"{{.Trigger.Channel.Id}}\")", i, triggerChannelID)
+	}
+	return nil
+}
+
+// isTriggerChannelTemplate returns true if s is a Go template expression that
+// references .Trigger.Channel.Id, with any amount of whitespace around it.
+func isTriggerChannelTemplate(s string) bool {
+	return strings.Contains(s, "{{") && strings.Contains(s, ".Trigger.Channel.Id")
 }
 
 // ValidateActions validates a list of actions.

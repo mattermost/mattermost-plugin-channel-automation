@@ -107,7 +107,7 @@ func TestCollectChannelIDs_NoChannels(t *testing.T) {
 
 func TestCollectChannelIDs_ChannelCreatedTrigger(t *testing.T) {
 	f := &Flow{
-		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{}},
+		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []Action{
 			{SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hello"}},
 		},
@@ -119,7 +119,7 @@ func TestCollectChannelIDs_ChannelCreatedTrigger(t *testing.T) {
 
 func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 	f := &Flow{
-		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{}},
+		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []Action{
 			{SendMessage: &SendMessageActionConfig{ChannelID: "ch-notify", Body: "hello"}},
 		},

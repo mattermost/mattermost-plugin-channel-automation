@@ -11,6 +11,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
 
 const (
@@ -57,9 +58,9 @@ func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
 		return
 	}
-	if !h.checkPermission(userID, f) {
-		h.api.LogWarn("Permission denied for execution list", "user_id", userID, "flow_id", flowID)
-		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
+	if permErr := permissions.CheckFlowPermissions(h.api, userID, f); permErr != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, permErr, userID, flowID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -85,6 +86,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := mux.Vars(r)["id"]
+
 	record, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get execution record", "user_id", userID, "execution_id", id, "error", err.Error())
@@ -110,9 +112,9 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 			return
 		}
-	} else if !h.checkPermission(userID, f) {
-		h.api.LogWarn("Permission denied for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
-		httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
+	} else if err := permissions.CheckFlowPermissions(h.api, userID, f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
@@ -148,21 +150,6 @@ func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(records); err != nil {
 		h.api.LogError("Failed to encode response", "error", err.Error())
 	}
-}
-
-// checkPermission returns true if the user is a system admin or has
-// channel admin permissions on every channel referenced by the flow.
-func (h *APIHandler) checkPermission(userID string, f *model.Flow) bool {
-	if h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		return true
-	}
-	for _, chID := range model.CollectChannelIDs(f) {
-		member, appErr := h.api.GetChannelMember(chID, userID)
-		if appErr != nil || !member.SchemeAdmin {
-			return false
-		}
-	}
-	return true
 }
 
 func parseLimit(r *http.Request) int {

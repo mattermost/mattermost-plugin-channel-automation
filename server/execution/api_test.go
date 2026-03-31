@@ -170,6 +170,27 @@ func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
+func TestExecutionAPI_ListByFlow_ChannelCreatedRequiresTeamAdmin(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
+
+	router, _, flowStore := setupAPIHandlerWithCustomMock(t, api)
+	flowStore.flows["f1"] = &model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/flows/f1/executions", nil)
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
 func TestExecutionAPI_ListByFlow_Success(t *testing.T) {
 	router, execStore, flowStore, _ := setupAPIHandler(t)
 

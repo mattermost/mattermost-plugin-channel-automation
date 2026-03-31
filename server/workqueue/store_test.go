@@ -155,14 +155,12 @@ func TestStore_Fail(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 
-	require.NoError(t, store.Fail("w1", "something went wrong"))
+	require.NoError(t, store.Fail("w1"))
 
-	// Item should still exist but be marked as failed.
+	// Item should be deleted from KV.
 	got, err := store.Get("w1")
 	require.NoError(t, err)
-	require.NotNil(t, got)
-	assert.Equal(t, model.WorkItemStatusFailed, got.Status)
-	assert.Equal(t, "something went wrong", got.Error)
+	assert.Nil(t, got)
 
 	// Running index should be empty.
 	kv.mu.Lock()

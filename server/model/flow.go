@@ -35,8 +35,10 @@ type MembershipChangedConfig struct {
 }
 
 // ChannelCreatedConfig holds trigger config for the channel_created trigger type.
-// No fields are needed — the trigger fires on any new public channel.
-type ChannelCreatedConfig struct{}
+// The trigger fires when a new public channel is created on the specified team.
+type ChannelCreatedConfig struct {
+	TeamID string `json:"team_id"`
+}
 
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
