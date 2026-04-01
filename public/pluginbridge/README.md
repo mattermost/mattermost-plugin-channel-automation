@@ -21,6 +21,8 @@ flows, err := client.ListFlows(pluginbridge.ListFlowsOptions{
 })
 
 // CRUD operations.
+// On `ai_prompt` actions, optional `MattermostAccessScope` maps to API JSON `mattermost_access_scope`
+// (team/channel guardrails for the AI plugin bridge).
 created, err := client.CreateFlow(&pluginbridge.Flow{ /* ... */ })
 flow, err    := client.GetFlow("flow-id")
 updated, err := client.UpdateFlow(flow)

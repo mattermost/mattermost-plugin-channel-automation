@@ -460,15 +460,26 @@ Exactly one type-specific config key should be set alongside `id`:
 
 #### AIPromptActionConfig
 
-| Field              | Type                            | Description                                                                                                             |
-| ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `system_prompt`    | string                          | _(optional)_ System prompt template (Go `text/template` syntax). Sent as the first message with role `"system"`.        |
-| `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
-| `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
-| `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| Field                      | Type                                                | Description                                                                                                             |
+| -------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `system_prompt`            | string                                              | _(optional)_ System prompt template (Go `text/template` syntax). Sent as the first message with role `"system"`.        |
+| `prompt`                   | string                                              | The prompt template (Go `text/template` syntax)                                                                         |
+| `provider_type`            | string                                              | Either `"agent"` or `"service"`                                                                                         |
+| `provider_id`              | string                                              | ID of the agent or service to use                                                                                       |
+| `allowed_tools`            | string[]                                            | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| `mattermost_access_scope`  | [MattermostAccessScope](#mattermostaccessscope)     | _(optional)_ Guardrails limiting which teams/channels the agent may access when using tools (bridge `mattermost_access_scope`) |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+
+#### MattermostAccessScope
+
+Optional guardrails passed to the AI plugin bridge. When omitted, no extra restrictions apply. If `allowed_channel_types` or `allowed_channel_ids` is set, `team_id` is required and must be a valid Mattermost team ID.
+
+| Field                     | Type       | Description                                                                                          |
+| ------------------------- | ---------- | ---------------------------------------------------------------------------------------------------- |
+| `team_id`                 | string     | Team to anchor the run to. Required when channel types or channel IDs are restricted.                |
+| `allowed_channel_types`   | string[]   | _(optional)_ Channel type codes: `"O"` (public), `"P"` (private), `"D"` (DM), `"G"` (group message). |
+| `allowed_channel_ids`     | string[]   | _(optional)_ Allowlist of channel IDs (intersected with team and type constraints).                 |
 
 ---
 
@@ -505,6 +516,8 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 ### `ai_prompt`
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
+
+Optional `mattermost_access_scope` restricts which Mattermost teams and channels the agent may touch when running tools (agent completions only).
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 

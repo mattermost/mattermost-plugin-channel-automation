@@ -88,13 +88,26 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
+// MattermostAccessScope restricts which Mattermost teams and channels an AI agent
+// may access during tool use for this action. JSON field matches the AI bridge API.
+type MattermostAccessScope struct {
+	// TeamID anchors the run to a single team. Required when any other scope field is set.
+	TeamID string `json:"team_id"`
+	// AllowedChannelTypes restricts which channel types the run may access.
+	// Valid values: "O" (public), "P" (private), "D" (DM), "G" (group message).
+	AllowedChannelTypes []string `json:"allowed_channel_types,omitempty"`
+	// AllowedChannelIDs is an optional allowlist of specific channel IDs.
+	AllowedChannelIDs []string `json:"allowed_channel_ids,omitempty"`
+}
+
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt          string                 `json:"system_prompt,omitempty"`
+	Prompt                string                 `json:"prompt"`
+	ProviderType          string                 `json:"provider_type"`
+	ProviderID            string                 `json:"provider_id"`
+	AllowedTools          []string               `json:"allowed_tools,omitempty"`
+	MattermostAccessScope *MattermostAccessScope `json:"mattermost_access_scope,omitempty"`
 }
 
 // Action defines a single step in a flow. Exactly one config pointer should be set.

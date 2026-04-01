@@ -75,7 +75,7 @@ A flow that asks an AI agent to classify incoming messages and posts the result:
 | Type           | Description                                                                                                                           |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `send_message` | Posts a message as the plugin bot. Supports `channel_id`, `reply_to_post_id`, `as_bot_id`, and `body` — all templated.                |
-| `ai_prompt`    | Sends a rendered prompt to an AI agent via the Mattermost AI Plugin. Requires `provider_type` and `provider_id` in the action config. |
+| `ai_prompt`    | Sends a rendered prompt to an AI agent via the Mattermost AI Plugin. Requires `provider_type` and `provider_id` in the action config. Optional `mattermost_access_scope` sets team/channel guardrails for agent tool use. |
 
 ## Template Context
 

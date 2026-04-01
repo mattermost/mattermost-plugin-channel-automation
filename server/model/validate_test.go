@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	mmModel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,6 +213,103 @@ func TestValidateActions(t *testing.T) {
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exactly one action config must be set")
+	})
+
+	t.Run("ai_prompt with valid mattermost_access_scope", func(t *testing.T) {
+		teamID := mmModel.NewId()
+		chID := mmModel.NewId()
+		err := ValidateActions([]Action{{
+			ID: "ai-step",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt:       "hello",
+				ProviderType: "agent",
+				ProviderID:   "bot1",
+				MattermostAccessScope: &MattermostAccessScope{
+					TeamID:              teamID,
+					AllowedChannelTypes: []string{"O", "P"},
+					AllowedChannelIDs:   []string{chID},
+				},
+			},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("ai_prompt with invalid mattermost_access_scope", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ai-step",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt:       "hello",
+				ProviderType: "agent",
+				ProviderID:   "bot1",
+				MattermostAccessScope: &MattermostAccessScope{
+					AllowedChannelTypes: []string{"O"},
+				},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "mattermost_access_scope")
+		assert.Contains(t, err.Error(), "team_id is required")
+	})
+}
+
+func TestValidateMattermostAccessScope(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		require.NoError(t, ValidateMattermostAccessScope(nil))
+	})
+
+	t.Run("empty struct", func(t *testing.T) {
+		require.NoError(t, ValidateMattermostAccessScope(&MattermostAccessScope{}))
+	})
+
+	teamID := mmModel.NewId()
+	chID := mmModel.NewId()
+
+	t.Run("team_id only", func(t *testing.T) {
+		require.NoError(t, ValidateMattermostAccessScope(&MattermostAccessScope{TeamID: teamID}))
+	})
+
+	t.Run("full scope", func(t *testing.T) {
+		require.NoError(t, ValidateMattermostAccessScope(&MattermostAccessScope{
+			TeamID:              teamID,
+			AllowedChannelTypes: []string{"O", "P", "D", "G"},
+			AllowedChannelIDs:   []string{chID},
+		}))
+	})
+
+	t.Run("channel types without team_id", func(t *testing.T) {
+		err := ValidateMattermostAccessScope(&MattermostAccessScope{AllowedChannelTypes: []string{"O"}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id is required")
+	})
+
+	t.Run("channel ids without team_id", func(t *testing.T) {
+		err := ValidateMattermostAccessScope(&MattermostAccessScope{AllowedChannelIDs: []string{chID}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id is required")
+	})
+
+	t.Run("invalid team_id", func(t *testing.T) {
+		err := ValidateMattermostAccessScope(&MattermostAccessScope{TeamID: "bad"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id must be a valid ID")
+	})
+
+	t.Run("invalid channel type", func(t *testing.T) {
+		err := ValidateMattermostAccessScope(&MattermostAccessScope{
+			TeamID:              teamID,
+			AllowedChannelTypes: []string{"X"},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid channel type")
+	})
+
+	t.Run("invalid channel id in allowlist", func(t *testing.T) {
+		err := ValidateMattermostAccessScope(&MattermostAccessScope{
+			TeamID:            teamID,
+			AllowedChannelIDs: []string{"not-valid"},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid ID")
 	})
 }
 

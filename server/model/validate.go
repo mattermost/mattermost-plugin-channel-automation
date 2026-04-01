@@ -3,13 +3,57 @@ package model
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
+
+	mmModel "github.com/mattermost/mattermost/server/public/model"
 )
 
 const minScheduleInterval = 1 * time.Hour
 
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+// mattermostAccessScopeValidChannelTypes is the set of recognized Mattermost channel type codes
+// (aligned with the AI plugin's llm.MattermostAccessScope validation).
+var mattermostAccessScopeValidChannelTypes = []string{
+	string(mmModel.ChannelTypeOpen),
+	string(mmModel.ChannelTypePrivate),
+	string(mmModel.ChannelTypeDirect),
+	string(mmModel.ChannelTypeGroup),
+}
+
+// ValidateMattermostAccessScope checks scope fields for internal consistency.
+func ValidateMattermostAccessScope(s *MattermostAccessScope) error {
+	if s == nil {
+		return nil
+	}
+
+	hasChannelTypes := len(s.AllowedChannelTypes) > 0
+	hasChannelIDs := len(s.AllowedChannelIDs) > 0
+
+	if s.TeamID == "" && (hasChannelTypes || hasChannelIDs) {
+		return fmt.Errorf("team_id is required when allowed_channel_types or allowed_channel_ids is set")
+	}
+
+	if s.TeamID != "" && !mmModel.IsValidId(s.TeamID) {
+		return fmt.Errorf("team_id must be a valid ID")
+	}
+
+	for _, ct := range s.AllowedChannelTypes {
+		if !slices.Contains(mattermostAccessScopeValidChannelTypes, ct) {
+			return fmt.Errorf("invalid channel type %q: must be one of %s", ct, strings.Join(mattermostAccessScopeValidChannelTypes, ", "))
+		}
+	}
+
+	for _, id := range s.AllowedChannelIDs {
+		if !mmModel.IsValidId(id) {
+			return fmt.Errorf("allowed_channel_ids contains invalid ID %q", id)
+		}
+	}
+
+	return nil
+}
 
 // ValidateTrigger validates a trigger configuration based on its type.
 // Exactly one trigger type must be set. An optional existing trigger can be
@@ -145,6 +189,11 @@ func ValidateActions(actions []Action) error {
 		}
 		if configCount > 1 {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
+		}
+		if a.AIPrompt != nil && a.AIPrompt.MattermostAccessScope != nil {
+			if err := ValidateMattermostAccessScope(a.AIPrompt.MattermostAccessScope); err != nil {
+				return fmt.Errorf("action %d: mattermost_access_scope: %w", i, err)
+			}
 		}
 	}
 	return nil

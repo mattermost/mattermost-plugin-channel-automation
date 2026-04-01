@@ -47,12 +47,19 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+export interface MattermostAccessScope {
+    team_id: string;
+    allowed_channel_types?: string[];
+    allowed_channel_ids?: string[];
+}
+
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
     allowed_tools?: string[];
+    mattermost_access_scope?: MattermostAccessScope;
 }
 
 export interface Action {

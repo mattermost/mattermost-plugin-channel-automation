@@ -57,11 +57,20 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
+// MattermostAccessScope restricts which Mattermost teams and channels an AI agent
+// may access during tool use for this action.
+type MattermostAccessScope struct {
+	TeamID              string   `json:"team_id"`
+	AllowedChannelTypes []string `json:"allowed_channel_types,omitempty"`
+	AllowedChannelIDs   []string `json:"allowed_channel_ids,omitempty"`
+}
+
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt          string                 `json:"system_prompt,omitempty"`
+	Prompt                string                 `json:"prompt"`
+	ProviderType          string                 `json:"provider_type"`
+	ProviderID            string                 `json:"provider_id"`
+	AllowedTools          []string               `json:"allowed_tools,omitempty"`
+	MattermostAccessScope *MattermostAccessScope `json:"mattermost_access_scope,omitempty"`
 }

@@ -97,6 +97,13 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	if len(cfg.AllowedTools) > 0 {
 		req.AllowedTools = cfg.AllowedTools
 	}
+	if cfg.MattermostAccessScope != nil {
+		req.MattermostAccessScope = &bridgeclient.MattermostAccessScope{
+			TeamID:              cfg.MattermostAccessScope.TeamID,
+			AllowedChannelTypes: cfg.MattermostAccessScope.AllowedChannelTypes,
+			AllowedChannelIDs:   cfg.MattermostAccessScope.AllowedChannelIDs,
+		}
+	}
 	var response string
 	switch cfg.ProviderType {
 	case "agent":
