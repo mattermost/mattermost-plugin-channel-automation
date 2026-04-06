@@ -61,9 +61,9 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
+	SystemPrompt string                        `json:"system_prompt,omitempty"`
+	Prompt       string                        `json:"prompt"`
+	ProviderType string                        `json:"provider_type"`
+	ProviderID   string                        `json:"provider_id"`
 	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
 }
