@@ -47,12 +47,18 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+/** Matches AI bridge allowed_tools entries (server_origin + name from agent tools discovery). */
+export interface AllowedToolRef {
+    server_origin: string;
+    name: string;
+}
+
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
-    allowed_tools?: string[];
+    allowed_tools?: AllowedToolRef[];
 }
 
 export interface Action {
@@ -70,6 +76,7 @@ export interface AIBotInfo {
 export interface AIToolInfo {
     name: string;
     description: string;
+    server_origin?: string;
 }
 
 export interface Flow {

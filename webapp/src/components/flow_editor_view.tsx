@@ -8,7 +8,7 @@ import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
-import type {AIBotInfo, AIToolInfo, Action} from 'types';
+import type {AIBotInfo, AIPromptActionParams, AIToolInfo, Action, AllowedToolRef} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -21,7 +21,7 @@ interface ActionForm {
     system_prompt: string;
     prompt: string;
     provider_id: string;
-    allowed_tools: string;
+    allowed_tool_refs: AllowedToolRef[];
 }
 
 const styles = {
@@ -169,8 +169,31 @@ const styles = {
 const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
+function toolRefKey(r: {server_origin?: string; name: string}): string {
+    return JSON.stringify({server_origin: r.server_origin ?? '', name: r.name});
+}
+
+function normalizeAllowedToolsFromFlow(raw: AIPromptActionParams['allowed_tools']): AllowedToolRef[] {
+    if (!raw || !Array.isArray(raw)) {
+        return [];
+    }
+    const out: AllowedToolRef[] = [];
+    for (const item of raw) {
+        if (typeof item === 'string') {
+            if (item.trim() !== '') {
+                out.push({server_origin: '', name: item.trim()});
+            }
+            continue;
+        }
+        if (item && typeof item === 'object' && typeof item.name === 'string' && item.name !== '') {
+            out.push({server_origin: item.server_origin ?? '', name: item.name});
+        }
+    }
+    return out;
+}
+
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -185,7 +208,7 @@ function actionToForm(a: Action): ActionForm {
             system_prompt: a.ai_prompt.system_prompt ?? '',
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
-            allowed_tools: (a.ai_prompt.allowed_tools ?? []).join(', '),
+            allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
         };
     }
     if (a.send_message) {
@@ -199,10 +222,10 @@ function actionToForm(a: Action): ActionForm {
             system_prompt: '',
             prompt: '',
             provider_id: '',
-            allowed_tools: '',
+            allowed_tool_refs: [],
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tools: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -211,7 +234,7 @@ interface ToolSelectorProps {
     action: ActionForm;
     index: number;
     tools: AIToolInfo[] | undefined;
-    onToggle: (index: number, toolName: string, checked: boolean) => void;
+    onToggle: (index: number, tool: AIToolInfo, checked: boolean) => void;
 }
 
 const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onToggle}) => {
@@ -224,24 +247,27 @@ const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onTogg
     if (tools.length === 0) {
         return <p style={hintStyle}>{'No tools available for this agent.'}</p>;
     }
-    const selected = action.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
+    const selected = new Set(action.allowed_tool_refs.map((r) => toolRefKey(r)));
     return (
         <div style={styles.toolList}>
             {tools.map((tool) => (
                 <label
-                    key={tool.name}
+                    key={toolRefKey(tool)}
                     style={styles.toolItem}
                 >
                     <input
                         type='checkbox'
-                        checked={selected.includes(tool.name)}
-                        onChange={(e) => onToggle(index, tool.name, e.target.checked)}
+                        checked={selected.has(toolRefKey(tool))}
+                        onChange={(e) => onToggle(index, tool, e.target.checked)}
                     />
                     <span>
                         <strong>{tool.name}</strong>
-                        {tool.description && (
+                        {tool.server_origin ? (
+                            <span style={styles.toolDescription}>{` \u2014 ${tool.server_origin}`}</span>
+                        ) : null}
+                        {tool.description ? (
                             <span style={styles.toolDescription}>{` \u2014 ${tool.description}`}</span>
-                        )}
+                        ) : null}
                     </span>
                 </label>
             ))}
@@ -399,14 +425,18 @@ const FlowEditorView: React.FC = () => {
         fetchToolsForAction(index, agentId);
     }, [handleActionChange, fetchToolsForAction]);
 
-    const handleToolToggle = useCallback((index: number, toolName: string, checked: boolean) => {
+    const handleToolToggle = useCallback((index: number, tool: AIToolInfo, checked: boolean) => {
         setActions((prev) => prev.map((a, i) => {
             if (i !== index) {
                 return a;
             }
-            const current = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
-            const updated = checked ? [...current, toolName] : current.filter((t) => t !== toolName);
-            return {...a, allowed_tools: updated.join(', ')};
+            const k = toolRefKey(tool);
+            const ref: AllowedToolRef = {server_origin: tool.server_origin ?? '', name: tool.name};
+            const next = a.allowed_tool_refs.filter((r) => toolRefKey(r) !== k);
+            if (checked) {
+                return {...a, allowed_tool_refs: [...next, ref]};
+            }
+            return {...a, allowed_tool_refs: next};
         }));
     }, []);
 
@@ -433,9 +463,8 @@ const FlowEditorView: React.FC = () => {
                     if (a.system_prompt.trim() && action.ai_prompt) {
                         action.ai_prompt.system_prompt = a.system_prompt;
                     }
-                    const tools = a.allowed_tools.split(',').map((s) => s.trim()).filter(Boolean);
-                    if (tools.length > 0 && action.ai_prompt) {
-                        action.ai_prompt.allowed_tools = tools;
+                    if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
+                        action.ai_prompt.allowed_tools = a.allowed_tool_refs;
                     }
                     return action;
                 }
