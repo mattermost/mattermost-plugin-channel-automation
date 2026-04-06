@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/gorilla/mux v1.8.1
-	github.com/mattermost/mattermost-plugin-ai v1.8.2-0.20260309212133-977a798a287e
+	github.com/mattermost/mattermost-plugin-ai v1.14.1-0.20260406214156-3e89e6d47782
 	github.com/mattermost/mattermost-plugin-starter-template v0.5.1-0.20260301071036-fce92410a612
 	github.com/mattermost/mattermost/server/public v0.2.1
 	github.com/pkg/errors v0.9.1
@@ -110,7 +110,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/mattermost/mattermost-plugin-ai => ../mattermost-plugin-ai
 
 exclude google.golang.org/genproto v0.0.0-20190306203927-b5d61aea6440
