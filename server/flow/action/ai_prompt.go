@@ -11,7 +11,8 @@ import (
 )
 
 const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
-	"Do not take additional follow-up actions beyond what was explicitly requested."
+	"You may call the tools you are given when they are needed to answer accurately (for example, search). " +
+	"Do not take additional follow-up actions beyond what was explicitly requested after you have given the final answer."
 
 // BridgeClient is the interface for AI bridge operations, satisfied by *bridgeclient.Client.
 type BridgeClient interface {
@@ -96,6 +97,13 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 
 	if len(cfg.AllowedTools) > 0 {
 		req.AllowedTools = []bridgeclient.AllowedToolRef(cfg.AllowedTools)
+	}
+	if cfg.MattermostAccessScope != nil {
+		req.MattermostAccessScope = &bridgeclient.MattermostAccessScope{
+			TeamID:              cfg.MattermostAccessScope.TeamID,
+			AllowedChannelTypes: cfg.MattermostAccessScope.AllowedChannelTypes,
+			AllowedChannelIDs:   cfg.MattermostAccessScope.AllowedChannelIDs,
+		}
 	}
 	var response string
 	switch cfg.ProviderType {

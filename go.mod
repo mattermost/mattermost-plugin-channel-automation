@@ -111,6 +111,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/mattermost/mattermost-plugin-ai => ../mattermost-plugin-ai
+replace github.com/mattermost/mattermost-plugin-ai => ../worktrees/mattermost-plugin-ai-automation-guardrails
 
 exclude google.golang.org/genproto v0.0.0-20190306203927-b5d61aea6440

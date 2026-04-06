@@ -263,6 +263,66 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to render template")
 }
 
+func TestAIPromptAction_Execute_MattermostAccessScope(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "scoped"}
+	a := NewAIPromptAction(api, bc)
+
+	teamID := "3r5zxmaqz38bdfe4b6a6qqqreq"
+	chID := "7ktomte13tjokgw9y1q94wir4h"
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Do something",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			MattermostAccessScope: &model.MattermostAccessScope{
+				TeamID:              teamID,
+				AllowedChannelTypes: []string{"O", "P"},
+				AllowedChannelIDs:   []string{chID},
+			},
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "scoped", output.Message)
+	require.NotNil(t, bc.lastReq.MattermostAccessScope)
+	assert.Equal(t, teamID, bc.lastReq.MattermostAccessScope.TeamID)
+	assert.Equal(t, []string{"O", "P"}, bc.lastReq.MattermostAccessScope.AllowedChannelTypes)
+	assert.Equal(t, []string{chID}, bc.lastReq.MattermostAccessScope.AllowedChannelIDs)
+}
+
+func TestAIPromptAction_Execute_NoMattermostAccessScope(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Nil(t, bc.lastReq.MattermostAccessScope)
+}
+
 func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "tool result"}
