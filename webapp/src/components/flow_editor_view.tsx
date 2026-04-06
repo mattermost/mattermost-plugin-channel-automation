@@ -8,7 +8,7 @@ import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
-import type {AIBotInfo, AIPromptActionParams, AIToolInfo, Action, AllowedToolRef} from 'types';
+import type {AIBotInfo, AIToolInfo, Action, AllowedToolRef} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -173,12 +173,14 @@ function toolRefKey(r: {server_origin?: string; name: string}): string {
     return JSON.stringify({server_origin: r.server_origin ?? '', name: r.name});
 }
 
-function normalizeAllowedToolsFromFlow(raw: AIPromptActionParams['allowed_tools']): AllowedToolRef[] {
+// Accept (string | AllowedToolRef)[] at runtime for backward compatibility with
+// legacy JSON payloads where allowed_tools was a plain string array.
+function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
     if (!raw || !Array.isArray(raw)) {
         return [];
     }
     const out: AllowedToolRef[] = [];
-    for (const item of raw) {
+    for (const item of raw as Array<string | AllowedToolRef>) {
         if (typeof item === 'string') {
             if (item.trim() !== '') {
                 out.push({server_origin: '', name: item.trim()});
