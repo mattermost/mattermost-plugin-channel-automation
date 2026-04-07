@@ -512,7 +512,7 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ## Template context
 
-Action templates receive a `AutomationContext` object with the following structure:
+Action templates receive an `AutomationContext` object with the following structure:
 
 ```
 {{.CreatedBy}}          — user ID of the automation creator

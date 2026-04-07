@@ -175,7 +175,7 @@ function toolRefKey(r: {server_origin?: string; name: string}): string {
 
 // Accept (string | AllowedToolRef)[] at runtime for backward compatibility with
 // legacy JSON payloads where allowed_tools was a plain string array.
-function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
+function normalizeAllowedTools(raw: unknown): AllowedToolRef[] {
     if (!raw || !Array.isArray(raw)) {
         return [];
     }
@@ -210,7 +210,7 @@ function actionToForm(a: Action): ActionForm {
             system_prompt: a.ai_prompt.system_prompt ?? '',
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
-            allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
+            allowed_tool_refs: normalizeAllowedTools(a.ai_prompt.allowed_tools),
         };
     }
     if (a.send_message) {
