@@ -1,5 +1,7 @@
 package pluginbridge
 
+import "github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
+
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`
@@ -59,9 +61,9 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt string                        `json:"system_prompt,omitempty"`
+	Prompt       string                        `json:"prompt"`
+	ProviderType string                        `json:"provider_type"`
+	ProviderID   string                        `json:"provider_id"`
+	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
 }

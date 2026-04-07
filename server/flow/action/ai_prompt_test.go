@@ -274,7 +274,10 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 			Prompt:       "Do something",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			AllowedTools: []string{"search", "create_post"},
+			AllowedTools: bridgeclient.AllowedToolsList{
+				{ServerOrigin: "https://mcp.example", Name: "search"},
+				{Name: "create_post"},
+			},
 		},
 	}
 	ctx := &model.FlowContext{
@@ -286,7 +289,10 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "tool result", output.Message)
-	assert.Equal(t, []string{"search", "create_post"}, bc.lastReq.AllowedTools)
+	assert.Equal(t, []bridgeclient.AllowedToolRef{
+		{ServerOrigin: "https://mcp.example", Name: "search"},
+		{Name: "create_post"},
+	}, bc.lastReq.AllowedTools)
 }
 
 func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
