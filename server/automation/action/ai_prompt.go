@@ -95,7 +95,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	}
 
 	if len(cfg.AllowedTools) > 0 {
-		req.AllowedTools = cfg.AllowedTools
+		req.AllowedTools = []bridgeclient.AllowedToolRef(cfg.AllowedTools)
 	}
 	var response string
 	switch cfg.ProviderType {
