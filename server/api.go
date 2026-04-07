@@ -13,8 +13,8 @@ import (
 )
 
 // configProvider adapts the plugin's unexported configuration to the
-// automation.Configuration interface. It calls getConfig on each access so
-// it always reflects the current configuration.
+// configuration interface expected by the API handler. It calls getConfig on
+// each access so it always reflects the current configuration.
 type configProvider struct {
 	getConfig func() *configuration
 }
