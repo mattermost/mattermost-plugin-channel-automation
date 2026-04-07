@@ -433,10 +433,12 @@ Exactly one key should be set, indicating the trigger type:
 
 #### ChannelCreatedConfig
 
-Empty object — no fields required. The trigger fires on any new public channel creation.
+| Field     | Type   | Description                          |
+| --------- | ------ | ------------------------------------ |
+| `team_id` | string | Team to watch for new channels (required) |
 
 ```json
-{ "channel_created": {} }
+{ "channel_created": { "team_id": "team-id-1" } }
 ```
 
 ### Action
@@ -490,7 +492,7 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 ### `channel_created`
 
-Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
+Fires when a new public channel (type `"O"`) is created on the specified team. DMs, group messages, and private channels are excluded. Requires `team_id` in the trigger configuration.
 
 ---
 

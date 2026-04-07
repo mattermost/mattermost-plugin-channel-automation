@@ -17,7 +17,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 - **Message Posted** — Fire an automation when a new message appears in a specific channel. Bot posts, system messages, and webhook posts are automatically excluded.
 - **Schedule** — Fire an automation on a recurring interval (e.g. every 30 minutes, every 24 hours).
 - **Membership Changed** — Fire an automation when a user joins or leaves a specific channel.
-- **Channel Created** — Fire an automation when a new public channel is created anywhere on the server.
+- **Channel Created** — Fire an automation when a new public channel is created in a specific team.
 
 ### Actions
 
