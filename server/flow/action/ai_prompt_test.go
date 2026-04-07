@@ -335,9 +335,9 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
 			AllowedTools: bridgeclient.AllowedToolsList{
-					{ServerOrigin: "https://mcp.example", Name: "search"},
-					{Name: "create_post"},
-				},
+				{ServerOrigin: "https://mcp.example", Name: "search"},
+				{Name: "create_post"},
+			},
 		},
 	}
 	ctx := &model.FlowContext{

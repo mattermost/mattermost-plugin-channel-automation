@@ -181,7 +181,7 @@ function normalizeAllowedToolsFromFlow(raw: AIPromptActionParams['allowed_tools'
         return [];
     }
     const out: AllowedToolRef[] = [];
-    for (const item of raw) {
+    for (const item of raw as Array<string | AllowedToolRef>) {
         if (typeof item === 'string') {
             if (item.trim() !== '') {
                 out.push({server_origin: '', name: item.trim()});
