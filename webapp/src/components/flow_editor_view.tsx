@@ -8,7 +8,7 @@ import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
-import type {AIBotInfo, AIToolInfo, Action, AllowedToolRef} from 'types';
+import type {AIBotInfo, AIPromptActionParams, AIToolInfo, Action, AllowedToolRef} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -22,6 +22,9 @@ interface ActionForm {
     prompt: string;
     provider_id: string;
     allowed_tool_refs: AllowedToolRef[];
+    scope_team_id: string;
+    scope_channel_types: string;
+    scope_channel_ids: string;
 }
 
 const styles = {
@@ -173,9 +176,7 @@ function toolRefKey(r: {server_origin?: string; name: string}): string {
     return JSON.stringify({server_origin: r.server_origin ?? '', name: r.name});
 }
 
-// Accept (string | AllowedToolRef)[] at runtime for backward compatibility with
-// legacy JSON payloads where allowed_tools was a plain string array.
-function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
+function normalizeAllowedToolsFromFlow(raw: AIPromptActionParams['allowed_tools']): AllowedToolRef[] {
     if (!raw || !Array.isArray(raw)) {
         return [];
     }
@@ -195,11 +196,12 @@ function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
 }
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], scope_team_id: '', scope_channel_types: '', scope_channel_ids: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
     if (a.ai_prompt) {
+        const scope = a.ai_prompt.mattermost_access_scope;
         return {
             id: a.id,
             type: 'ai_prompt',
@@ -211,6 +213,9 @@ function actionToForm(a: Action): ActionForm {
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
+            scope_team_id: scope?.team_id ?? '',
+            scope_channel_types: (scope?.allowed_channel_types ?? []).join(', '),
+            scope_channel_ids: (scope?.allowed_channel_ids ?? []).join(', '),
         };
     }
     if (a.send_message) {
@@ -225,9 +230,12 @@ function actionToForm(a: Action): ActionForm {
             prompt: '',
             provider_id: '',
             allowed_tool_refs: [],
+            scope_team_id: '',
+            scope_channel_types: '',
+            scope_channel_ids: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], scope_team_id: '', scope_channel_types: '', scope_channel_ids: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -238,6 +246,43 @@ interface ToolSelectorProps {
     tools: AIToolInfo[] | undefined;
     onToggle: (index: number, tool: AIToolInfo, checked: boolean) => void;
 }
+
+const scopeChannelTypeOptions = [
+    {code: 'O' as const, label: 'Public'},
+    {code: 'P' as const, label: 'Private'},
+    {code: 'D' as const, label: 'Direct (DM)'},
+    {code: 'G' as const, label: 'Group message'},
+];
+
+interface ScopeChannelTypeSelectorProps {
+    action: ActionForm;
+    index: number;
+    onToggle: (index: number, typeCode: string, checked: boolean) => void;
+}
+
+const ScopeChannelTypeSelector: React.FC<ScopeChannelTypeSelectorProps> = ({action, index, onToggle}) => {
+    const selected = action.scope_channel_types.split(',').map((s) => s.trim()).filter(Boolean);
+    return (
+        <div style={styles.toolList}>
+            {scopeChannelTypeOptions.map(({code, label}) => (
+                <label
+                    key={code}
+                    style={styles.toolItem}
+                >
+                    <input
+                        type='checkbox'
+                        checked={selected.includes(code)}
+                        onChange={(e) => onToggle(index, code, e.target.checked)}
+                    />
+                    <span>
+                        <strong>{code}</strong>
+                        {` \u2014 ${label}`}
+                    </span>
+                </label>
+            ))}
+        </div>
+    );
+};
 
 const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onToggle}) => {
     if (!action.provider_id) {
@@ -442,6 +487,18 @@ const FlowEditorView: React.FC = () => {
         }));
     }, []);
 
+    const handleScopeChannelTypeToggle = useCallback((index: number, typeCode: string, checked: boolean) => {
+        setActions((prev) => prev.map((a, i) => {
+            if (i !== index) {
+                return a;
+            }
+            const current = a.scope_channel_types.split(',').map((s) => s.trim()).filter(Boolean);
+            const updated = checked ? [...current, typeCode] : current.filter((t) => t !== typeCode);
+            const ordered = scopeChannelTypeOptions.map(({code}) => code).filter((c) => updated.includes(c));
+            return {...a, scope_channel_types: ordered.join(', ')};
+        }));
+    }, []);
+
     const handleSave = useCallback(async () => {
         setSaving(true);
         setError(null);
@@ -467,6 +524,16 @@ const FlowEditorView: React.FC = () => {
                     }
                     if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = a.allowed_tool_refs;
+                    }
+                    const scopeTeam = a.scope_team_id.trim();
+                    const scopeTypes = a.scope_channel_types.split(',').map((s) => s.trim()).filter(Boolean);
+                    const scopeIds = a.scope_channel_ids.split(',').map((s) => s.trim()).filter(Boolean);
+                    if ((scopeTeam || scopeTypes.length > 0 || scopeIds.length > 0) && action.ai_prompt) {
+                        action.ai_prompt.mattermost_access_scope = {
+                            team_id: scopeTeam,
+                            ...(scopeTypes.length > 0 ? {allowed_channel_types: scopeTypes} : {}),
+                            ...(scopeIds.length > 0 ? {allowed_channel_ids: scopeIds} : {}),
+                        };
                     }
                     return action;
                 }
@@ -737,6 +804,49 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                     onToggle={handleToolToggle}
                                 />
                             </div>
+                            <details style={styles.details}>
+                                <summary style={styles.summary}>{'Mattermost access scope (guardrails, optional)'}</summary>
+                                <p style={hintStyle}>
+                                    {'Restrict which teams and channels the agent may access when using tools. '}
+                                    {'If you set channel types or channel IDs, Team ID is required.'}
+                                </p>
+                                <div style={styles.formGroup}>
+                                    <label
+                                        htmlFor={`action-${index}-scope-team-id`}
+                                        style={styles.label}
+                                    >{'Team ID'}</label>
+                                    <input
+                                        id={`action-${index}-scope-team-id`}
+                                        style={styles.input}
+                                        type='text'
+                                        placeholder='26-character Mattermost team ID'
+                                        value={action.scope_team_id}
+                                        onChange={(e) => handleActionChange(index, 'scope_team_id', e.target.value)}
+                                    />
+                                </div>
+                                <div style={styles.formGroup}>
+                                    <label style={styles.label}>{'Allowed channel types'}</label>
+                                    <ScopeChannelTypeSelector
+                                        action={action}
+                                        index={index}
+                                        onToggle={handleScopeChannelTypeToggle}
+                                    />
+                                </div>
+                                <div style={styles.formGroup}>
+                                    <label
+                                        htmlFor={`action-${index}-scope-channel-ids`}
+                                        style={styles.label}
+                                    >{'Allowed channel IDs (comma-separated)'}</label>
+                                    <input
+                                        id={`action-${index}-scope-channel-ids`}
+                                        style={styles.input}
+                                        type='text'
+                                        placeholder='e.g. channel_id_1, channel_id_2'
+                                        value={action.scope_channel_ids}
+                                        onChange={(e) => handleActionChange(index, 'scope_channel_ids', e.target.value)}
+                                    />
+                                </div>
+                            </details>
                             <details style={styles.details}>
                                 <summary style={styles.summary}>{'Output of this action'}</summary>
                                 <pre style={styles.pre}>{`{
