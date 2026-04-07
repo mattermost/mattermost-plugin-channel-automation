@@ -307,7 +307,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 		}
 		err := ValidateSendMessageChannel(f)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must use the template expression")
+		assert.Contains(t, err.Error(), "must use a template expression")
 	})
 
 	t.Run("schedule trigger enforces channel restriction", func(t *testing.T) {
