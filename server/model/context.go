@@ -2,14 +2,14 @@ package model
 
 import mmmodel "github.com/mattermost/mattermost/server/public/model"
 
-// FlowContext is the runtime context built up during flow execution.
-type FlowContext struct {
+// AutomationContext is the runtime context built up during automation execution.
+type AutomationContext struct {
 	CreatedBy string                `json:"created_by"`
 	Trigger   TriggerData           `json:"trigger"`
 	Steps     map[string]StepOutput `json:"steps"`
 }
 
-// TriggerData holds the data from the event that triggered the flow.
+// TriggerData holds the data from the event that triggered the automation.
 // It uses safe sub-structs that expose only scalar fields needed by
 // templates, preventing PII leakage and blocking method calls on
 // live model objects.

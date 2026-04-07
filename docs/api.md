@@ -6,7 +6,7 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"` if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
+All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the automation (trigger and action channel IDs). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"` if neither condition is met. The list endpoint filters results to only automations the user has permission to view.
 
 ## Endpoints
 
@@ -32,20 +32,20 @@ Returns the client-relevant plugin configuration. Any authenticated user may cal
 
 ---
 
-### List flows
+### List automations
 
 ```
-GET /flows
-GET /flows?channel_id=<channel-id>
+GET /automations
+GET /automations?channel_id=<channel-id>
 ```
 
-Returns all flows visible to the requesting user. System admins see all flows; other users only see flows where they have channel admin permissions on all referenced channels.
+Returns all automations visible to the requesting user. System admins see all automations; other users only see automations where they have channel admin permissions on all referenced channels.
 
 **Query parameters:**
 
 | Parameter    | Type   | Description                                                                                                                               |
 | ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. |
+| `channel_id` | string | _(optional)_ Filter to automations whose trigger targets this channel. |
 
 **Response:** `200 OK`
 
@@ -80,17 +80,17 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 | Status | Body                   |
 | ------ | ---------------------- |
-| 500    | `failed to list flows` |
+| 500    | `failed to list automations` |
 
 ---
 
-### Create flow
+### Create automation
 
 ```
-POST /flows
+POST /automations
 ```
 
-Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
+Creates a new automation. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
 **Request body** (max 1 MB):
 
@@ -117,7 +117,7 @@ Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `cr
 
 **Response:** `201 Created`
 
-The created flow object with all server-assigned fields populated.
+The created automation object with all server-assigned fields populated.
 
 **Errors:**
 
@@ -128,41 +128,41 @@ The created flow object with all server-assigned fields populated.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
-| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 500    | `failed to create flow`                                                                                     |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`                 |
+| 409    | `channel has reached the maximum of <N> automation(s)`                                                            |
+| 500    | `failed to create automation`                                                                                     |
 
 ---
 
-### Get flow
+### Get automation
 
 ```
-GET /flows/{id}
+GET /automations/{id}
 ```
 
-Returns a single flow by ID.
+Returns a single automation by ID.
 
 **Response:** `200 OK`
 
-The flow object.
+The automation object.
 
 **Errors:**
 
 | Status | Body                                                                                        |
 | ------ | ------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
-| 404    | `flow not found`                                                                            |
-| 500    | `failed to get flow`                                                                        |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 404    | `automation not found`                                                                            |
+| 500    | `failed to get automation`                                                                        |
 
 ---
 
-### Update flow
+### Update automation
 
 ```
-PUT /flows/{id}
+PUT /automations/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format).
+Replaces an automation. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format).
 
 **Request body** (max 1 MB):
 
@@ -189,7 +189,7 @@ Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `cre
 
 **Response:** `200 OK`
 
-The updated flow object.
+The updated automation object.
 
 **Errors:**
 
@@ -200,20 +200,20 @@ The updated flow object.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
-| 404    | `flow not found`                                                                                            |
-| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 500    | `failed to update flow`                                                                                     |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`                 |
+| 404    | `automation not found`                                                                                            |
+| 409    | `channel has reached the maximum of <N> automation(s)`                                                            |
+| 500    | `failed to update automation`                                                                                     |
 
 ---
 
-### Delete flow
+### Delete automation
 
 ```
-DELETE /flows/{id}
+DELETE /automations/{id}
 ```
 
-Deletes a flow by ID.
+Deletes an automation by ID.
 
 **Response:** `204 No Content`
 
@@ -221,9 +221,9 @@ Deletes a flow by ID.
 
 | Status | Body                                                                                        |
 | ------ | ------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
-| 404    | `flow not found`                                                                            |
-| 500    | `failed to delete flow`                                                                     |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 404    | `automation not found`                                                                            |
+| 500    | `failed to delete automation`                                                                     |
 
 ---
 
@@ -259,14 +259,14 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 
 ---
 
-### List executions for a flow
+### List executions for an automation
 
 ```
-GET /flows/{flow_id}/executions
-GET /flows/{flow_id}/executions?limit=50
+GET /automations/{automation_id}/executions
+GET /automations/{automation_id}/executions?limit=50
 ```
 
-Returns execution history records for a specific flow, ordered by most recent first. The user must have permission to view the flow (system admin or channel admin on all referenced channels).
+Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation (system admin or channel admin on all referenced channels).
 
 **Query parameters:**
 
@@ -280,8 +280,8 @@ Returns execution history records for a specific flow, ordered by most recent fi
 [
     {
         "id": "exec-id-1",
-        "flow_id": "flow-id-1",
-        "flow_name": "My Flow",
+        "automation_id": "automation-id-1",
+        "automation_name": "My Automation",
         "status": "success",
         "steps": {
             "send-greeting": {
@@ -303,8 +303,8 @@ Returns execution history records for a specific flow, ordered by most recent fi
 | Status | Body                       |
 | ------ | -------------------------- |
 | 403    | `forbidden`                |
-| 404    | `flow not found`           |
-| 500    | `failed to get flow`       |
+| 404    | `automation not found`           |
+| 500    | `failed to get automation`       |
 | 500    | `failed to list executions`|
 
 ---
@@ -315,7 +315,7 @@ Returns execution history records for a specific flow, ordered by most recent fi
 GET /executions/{id}
 ```
 
-Returns a single execution record by ID. The user must have permission to view the parent flow. If the flow has been deleted, only system admins can view the execution.
+Returns a single execution record by ID. The user must have permission to view the parent automation. If the automation has been deleted, only system admins can view the execution.
 
 **Response:** `200 OK`
 
@@ -328,7 +328,7 @@ An [ExecutionRecord](#executionrecord) object.
 | 403    | `forbidden`                 |
 | 404    | `execution not found`       |
 | 500    | `failed to get execution`   |
-| 500    | `failed to get flow`        |
+| 500    | `failed to get automation`        |
 
 ---
 
@@ -339,7 +339,7 @@ GET /executions
 GET /executions?limit=50
 ```
 
-Returns recent execution records across all flows. **System admin only.**
+Returns recent execution records across all automations. **System admin only.**
 
 **Query parameters:**
 
@@ -362,14 +362,14 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ## Data types
 
-### Flow
+### Automation
 
 | Field        | Type                | Description                                                    |
 | ------------ | ------------------- | -------------------------------------------------------------- |
 | `id`         | string              | 26-character unique ID (server-assigned)                       |
 | `name`       | string              | Display name                                                   |
-| `enabled`    | boolean             | Whether the flow is active                                     |
-| `trigger`    | [Trigger](#trigger) | When the flow fires                                            |
+| `enabled`    | boolean             | Whether the automation is active                               |
+| `trigger`    | [Trigger](#trigger) | When the automation fires                                      |
 | `actions`    | [Action](#action)[] | Steps to execute                                               |
 | `created_at` | integer             | Creation time in milliseconds since epoch (server-assigned)    |
 | `updated_at` | integer             | Last update time in milliseconds since epoch (server-assigned) |
@@ -380,8 +380,8 @@ An array of [ExecutionRecord](#executionrecord) objects.
 | Field          | Type                            | Description                                                    |
 | -------------- | ------------------------------- | -------------------------------------------------------------- |
 | `id`           | string                          | Unique execution ID (server-assigned)                          |
-| `flow_id`      | string                          | ID of the flow that was executed                               |
-| `flow_name`    | string                          | Name of the flow at execution time                             |
+| `automation_id`      | string                          | ID of the automation that was executed                         |
+| `automation_name`    | string                          | Name of the automation at execution time                       |
 | `status`       | string                          | `"success"` or `"error"`                                       |
 | `error`        | string                          | _(optional)_ Error message if status is `"error"`              |
 | `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
@@ -445,7 +445,7 @@ Exactly one type-specific config key should be set alongside `id`:
 
 | Field          | Type                                                | Description                                                                                                                        |
 | -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow.   |
+| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the automation.   |
 | `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                       |
 | `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                       |
 
@@ -500,7 +500,7 @@ Fires when a new public channel (type `"O"`) is created. DMs, group messages, an
 
 Posts a message to a channel as the plugin bot user.
 
-The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templates with the flow context.
+The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templates with the automation context.
 
 ### `ai_prompt`
 
@@ -512,12 +512,12 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ## Template context
 
-Action templates receive a `FlowContext` object with the following structure:
+Action templates receive a `AutomationContext` object with the following structure:
 
 ```
-{{.CreatedBy}}          — user ID of the flow creator
+{{.CreatedBy}}          — user ID of the automation creator
 {{.Trigger}}            — trigger event data
-{{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
+{{.Trigger.Post}}       — the post that triggered the automation (message_posted only)
 {{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
 {{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)

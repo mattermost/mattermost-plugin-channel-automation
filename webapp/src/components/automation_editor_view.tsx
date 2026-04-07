@@ -1,4 +1,4 @@
-import {createFlow, getAgentTools, getAIBots, getFlow, updateFlow} from 'client';
+import {createAutomation, getAgentTools, getAIBots, getAutomation, updateAutomation} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 import {useHistory, useParams, useRouteMatch} from 'react-router-dom';
 import type {TriggerFormState} from 'triggers';
@@ -249,13 +249,13 @@ const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onTogg
     );
 };
 
-const FlowEditorView: React.FC = () => {
-    const {id: flowId} = useParams<{id?: string}>();
+const AutomationEditorView: React.FC = () => {
+    const {id: automationId} = useParams<{id?: string}>();
     const history = useHistory();
     const {url} = useRouteMatch();
 
-    // Derive the workflows list URL by stripping the current route suffix
-    const workflowsUrl = url.replace(/\/workflows\/.*$/, '/workflows');
+    // Derive the automations list URL by stripping the current route suffix
+    const automationsUrl = url.replace(/\/automations\/.*$/, '/automations');
 
     const [name, setName] = useState('');
     const [enabled, setEnabled] = useState(false);
@@ -267,7 +267,7 @@ const FlowEditorView: React.FC = () => {
     const [agents, setAgents] = useState<AIBotInfo[]>([]);
     const [agentsError, setAgentsError] = useState<string | null>(null);
     const [agentTools, setAgentTools] = useState<Map<number, AIToolInfo[]>>(new Map());
-    const [loading, setLoading] = useState(Boolean(flowId));
+    const [loading, setLoading] = useState(Boolean(automationId));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -323,23 +323,23 @@ const FlowEditorView: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (!flowId) {
+        if (!automationId) {
             return undefined;
         }
         let cancelled = false;
         (async () => {
             try {
-                const flow = await getFlow(flowId);
+                const automation = await getAutomation(automationId);
                 if (cancelled) {
                     return;
                 }
-                setName(flow.name);
-                setEnabled(flow.enabled);
-                const tt = getTriggerType(flow.trigger);
+                setName(automation.name);
+                setEnabled(automation.enabled);
+                const tt = getTriggerType(automation.trigger);
                 setTriggerType(tt);
                 const config = getTriggerConfig(tt);
-                setTriggerState(config?.fromTrigger(flow.trigger) ?? {});
-                const forms = (flow.actions ?? []).map(actionToForm);
+                setTriggerState(config?.fromTrigger(automation.trigger) ?? {});
+                const forms = (automation.actions ?? []).map(actionToForm);
                 setActions(forms);
                 forms.forEach((a, idx) => {
                     if (a.type === 'ai_prompt' && a.provider_id) {
@@ -348,7 +348,7 @@ const FlowEditorView: React.FC = () => {
                 });
             } catch (err: unknown) {
                 if (!cancelled) {
-                    setError(err instanceof Error ? err.message : 'Failed to load flow');
+                    setError(err instanceof Error ? err.message : 'Failed to load automation');
                 }
             } finally {
                 if (!cancelled) {
@@ -359,7 +359,7 @@ const FlowEditorView: React.FC = () => {
         return () => {
             cancelled = true;
         };
-    }, [flowId, fetchToolsForAction]);
+    }, [automationId, fetchToolsForAction]);
 
     const handleTriggerTypeChange = useCallback((newType: string) => {
         setTriggerType(newType);
@@ -456,17 +456,17 @@ const FlowEditorView: React.FC = () => {
             }),
         };
         try {
-            if (flowId) {
-                await updateFlow(flowId, data);
+            if (automationId) {
+                await updateAutomation(automationId, data);
             } else {
-                await createFlow(data);
+                await createAutomation(data);
             }
-            history.push(workflowsUrl);
+            history.push(automationsUrl);
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to save flow');
+            setError(err instanceof Error ? err.message : 'Failed to save automation');
             setSaving(false);
         }
-    }, [flowId, name, enabled, triggerType, triggerState, triggerConfig, actions, history, workflowsUrl]);
+    }, [automationId, name, enabled, triggerType, triggerState, triggerConfig, actions, history, automationsUrl]);
 
     if (loading) {
         return <p>{'Loading...'}</p>;
@@ -477,20 +477,20 @@ const FlowEditorView: React.FC = () => {
             <div style={styles.header}>
                 <button
                     style={styles.btnSecondary}
-                    onClick={() => history.push(workflowsUrl)}
+                    onClick={() => history.push(automationsUrl)}
                 >
                     {'\u2190 Back'}
                 </button>
-                <h2>{flowId ? 'Edit Flow' : 'Create Flow'}</h2>
+                <h2>{automationId ? 'Edit Automation' : 'Create Automation'}</h2>
             </div>
             {error && <p style={styles.error}>{error}</p>}
             <div style={styles.formGroup}>
                 <label
-                    htmlFor='flow-name'
+                    htmlFor='automation-name'
                     style={styles.label}
                 >{'Name'}</label>
                 <input
-                    id='flow-name'
+                    id='automation-name'
                     style={styles.input}
                     type='text'
                     value={name}
@@ -736,7 +736,7 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                 </button>
                 <button
                     style={styles.btnSecondary}
-                    onClick={() => history.push(workflowsUrl)}
+                    onClick={() => history.push(automationsUrl)}
                 >
                     {'Cancel'}
                 </button>
@@ -745,4 +745,4 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
     );
 };
 
-export default FlowEditorView;
+export default AutomationEditorView;

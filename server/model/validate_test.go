@@ -217,7 +217,7 @@ func TestValidateActions(t *testing.T) {
 
 func TestValidateSendMessageChannel(t *testing.T) {
 	t.Run("message_posted with matching literal channel", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 		}
@@ -225,7 +225,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("message_posted with trigger channel template", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hi"}}},
 		}
@@ -233,7 +233,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("message_posted with trigger channel template with spaces", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{ .Trigger.Channel.Id }}", Body: "hi"}}},
 		}
@@ -241,7 +241,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("message_posted with different literal channel rejected", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch-other", Body: "hi"}}},
 		}
@@ -251,7 +251,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("membership_changed with matching literal channel", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 		}
@@ -259,7 +259,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("channel_created with template", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}", Body: "hi"}}},
 		}
@@ -267,7 +267,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("channel_created with literal channel rejected", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "some-ch", Body: "hi"}}},
 		}
@@ -277,7 +277,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("schedule trigger enforces channel restriction", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "any-ch", Body: "hi"}}},
 		}
@@ -285,7 +285,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("schedule trigger allows matching channel", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 		}
@@ -293,7 +293,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 	})
 
 	t.Run("non-send_message actions are ignored", func(t *testing.T) {
-		f := &Flow{
+		f := &Automation{
 			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
 			Actions: []Action{{ID: "a", AIPrompt: &AIPromptActionConfig{Prompt: "test", ProviderType: "agent", ProviderID: "bot1"}}},
 		}

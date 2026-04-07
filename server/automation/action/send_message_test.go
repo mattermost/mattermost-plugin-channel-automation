@@ -13,7 +13,7 @@ import (
 )
 
 func TestRenderTemplate_SimpleVariable(t *testing.T) {
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
@@ -26,7 +26,7 @@ func TestRenderTemplate_SimpleVariable(t *testing.T) {
 }
 
 func TestRenderTemplate_Conditional(t *testing.T) {
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{DisplayName: "General"},
 		},
@@ -40,7 +40,7 @@ func TestRenderTemplate_Conditional(t *testing.T) {
 }
 
 func TestRenderTemplate_StepReference(t *testing.T) {
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps: map[string]model.StepOutput{
 			"step1": {PostID: "p1", Message: "prev message"},
@@ -54,7 +54,7 @@ func TestRenderTemplate_StepReference(t *testing.T) {
 }
 
 func TestRenderTemplate_InvalidTemplate(t *testing.T) {
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -65,7 +65,7 @@ func TestRenderTemplate_InvalidTemplate(t *testing.T) {
 }
 
 func TestRenderTemplate_ExecutionError(t *testing.T) {
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -97,7 +97,7 @@ func TestSendMessageAction_Execute_Success(t *testing.T) {
 			Body:      "Hello {{.Trigger.User.Username}}",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			User: &model.SafeUser{Id: "user1", Username: "alice"},
@@ -134,7 +134,7 @@ func TestSendMessageAction_Execute_TemplatedChannelID(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{Id: "trigger-ch"},
@@ -172,7 +172,7 @@ func TestSendMessageAction_Execute_ReplyToPostID(t *testing.T) {
 			Body:          "threaded reply",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -208,7 +208,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated(t *testing.T) {
 			Body:          "reply",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Post: &model.SafePost{Id: "trigger-post-id", ChannelId: "ch1"},
@@ -238,7 +238,7 @@ func TestSendMessageAction_Execute_BadReplyToPostIDTemplate(t *testing.T) {
 			Body:          "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -267,7 +267,7 @@ func TestSendMessageAction_Execute_EmptyReplyToPostID(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -293,7 +293,7 @@ func TestSendMessageAction_Execute_BadChannelIDTemplate(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -317,7 +317,7 @@ func TestSendMessageAction_Execute_CreatePostFailure(t *testing.T) {
 			Body:      "Hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -341,7 +341,7 @@ func TestSendMessageAction_Execute_BadTemplate(t *testing.T) {
 			Body:      "{{.Invalid",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -365,7 +365,7 @@ func TestSendMessageAction_Execute_PermissionDenied(t *testing.T) {
 			Body:      "Hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -389,7 +389,7 @@ func TestSendMessageAction_Execute_EmptyCreatedBy(t *testing.T) {
 			Body:      "Hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -397,7 +397,7 @@ func TestSendMessageAction_Execute_EmptyCreatedBy(t *testing.T) {
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
 	assert.Nil(t, output)
-	assert.Contains(t, err.Error(), "flow has no creator")
+	assert.Contains(t, err.Error(), "automation has no creator")
 	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
@@ -422,7 +422,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_ResolvesRootFromChild(t *testin
 			Body:          "threaded reply",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -451,7 +451,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_GetPostFails(t *testing.T) {
 			Body:          "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -484,7 +484,7 @@ func TestSendMessageAction_Execute_ReplyToPostID_Templated_ResolvesRoot(t *testi
 			Body:          "reply",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Post: &model.SafePost{Id: "child-post-id", ChannelId: "ch1"},
@@ -520,7 +520,7 @@ func TestSendMessageAction_Execute_AsBotID_ValidBot(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -549,7 +549,7 @@ func TestSendMessageAction_Execute_AsBotID_NotABot(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -576,7 +576,7 @@ func TestSendMessageAction_Execute_AsBotID_UserNotFound(t *testing.T) {
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -600,7 +600,7 @@ func TestSendMessageAction_Execute_ChannelGuardrail_BlocksDifferentChannel(t *te
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{Id: "ch-trigger"},
@@ -632,7 +632,7 @@ func TestSendMessageAction_Execute_ChannelGuardrail_AllowsSameChannel(t *testing
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{Id: "ch-trigger"},
@@ -663,7 +663,7 @@ func TestSendMessageAction_Execute_ChannelGuardrail_SkippedWhenNoTriggerChannel(
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger:   model.TriggerData{},
 		Steps:     make(map[string]model.StepOutput),
@@ -687,7 +687,7 @@ func TestSendMessageAction_Execute_PermissionDenied_TemplatedChannel(t *testing.
 			Body:      "hello",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		CreatedBy: "creator-id",
 		Trigger: model.TriggerData{
 			Channel: &model.SafeChannel{Id: "resolved-ch"},

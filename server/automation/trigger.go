@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// TriggerService evaluates incoming events against stored flows.
+// TriggerService evaluates incoming events against stored automations.
 type TriggerService struct {
 	store    model.Store
 	registry *Registry
@@ -17,8 +17,8 @@ func NewTriggerService(store model.Store, registry *Registry) *TriggerService {
 	return &TriggerService{store: store, registry: registry}
 }
 
-// FindMatchingFlows returns all enabled flows whose trigger matches the given event.
-func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, error) {
+// FindMatchingAutomations returns all enabled automations whose trigger matches the given event.
+func (t *TriggerService) FindMatchingAutomations(event *model.Event) ([]*model.Automation, error) {
 	handler, ok := t.registry.GetTrigger(event.Type)
 	if !ok {
 		return nil, nil
@@ -32,17 +32,17 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 		if event.Post == nil {
 			return nil, nil
 		}
-		candidateIDs, err = t.store.GetFlowIDsForChannel(event.Post.ChannelId)
+		candidateIDs, err = t.store.GetAutomationIDsForChannel(event.Post.ChannelId)
 	case "membership_changed":
 		if event.Channel == nil {
 			return nil, nil
 		}
-		candidateIDs, err = t.store.GetFlowIDsForMembershipChannel(event.Channel.Id)
+		candidateIDs, err = t.store.GetAutomationIDsForMembershipChannel(event.Channel.Id)
 	case "channel_created":
 		if event.Channel == nil {
 			return nil, nil
 		}
-		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
+		candidateIDs, err = t.store.GetChannelCreatedAutomationIDs()
 	default:
 		return nil, fmt.Errorf("trigger type %q is registered but has no candidate resolution logic", event.Type)
 	}
@@ -54,22 +54,22 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 		return nil, nil
 	}
 
-	var flows []*model.Flow
+	var automations []*model.Automation
 	for _, id := range candidateIDs {
-		f, err := t.store.Get(id)
+		a, err := t.store.Get(id)
 		if err != nil {
 			return nil, err
 		}
-		if f == nil {
+		if a == nil {
 			continue
 		}
-		if !f.Enabled {
+		if !a.Enabled {
 			continue
 		}
-		if !handler.Matches(&f.Trigger, event) {
+		if !handler.Matches(&a.Trigger, event) {
 			continue
 		}
-		flows = append(flows, f)
+		automations = append(automations, a)
 	}
-	return flows, nil
+	return automations, nil
 }

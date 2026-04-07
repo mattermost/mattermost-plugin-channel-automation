@@ -64,7 +64,7 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			Post: &model.SafePost{Message: "Hello world"},
 		},
@@ -101,7 +101,7 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 			ProviderID:   "openai",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
@@ -137,7 +137,7 @@ func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps: map[string]model.StepOutput{
 			"step1": {Message: "previous result"},
@@ -190,7 +190,7 @@ func TestAIPromptAction_Execute_MissingConfig(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			act := &model.Action{ID: "ai1", AIPrompt: tc.aiPrompt}
-			ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+			ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 			output, err := a.Execute(act, ctx)
 			require.Error(t, err)
@@ -212,7 +212,7 @@ func TestAIPromptAction_Execute_NilBridgeClient(t *testing.T) {
 			ProviderID:   "bot",
 		},
 	}
-	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
@@ -233,7 +233,7 @@ func TestAIPromptAction_Execute_BridgeClientError(t *testing.T) {
 			ProviderID:   "bot",
 		},
 	}
-	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
@@ -255,7 +255,7 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 			ProviderID:   "bot",
 		},
 	}
-	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
@@ -277,7 +277,7 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 			AllowedTools: []string{"search", "create_post"},
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -302,7 +302,7 @@ func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -327,7 +327,7 @@ func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			User: &model.SafeUser{Id: "user1", Username: "alice"},
 		},
@@ -365,7 +365,7 @@ func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) 
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{},
 		Steps:   make(map[string]model.StepOutput),
 	}
@@ -396,7 +396,7 @@ func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 			ProviderID:   "bot",
 		},
 	}
-	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)
@@ -501,7 +501,7 @@ func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 			ProviderID:   "ai-bot",
 		},
 	}
-	ctx := &model.FlowContext{
+	ctx := &model.AutomationContext{
 		Trigger: model.TriggerData{
 			Post: &model.SafePost{
 				Id:        "post123",
@@ -568,7 +568,7 @@ func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 			ProviderID:   "bot",
 		},
 	}
-	ctx := &model.FlowContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	output, err := a.Execute(act, ctx)
 	require.Error(t, err)

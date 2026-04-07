@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 

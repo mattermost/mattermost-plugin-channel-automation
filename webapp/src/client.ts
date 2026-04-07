@@ -1,6 +1,6 @@
 import {Client4} from '@mattermost/client';
 
-import type {AIBotInfo, AIToolInfo, Flow} from 'types';
+import type {AIBotInfo, AIToolInfo, Automation} from 'types';
 
 const BASE_URL = '/plugins/com.mattermost.channel-automation/api/v1';
 
@@ -39,31 +39,31 @@ async function doFetch<T>(url: string, options: {method?: string; body?: string}
     return resp.json() as Promise<T>;
 }
 
-export async function getFlows(): Promise<Flow[]> {
-    const flows = await doFetch<Flow[] | null>(`${BASE_URL}/flows`);
-    return flows ?? [];
+export async function getAutomations(): Promise<Automation[]> {
+    const automations = await doFetch<Automation[] | null>(`${BASE_URL}/automations`);
+    return automations ?? [];
 }
 
-export async function getFlow(id: string): Promise<Flow> {
-    return doFetch<Flow>(`${BASE_URL}/flows/${id}`);
+export async function getAutomation(id: string): Promise<Automation> {
+    return doFetch<Automation>(`${BASE_URL}/automations/${id}`);
 }
 
-export async function createFlow(data: Partial<Flow>): Promise<Flow> {
-    return doFetch<Flow>(`${BASE_URL}/flows`, {
+export async function createAutomation(data: Partial<Automation>): Promise<Automation> {
+    return doFetch<Automation>(`${BASE_URL}/automations`, {
         method: 'POST',
         body: JSON.stringify(data),
     });
 }
 
-export async function updateFlow(id: string, data: Partial<Flow>): Promise<Flow> {
-    return doFetch<Flow>(`${BASE_URL}/flows/${id}`, {
+export async function updateAutomation(id: string, data: Partial<Automation>): Promise<Automation> {
+    return doFetch<Automation>(`${BASE_URL}/automations/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
     });
 }
 
-export async function deleteFlow(id: string): Promise<void> {
-    await doFetch<void>(`${BASE_URL}/flows/${id}`, {
+export async function deleteAutomation(id: string): Promise<void> {
+    await doFetch<void>(`${BASE_URL}/automations/${id}`, {
         method: 'DELETE',
     });
 }

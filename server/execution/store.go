@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	recordKeyPrefix = "xh:"
-	flowIndexPrefix = "xhi:"
-	globalIndexKey  = "xh_index"
+	recordKeyPrefix       = "xh:"
+	automationIndexPrefix = "xhi:"
+	globalIndexKey        = "xh_index"
 
-	maxFlowIndexSize   = 50
-	maxGlobalIndexSize = 500
-	recordTTLSeconds   = 7 * 24 * 60 * 60 // 7 days
-	maxMessageBytes    = 16 * 1024        // 16 KB
+	maxAutomationIndexSize = 50
+	maxGlobalIndexSize     = 500
+	recordTTLSeconds       = 7 * 24 * 60 * 60 // 7 days
+	maxMessageBytes        = 16 * 1024        // 16 KB
 )
 
 // Store is a KV-backed execution history store.
@@ -47,9 +47,9 @@ func (s *Store) Save(record *model.ExecutionRecord) error {
 	}
 
 	var indexErr error
-	if err := s.prependToIndex(flowIndexPrefix+record.FlowID, record.ID, maxFlowIndexSize); err != nil {
-		s.api.LogError("Failed to update flow execution index",
-			"flow_id", record.FlowID,
+	if err := s.prependToIndex(automationIndexPrefix+record.AutomationID, record.ID, maxAutomationIndexSize); err != nil {
+		s.api.LogError("Failed to update automation execution index",
+			"automation_id", record.AutomationID,
 			"execution_id", record.ID,
 			"err", err.Error(),
 		)
@@ -84,21 +84,21 @@ func (s *Store) Get(id string) (*model.ExecutionRecord, error) {
 	return &record, nil
 }
 
-// ListByFlow returns recent execution records for a flow.
-func (s *Store) ListByFlow(flowID string, limit int) ([]*model.ExecutionRecord, error) {
-	return s.listFromIndex(flowIndexPrefix+flowID, limit)
+// ListByAutomation returns recent execution records for an automation.
+func (s *Store) ListByAutomation(automationID string, limit int) ([]*model.ExecutionRecord, error) {
+	return s.listFromIndex(automationIndexPrefix+automationID, limit)
 }
 
-// ListRecent returns the most recent execution records across all flows.
+// ListRecent returns the most recent execution records across all automations.
 func (s *Store) ListRecent(limit int) ([]*model.ExecutionRecord, error) {
 	return s.listFromIndex(globalIndexKey, limit)
 }
 
-// PurgeFlow removes the per-flow index for a deleted flow.
+// PurgeAutomation removes the per-automation index for a deleted automation.
 // Individual records are left to expire via TTL.
-func (s *Store) PurgeFlow(flowID string) error {
-	if appErr := s.api.KVDelete(flowIndexPrefix + flowID); appErr != nil {
-		return fmt.Errorf("failed to delete flow execution index for %s: %w", flowID, appErr)
+func (s *Store) PurgeAutomation(automationID string) error {
+	if appErr := s.api.KVDelete(automationIndexPrefix + automationID); appErr != nil {
+		return fmt.Errorf("failed to delete automation execution index for %s: %w", automationID, appErr)
 	}
 	return nil
 }
@@ -189,7 +189,7 @@ func (s *Store) setIndex(key string, ids []string) error {
 	}
 
 	// Indexes share the same TTL as records. Since prependToIndex rewrites
-	// the index on every save, the TTL resets each time. When a flow goes
+	// the index on every save, the TTL resets each time. When an automation goes
 	// inactive, the index expires alongside its last records.
 	data, err := json.Marshal(ids)
 	if err != nil {

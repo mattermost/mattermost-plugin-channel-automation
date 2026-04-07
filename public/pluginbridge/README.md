@@ -2,7 +2,7 @@
 
 `pluginbridge` provides a typed Go client for the Channel Automation plugin API.
 It is designed for use by other Mattermost plugins that need to create, read,
-update, or delete automation flows via inter-plugin HTTP calls.
+update, or delete automations via inter-plugin HTTP calls.
 
 ## Usage
 
@@ -12,19 +12,19 @@ import "github.com/mattermost/mattermost-plugin-channel-automation/public/plugin
 // Create a client bound to a specific user.
 client := pluginbridge.NewClient(pluginAPI, pluginbridge.WithUser("user-id"))
 
-// List all flows (no filters).
-flows, err := client.ListFlows(pluginbridge.ListFlowsOptions{})
+// List all automations (no filters).
+automations, err := client.ListAutomations(pluginbridge.ListAutomationsOptions{})
 
-// List flows filtered by channel.
-flows, err := client.ListFlows(pluginbridge.ListFlowsOptions{
+// List automations filtered by channel.
+automations, err := client.ListAutomations(pluginbridge.ListAutomationsOptions{
     ChannelID: "channel-id",
 })
 
 // CRUD operations.
-created, err := client.CreateFlow(&pluginbridge.Flow{ /* ... */ })
-flow, err    := client.GetFlow("flow-id")
-updated, err := client.UpdateFlow(flow)
-err           = client.DeleteFlow("flow-id")
+created, err    := client.CreateAutomation(&pluginbridge.Automation{ /* ... */ })
+automation, err := client.GetAutomation("automation-id")
+updated, err    := client.UpdateAutomation(automation)
+err              = client.DeleteAutomation("automation-id")
 ```
 
 ### Switching users
@@ -37,13 +37,13 @@ admin := pluginbridge.NewClient(pluginAPI, pluginbridge.WithUser(adminID))
 other := admin.AsUser(regularUserID)
 
 // 'other' makes requests as regularUserID.
-flows, err := other.ListFlows(pluginbridge.ListFlowsOptions{})
+automations, err := other.ListAutomations(pluginbridge.ListAutomationsOptions{})
 ```
 
 ### Error handling
 
 ```go
-_, err := client.GetFlow("missing-id")
+_, err := client.GetAutomation("missing-id")
 if pluginbridge.IsNotFound(err) {
     // handle 404
 }
