@@ -93,7 +93,7 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 	}
 	if err != nil {
 		h.api.LogError("Failed to list automations", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list automations", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list automations", "")
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 
 	if err := h.store.Save(&a); err != nil {
 		h.api.LogError("Failed to create automation", "user_id", a.CreatedBy, "automation_id", a.ID, "automation_name", a.Name, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create automation", "")
 		return
 	}
 
@@ -198,7 +198,7 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 	a, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get automation", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
 	if a == nil {
@@ -230,7 +230,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get automation for update", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
 	if existing == nil {
@@ -296,7 +296,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 
 	if err := h.store.Save(&a); err != nil {
 		h.api.LogError("Failed to update automation", "user_id", userID, "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update automation", "")
 		return
 	}
 
@@ -324,7 +324,7 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 	existing, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get automation for delete", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
 	if existing == nil {
@@ -340,7 +340,7 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 
 	if err := h.store.Delete(id); err != nil {
 		h.api.LogError("Failed to delete automation", "user_id", userID, "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete automation", "")
 		return
 	}
 

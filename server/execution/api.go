@@ -51,7 +51,7 @@ func (h *APIHandler) handleListByAutomation(w http.ResponseWriter, r *http.Reque
 	a, err := h.automationStore.Get(automationID)
 	if err != nil {
 		h.api.LogError("Failed to get automation for execution list", "user_id", userID, "automation_id", automationID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
 	if a == nil {
@@ -68,7 +68,7 @@ func (h *APIHandler) handleListByAutomation(w http.ResponseWriter, r *http.Reque
 	records, err := h.store.ListByAutomation(automationID, limit)
 	if err != nil {
 		h.api.LogError("Failed to list executions", "user_id", userID, "automation_id", automationID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", "")
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	record, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get execution record", "user_id", userID, "execution_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", "")
 		return
 	}
 	if record == nil {
@@ -102,7 +102,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	a, err := h.automationStore.Get(record.AutomationID)
 	if err != nil {
 		h.api.LogError("Failed to get automation for execution", "user_id", userID, "execution_id", id, "automation_id", record.AutomationID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
 	// If the automation was deleted, only system admins can view.
@@ -113,7 +113,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if err := permissions.CheckAutomationPermissions(h.api, userID, a); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, record.AutomationID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -142,7 +142,7 @@ func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	records, err := h.store.ListRecent(limit)
 	if err != nil {
 		h.api.LogError("Failed to list recent executions", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", "")
 		return
 	}
 
