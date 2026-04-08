@@ -6,8 +6,8 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 )
 
-// Flow represents a trigger-action workflow.
-type Flow struct {
+// Automation represents a trigger-action automation.
+type Automation struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
 	Enabled   bool     `json:"enabled"`
@@ -42,7 +42,7 @@ type ChannelCreatedConfig struct {
 	TeamID string `json:"team_id"`
 }
 
-// Trigger defines when a flow should fire. Exactly one config pointer should be set.
+// Trigger defines when an automation should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
@@ -50,17 +50,17 @@ type Trigger struct {
 	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
 }
 
-// TriggerChannelID returns the channel ID from the flow's trigger config,
+// TriggerChannelID returns the channel ID from the automation's trigger config,
 // regardless of trigger type. Returns empty string if no trigger is set.
-func (f *Flow) TriggerChannelID() string {
-	if f.Trigger.MessagePosted != nil {
-		return f.Trigger.MessagePosted.ChannelID
+func (a *Automation) TriggerChannelID() string {
+	if a.Trigger.MessagePosted != nil {
+		return a.Trigger.MessagePosted.ChannelID
 	}
-	if f.Trigger.Schedule != nil {
-		return f.Trigger.Schedule.ChannelID
+	if a.Trigger.Schedule != nil {
+		return a.Trigger.Schedule.ChannelID
 	}
-	if f.Trigger.MembershipChanged != nil {
-		return f.Trigger.MembershipChanged.ChannelID
+	if a.Trigger.MembershipChanged != nil {
+		return a.Trigger.MembershipChanged.ChannelID
 	}
 	return ""
 }
@@ -99,7 +99,7 @@ type AIPromptActionConfig struct {
 	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
 }
 
-// Action defines a single step in a flow. Exactly one config pointer should be set.
+// Action defines a single step in an automation. Exactly one config pointer should be set.
 type Action struct {
 	ID          string                   `json:"id"`
 	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
@@ -118,8 +118,8 @@ func (a *Action) Type() string {
 }
 
 // CollectChannelIDs returns all unique, literal (non-template) channel IDs
-// referenced in the flow's trigger and actions.
-func CollectChannelIDs(f *Flow) []string {
+// referenced in the automation's trigger and actions.
+func CollectChannelIDs(a *Automation) []string {
 	seen := make(map[string]struct{})
 	var ids []string
 
@@ -134,19 +134,19 @@ func CollectChannelIDs(f *Flow) []string {
 		ids = append(ids, id)
 	}
 
-	if f.Trigger.MessagePosted != nil {
-		add(f.Trigger.MessagePosted.ChannelID)
+	if a.Trigger.MessagePosted != nil {
+		add(a.Trigger.MessagePosted.ChannelID)
 	}
-	if f.Trigger.Schedule != nil {
-		add(f.Trigger.Schedule.ChannelID)
+	if a.Trigger.Schedule != nil {
+		add(a.Trigger.Schedule.ChannelID)
 	}
-	if f.Trigger.MembershipChanged != nil {
-		add(f.Trigger.MembershipChanged.ChannelID)
+	if a.Trigger.MembershipChanged != nil {
+		add(a.Trigger.MembershipChanged.ChannelID)
 	}
 
-	for i := range f.Actions {
-		if f.Actions[i].SendMessage != nil {
-			add(f.Actions[i].SendMessage.ChannelID)
+	for i := range a.Actions {
+		if a.Actions[i].SendMessage != nil {
+			add(a.Actions[i].SendMessage.ChannelID)
 		}
 	}
 

@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"io"
@@ -48,7 +48,7 @@ func TestMakeScheduleWaitInterval_StartAtInFuture(t *testing.T) {
 	})
 
 	t.Run("defers to startAt even with stale LastFinished", func(t *testing.T) {
-		// When a job is restarted (flow updated), the cluster KV metadata
+		// When a job is restarted (automation updated), the cluster KV metadata
 		// from the previous job persists. The wait function must still
 		// honour startAt even though LastFinished is non-zero.
 		staleLastFinished := now.Add(-2 * time.Minute)
@@ -131,13 +131,13 @@ func TestScheduleManager_StartSkipsNonScheduleAndDisabled(t *testing.T) {
 	enq := &mockEnqueuer{}
 	notif := &mockNotifier{}
 
-	// Save a message_posted flow and a disabled schedule flow.
-	require.NoError(t, store.Save(&model.Flow{
+	// Save a message_posted automation and a disabled schedule automation.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Enabled: false,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
@@ -146,11 +146,11 @@ func TestScheduleManager_StartSkipsNonScheduleAndDisabled(t *testing.T) {
 	sm := NewScheduleManager(api, store, enq, notif)
 	// We can't call Start() because it would call cluster.Schedule
 	// which needs real KV store. Instead test the filtering logic directly.
-	flows, err := store.ListScheduled()
+	automations, err := store.ListScheduled()
 	require.NoError(t, err)
 
 	var scheduled int
-	for _, f := range flows {
+	for _, f := range automations {
 		if f.Enabled {
 			scheduled++
 		}
@@ -189,7 +189,7 @@ func TestScheduleManager_StopClosesAllJobs(t *testing.T) {
 	sm.mu.Unlock()
 }
 
-func TestScheduleManager_RemoveFlowStopsJob(t *testing.T) {
+func TestScheduleManager_RemoveAutomationStopsJob(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -202,7 +202,7 @@ func TestScheduleManager_RemoveFlowStopsJob(t *testing.T) {
 	sm.jobs["f1"] = j
 	sm.mu.Unlock()
 
-	sm.RemoveFlow("f1")
+	sm.RemoveAutomation("f1")
 
 	assert.True(t, j.closed)
 	sm.mu.Lock()
@@ -211,7 +211,7 @@ func TestScheduleManager_RemoveFlowStopsJob(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestScheduleManager_RemoveFlowNoOp(t *testing.T) {
+func TestScheduleManager_RemoveAutomationNoOp(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -219,11 +219,11 @@ func TestScheduleManager_RemoveFlowNoOp(t *testing.T) {
 
 	sm := NewScheduleManager(api, store, enq, notif)
 
-	// Should not panic when removing a flow that has no job.
-	sm.RemoveFlow("nonexistent")
+	// Should not panic when removing an automation that has no job.
+	sm.RemoveAutomation("nonexistent")
 }
 
-func TestScheduleManager_SyncFlowStopsOldJob(t *testing.T) {
+func TestScheduleManager_SyncAutomationStopsOldJob(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -236,14 +236,14 @@ func TestScheduleManager_SyncFlowStopsOldJob(t *testing.T) {
 	sm.jobs["f1"] = oldJob
 	sm.mu.Unlock()
 
-	// Sync with a non-schedule flow should stop the old job and not add a new one.
-	// The existing flow was a schedule trigger, so the job should be removed.
-	existingFlow := &model.Flow{
+	// Sync with a non-schedule automation should stop the old job and not add a new one.
+	// The existing automation was a schedule trigger, so the job should be removed.
+	existingAutomation := &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
-	err := sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncAutomation(existingAutomation, &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -265,15 +265,15 @@ func TestScheduleManager_FireSchedule(t *testing.T) {
 
 	sm := NewScheduleManager(api, store, enq, notif)
 
-	sm.fireSchedule("flow1", "Test Flow", "1h", "ch1")
+	sm.fireSchedule("automation1", "Test Automation", "1h", "ch1")
 
 	enq.mu.Lock()
 	require.Len(t, enq.items, 1)
 	item := enq.items[0]
 	enq.mu.Unlock()
 
-	assert.Equal(t, "flow1", item.FlowID)
-	assert.Equal(t, "Test Flow", item.FlowName)
+	assert.Equal(t, "automation1", item.AutomationID)
+	assert.Equal(t, "Test Automation", item.AutomationName)
 	require.NotNil(t, item.TriggerData.Schedule)
 	assert.Equal(t, "1h", item.TriggerData.Schedule.Interval)
 	assert.NotZero(t, item.TriggerData.Schedule.FiredAt)
@@ -294,7 +294,7 @@ func fakeScheduleFunc(calls *[]string) scheduleFunc {
 	}
 }
 
-func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
+func TestScheduleManager_SyncAutomationUpdatedIntervalStopsOldJob(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -304,20 +304,20 @@ func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
 	var calls []string
 	sm.scheduleFn = fakeScheduleFunc(&calls)
 
-	// Simulate an existing job for a schedule flow with a 1h interval.
+	// Simulate an existing job for a schedule automation with a 1h interval.
 	oldJob := &fakeCloser{}
 	sm.mu.Lock()
 	sm.jobs["f1"] = oldJob
 	sm.mu.Unlock()
 
-	// SyncFlow with a new interval — the old job must be closed and
+	// SyncAutomation with a new interval — the old job must be closed and
 	// a new job created with the updated parameters.
-	existingFlow := &model.Flow{
+	existingAutomation := &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
-	err := sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncAutomation(existingAutomation, &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h"}},
@@ -335,7 +335,7 @@ func TestScheduleManager_SyncFlowUpdatedIntervalStopsOldJob(t *testing.T) {
 	assert.True(t, exists, "new job must be in the jobs map")
 }
 
-func TestScheduleManager_SyncFlowUpdatedStartAtStopsOldJob(t *testing.T) {
+func TestScheduleManager_SyncAutomationUpdatedStartAtStopsOldJob(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -345,20 +345,20 @@ func TestScheduleManager_SyncFlowUpdatedStartAtStopsOldJob(t *testing.T) {
 	var calls []string
 	sm.scheduleFn = fakeScheduleFunc(&calls)
 
-	// Simulate an existing job for a schedule flow.
+	// Simulate an existing job for a schedule automation.
 	oldJob := &fakeCloser{}
 	sm.mu.Lock()
 	sm.jobs["f1"] = oldJob
 	sm.mu.Unlock()
 
-	// SyncFlow with a new start_at — the old job must be closed and
+	// SyncAutomation with a new start_at — the old job must be closed and
 	// a new one created with the updated parameters.
-	existingFlow := &model.Flow{
+	existingAutomation := &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
-	err := sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncAutomation(existingAutomation, &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}},
@@ -369,7 +369,7 @@ func TestScheduleManager_SyncFlowUpdatedStartAtStopsOldJob(t *testing.T) {
 	require.Len(t, calls, 1, "a new job must be scheduled")
 }
 
-func TestScheduleManager_SyncFlowDisabledStopsJob(t *testing.T) {
+func TestScheduleManager_SyncAutomationDisabledStopsJob(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -383,13 +383,13 @@ func TestScheduleManager_SyncFlowDisabledStopsJob(t *testing.T) {
 	sm.jobs["f1"] = existing
 	sm.mu.Unlock()
 
-	// Sync a disabled schedule flow — should close the old job.
-	existingFlow := &model.Flow{
+	// Sync a disabled schedule automation — should close the old job.
+	existingAutomation := &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	}
-	err := sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncAutomation(existingAutomation, &model.Automation{
 		ID:      "f1",
 		Enabled: false,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
@@ -402,7 +402,7 @@ func TestScheduleManager_SyncFlowDisabledStopsJob(t *testing.T) {
 	sm.mu.Unlock()
 }
 
-func TestScheduleManager_SyncFlowNoOpWhenScheduleUnchanged(t *testing.T) {
+func TestScheduleManager_SyncAutomationNoOpWhenScheduleUnchanged(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -418,14 +418,14 @@ func TestScheduleManager_SyncFlowNoOpWhenScheduleUnchanged(t *testing.T) {
 	sm.jobs["f1"] = existingJob
 	sm.mu.Unlock()
 
-	// Update only the flow name and actions — schedule fields stay the same.
-	existingFlow := &model.Flow{
+	// Update only the automation name and actions — schedule fields stay the same.
+	existingAutomation := &model.Automation{
 		ID:      "f1",
 		Name:    "Old Name",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: 1700000000000}},
 	}
-	err := sm.SyncFlow(existingFlow, &model.Flow{
+	err := sm.SyncAutomation(existingAutomation, &model.Automation{
 		ID:      "f1",
 		Name:    "New Name",
 		Enabled: true,
@@ -444,7 +444,7 @@ func TestScheduleManager_SyncFlowNoOpWhenScheduleUnchanged(t *testing.T) {
 	assert.Equal(t, existingJob, job, "original job reference must be preserved")
 }
 
-func TestScheduleManager_SyncFlowCreateNewSchedule(t *testing.T) {
+func TestScheduleManager_SyncAutomationCreateNewSchedule(t *testing.T) {
 	api := newTestAPI(t)
 	store, _ := setupStore(t)
 	enq := &mockEnqueuer{}
@@ -454,15 +454,15 @@ func TestScheduleManager_SyncFlowCreateNewSchedule(t *testing.T) {
 	var calls []string
 	sm.scheduleFn = fakeScheduleFunc(&calls)
 
-	// Create (nil existing) with a schedule flow — should start a new job.
-	err := sm.SyncFlow(nil, &model.Flow{
+	// Create (nil existing) with a schedule automation — should start a new job.
+	err := sm.SyncAutomation(nil, &model.Automation{
 		ID:      "f1",
 		Enabled: true,
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}},
 	})
 	require.NoError(t, err)
 
-	require.Len(t, calls, 1, "a new job must be created on flow creation")
+	require.Len(t, calls, 1, "a new job must be created on automation creation")
 	assert.Equal(t, scheduleJobKeyPrefix+"f1", calls[0])
 
 	sm.mu.Lock()

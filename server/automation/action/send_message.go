@@ -22,7 +22,7 @@ func NewSendMessageAction(api plugin.API, botUserID string) *SendMessageAction {
 
 func (a *SendMessageAction) Type() string { return "send_message" }
 
-func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext) (*model.StepOutput, error) {
+func (a *SendMessageAction) Execute(action *model.Action, ctx *model.AutomationContext) (*model.StepOutput, error) {
 	cfg := action.SendMessage
 	if cfg == nil {
 		return nil, fmt.Errorf("send_message action has no send_message config")
@@ -39,7 +39,7 @@ func (a *SendMessageAction) Execute(action *model.Action, ctx *model.FlowContext
 	}
 
 	if ctx.CreatedBy == "" {
-		return nil, fmt.Errorf("flow has no creator; cannot verify channel permissions")
+		return nil, fmt.Errorf("automation has no creator; cannot verify channel permissions")
 	}
 	if !a.api.HasPermissionToChannel(ctx.CreatedBy, channelID, mmmodel.PermissionCreatePost) {
 		return nil, fmt.Errorf("user %q does not have permission to post in channel %q", ctx.CreatedBy, channelID)

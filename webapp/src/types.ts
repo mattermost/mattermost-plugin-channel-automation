@@ -79,7 +79,7 @@ export interface AIToolInfo {
     server_origin?: string;
 }
 
-export interface Flow {
+export interface Automation {
     id: string;
     name: string;
     enabled: boolean;

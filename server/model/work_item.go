@@ -13,13 +13,13 @@ const (
 // Successful items are deleted from the KV store; only pending, running,
 // and failed items are persisted.
 type WorkItem struct {
-	ID          string         `json:"id"`
-	FlowID      string         `json:"flow_id"`
-	FlowName    string         `json:"flow_name"`
-	TriggerData TriggerData    `json:"trigger_data"`
-	Status      WorkItemStatus `json:"status"`
-	CreatedAt   int64          `json:"created_at"`
-	StartedAt   int64          `json:"started_at,omitempty"`
-	Error       string         `json:"error,omitempty"`
-	RetryCount  int            `json:"retry_count"`
+	ID             string         `json:"id"`
+	AutomationID   string         `json:"automation_id"`
+	AutomationName string         `json:"automation_name"`
+	TriggerData    TriggerData    `json:"trigger_data"`
+	Status         WorkItemStatus `json:"status"`
+	CreatedAt      int64          `json:"created_at"`
+	StartedAt      int64          `json:"started_at,omitempty"`
+	Error          string         `json:"error,omitempty"`
+	RetryCount     int            `json:"retry_count"`
 }

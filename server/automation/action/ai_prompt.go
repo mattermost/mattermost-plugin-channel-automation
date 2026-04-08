@@ -32,7 +32,7 @@ func NewAIPromptAction(api plugin.API, bridgeClient BridgeClient) *AIPromptActio
 
 func (a *AIPromptAction) Type() string { return "ai_prompt" }
 
-func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (*model.StepOutput, error) {
+func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationContext) (*model.StepOutput, error) {
 	if a.bridgeClient == nil {
 		return nil, fmt.Errorf("agents plugin is not installed or active")
 	}

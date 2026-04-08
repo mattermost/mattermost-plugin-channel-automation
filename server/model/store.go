@@ -1,15 +1,15 @@
 package model
 
-// Store defines the interface for flow persistence.
+// Store defines the interface for automation persistence.
 type Store interface {
-	Get(id string) (*Flow, error)
-	List() ([]*Flow, error)
-	ListByTriggerChannel(channelID string) ([]*Flow, error)
-	ListScheduled() ([]*Flow, error)
-	Save(flow *Flow) error
+	Get(id string) (*Automation, error)
+	List() ([]*Automation, error)
+	ListByTriggerChannel(channelID string) ([]*Automation, error)
+	ListScheduled() ([]*Automation, error)
+	Save(automation *Automation) error
 	Delete(id string) error
 	CountByTriggerChannel(channelID string) (int, error)
-	GetFlowIDsForChannel(channelID string) ([]string, error)
-	GetFlowIDsForMembershipChannel(channelID string) ([]string, error)
-	GetChannelCreatedFlowIDs() ([]string, error)
+	GetAutomationIDsForChannel(channelID string) ([]string, error)
+	GetAutomationIDsForMembershipChannel(channelID string) ([]string, error)
+	GetChannelCreatedAutomationIDs() ([]string, error)
 }

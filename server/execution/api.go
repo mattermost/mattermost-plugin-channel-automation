@@ -21,54 +21,54 @@ const (
 
 // APIHandler provides HTTP handlers for execution history.
 type APIHandler struct {
-	store     model.ExecutionStore
-	flowStore model.Store
-	api       plugin.API
+	store           model.ExecutionStore
+	automationStore model.Store
+	api             plugin.API
 }
 
 // NewAPIHandler creates a new execution API handler.
-func NewAPIHandler(store model.ExecutionStore, flowStore model.Store, api plugin.API) *APIHandler {
-	return &APIHandler{store: store, flowStore: flowStore, api: api}
+func NewAPIHandler(store model.ExecutionStore, automationStore model.Store, api plugin.API) *APIHandler {
+	return &APIHandler{store: store, automationStore: automationStore, api: api}
 }
 
 // RegisterRoutes registers the execution history routes on the given router.
 func (h *APIHandler) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/flows/{flow_id}/executions", h.handleListByFlow).Methods(http.MethodGet)
+	r.HandleFunc("/automations/{automation_id}/executions", h.handleListByAutomation).Methods(http.MethodGet)
 	r.HandleFunc("/executions/{id}", h.handleGet).Methods(http.MethodGet)
 	r.HandleFunc("/executions", h.handleListRecent).Methods(http.MethodGet)
 }
 
-func (h *APIHandler) handleListByFlow(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) handleListByAutomation(w http.ResponseWriter, r *http.Request) {
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
 		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
-	flowID := mux.Vars(r)["flow_id"]
+	automationID := mux.Vars(r)["automation_id"]
 
-	// Check the user has permission to view this flow.
-	f, err := h.flowStore.Get(flowID)
+	// Check the user has permission to view this automation.
+	a, err := h.automationStore.Get(automationID)
 	if err != nil {
-		h.api.LogError("Failed to get flow for execution list", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		h.api.LogError("Failed to get automation for execution list", "user_id", userID, "automation_id", automationID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
-	if f == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
+	if a == nil {
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
 		return
 	}
-	if permErr := permissions.CheckFlowPermissions(h.api, userID, f); permErr != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, permErr, userID, flowID)
+	if permErr := permissions.CheckAutomationPermissions(h.api, userID, a); permErr != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, permErr, userID, automationID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
 	limit := parseLimit(r)
-	records, err := h.store.ListByFlow(flowID, limit)
+	records, err := h.store.ListByAutomation(automationID, limit)
 	if err != nil {
-		h.api.LogError("Failed to list executions", "user_id", userID, "flow_id", flowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
+		h.api.LogError("Failed to list executions", "user_id", userID, "automation_id", automationID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", "")
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	record, err := h.store.Get(id)
 	if err != nil {
 		h.api.LogError("Failed to get execution record", "user_id", userID, "execution_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get execution", "")
 		return
 	}
 	if record == nil {
@@ -98,22 +98,22 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check the user has permission to view the parent flow.
-	f, err := h.flowStore.Get(record.FlowID)
+	// Check the user has permission to view the parent automation.
+	a, err := h.automationStore.Get(record.AutomationID)
 	if err != nil {
-		h.api.LogError("Failed to get flow for execution", "user_id", userID, "execution_id", id, "flow_id", record.FlowID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		h.api.LogError("Failed to get automation for execution", "user_id", userID, "execution_id", id, "automation_id", record.AutomationID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
-	// If the flow was deleted, only system admins can view.
-	if f == nil {
+	// If the automation was deleted, only system admins can view.
+	if a == nil {
 		if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-			h.api.LogWarn("Permission denied for execution (deleted flow)", "user_id", userID, "execution_id", id, "flow_id", record.FlowID)
+			h.api.LogWarn("Permission denied for execution (deleted automation)", "user_id", userID, "execution_id", id, "automation_id", record.AutomationID)
 			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
 			return
 		}
-	} else if err := permissions.CheckFlowPermissions(h.api, userID, f); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+	} else if err := permissions.CheckAutomationPermissions(h.api, userID, a); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, record.AutomationID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -142,7 +142,7 @@ func (h *APIHandler) handleListRecent(w http.ResponseWriter, r *http.Request) {
 	records, err := h.store.ListRecent(limit)
 	if err != nil {
 		h.api.LogError("Failed to list recent executions", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list executions", "")
 		return
 	}
 

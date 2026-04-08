@@ -8,8 +8,8 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// renderTemplate renders a Go text/template string with the given FlowContext.
-func renderTemplate(tmplStr string, ctx *model.FlowContext) (string, error) {
+// renderTemplate renders a Go text/template string with the given AutomationContext.
+func renderTemplate(tmplStr string, ctx *model.AutomationContext) (string, error) {
 	tmpl, err := template.New("action").Parse(tmplStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
