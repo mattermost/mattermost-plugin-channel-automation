@@ -116,6 +116,12 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var a model.Automation
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
@@ -126,11 +132,7 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 	a.ID = mmmodel.NewId()
 	a.CreatedAt = time.Now().UnixMilli()
 	a.UpdatedAt = a.CreatedAt
-	a.CreatedBy = r.Header.Get("Mattermost-User-ID")
-	if a.CreatedBy == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
+	a.CreatedBy = userID
 
 	if a.Name == "" {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
