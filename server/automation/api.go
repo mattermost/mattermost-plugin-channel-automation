@@ -187,6 +187,12 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	a, err := h.store.Get(id)
@@ -197,12 +203,6 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 	}
 	if a == nil {
 		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -219,6 +219,12 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	existing, err := h.store.Get(id)
@@ -269,12 +275,6 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
-
 	// Check permissions on existing automation (must have permission to modify it).
 	if err := permissions.CheckAutomationPermissions(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
@@ -313,6 +313,12 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	existing, err := h.store.Get(id)
@@ -323,12 +329,6 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 	}
 	if existing == nil {
 		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
