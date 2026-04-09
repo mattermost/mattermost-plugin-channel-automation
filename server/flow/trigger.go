@@ -44,7 +44,7 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 		}
 		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
 	case model.TriggerTypeUserJoinedTeam:
-		if event.Team == nil {
+		if event.Team == nil || event.Team.Id == "" {
 			return nil, nil
 		}
 		candidateIDs, err = t.store.GetFlowIDsForUserJoinedTeam(event.Team.Id)

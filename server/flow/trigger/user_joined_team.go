@@ -19,7 +19,10 @@ func (t *UserJoinedTeamTrigger) Matches(trigger *model.Trigger, event *model.Eve
 	if trigger.UserJoinedTeam.TeamID != event.Team.Id {
 		return false
 	}
-	if ut := trigger.UserJoinedTeam.UserType; ut != "" && event.User != nil {
+	if ut := trigger.UserJoinedTeam.UserType; ut != "" {
+		if event.User == nil {
+			return false
+		}
 		if ut == "guest" && !event.User.IsGuest() {
 			return false
 		}

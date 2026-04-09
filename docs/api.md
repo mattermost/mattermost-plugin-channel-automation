@@ -409,7 +409,7 @@ Exactly one key should be set, indicating the trigger type:
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
 | `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
-| `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | _(optional)_ Fires when a user joins any team                     |
+| `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | Fires when a user joins the configured team (`team_id` required)  |
 
 #### MessagePostedConfig
 
@@ -581,12 +581,12 @@ Action templates receive a `FlowContext` object with the following structure:
 
 **Team** _(user_joined_team trigger only):_
 
-| Field        | Access                           |
-| ------------ | -------------------------------- |
-| ID           | `{{.Trigger.Team.Id}}`           |
-| Name         | `{{.Trigger.Team.Name}}`         |
-| Display Name       | `{{.Trigger.Team.DisplayName}}`       |
-| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}`  |
+| Field              | Access                               |
+| ------------------ | ------------------------------------ |
+| ID                 | `{{.Trigger.Team.Id}}`               |
+| Name               | `{{.Trigger.Team.Name}}`             |
+| Display Name       | `{{.Trigger.Team.DisplayName}}`      |
+| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}` |
 
 **Schedule** _(schedule trigger only):_
 
