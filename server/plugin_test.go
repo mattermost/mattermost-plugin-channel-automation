@@ -24,22 +24,72 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
 
-func TestOnActivate_RequiresEnterpriseLicense(t *testing.T) {
-	api := &plugintest.API{}
-	api.On("GetConfig").Return(&mmmodel.Config{
+func TestOnActivate_LicenseGate(t *testing.T) {
+	noDevConfig := &mmmodel.Config{
 		ServiceSettings: mmmodel.ServiceSettings{
 			EnableTesting:   new(bool),
 			EnableDeveloper: new(bool),
 		},
-	})
-	api.On("GetLicense").Return((*mmmodel.License)(nil))
+	}
+	devConfig := &mmmodel.Config{
+		ServiceSettings: mmmodel.ServiceSettings{
+			EnableTesting:   new(true),
+			EnableDeveloper: new(true),
+		},
+	}
+	enterpriseLicense := &mmmodel.License{Features: &mmmodel.Features{}}
 
-	p := &Plugin{}
-	p.SetAPI(api)
+	tests := []struct {
+		name           string
+		config         *mmmodel.Config
+		license        *mmmodel.License
+		wantLicenseErr bool
+	}{
+		{
+			name:           "rejects without license or dev mode",
+			config:         noDevConfig,
+			license:        nil,
+			wantLicenseErr: true,
+		},
+		{
+			name:           "allows with enterprise license",
+			config:         noDevConfig,
+			license:        enterpriseLicense,
+			wantLicenseErr: false,
+		},
+		{
+			name:           "allows in development mode",
+			config:         devConfig,
+			license:        nil,
+			wantLicenseErr: false,
+		},
+	}
 
-	err := p.OnActivate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Enterprise license")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			api := &plugintest.API{}
+			api.On("GetConfig").Return(tc.config)
+			api.On("GetLicense").Return(tc.license)
+			if !tc.wantLicenseErr {
+				// Mock the minimum to reach past the license gate.
+				// EnsureBot calls GetServerVersion before acquiring any mutex;
+				// returning a version below the minimum makes it fail immediately
+				// without touching KV storage, giving us a clean non-license error.
+				api.On("GetServerVersion").Return("4.0.0")
+			}
+
+			p := &Plugin{}
+			p.SetAPI(api)
+
+			err := p.OnActivate()
+			require.Error(t, err)
+			if tc.wantLicenseErr {
+				assert.Contains(t, err.Error(), "Enterprise license")
+			} else {
+				assert.NotContains(t, err.Error(), "Enterprise license")
+			}
+		})
+	}
 }
 
 func TestServeHTTP(t *testing.T) {
