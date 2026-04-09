@@ -24,6 +24,24 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
 
+func TestOnActivate_RequiresEnterpriseLicense(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetConfig").Return(&mmmodel.Config{
+		ServiceSettings: mmmodel.ServiceSettings{
+			EnableTesting:   new(bool),
+			EnableDeveloper: new(bool),
+		},
+	})
+	api.On("GetLicense").Return((*mmmodel.License)(nil))
+
+	p := &Plugin{}
+	p.SetAPI(api)
+
+	err := p.OnActivate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Enterprise license")
+}
+
 func TestServeHTTP(t *testing.T) {
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		api := &plugintest.API{}
