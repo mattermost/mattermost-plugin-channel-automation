@@ -109,7 +109,7 @@ func ValidateSendMessageChannel(f *Flow) error {
 		// (channel_created, user_joined_team). In that case only template
 		// expressions are valid — fail early with a clear message.
 		if triggerChannelID == "" {
-			return fmt.Errorf("action %d: send_message channel_id must use a template expression (e.g. \"{{.Trigger.Channel.Id}}\") for this trigger type", i)
+			return fmt.Errorf("action %d: send_message channel_id must use a template expression (e.g. \"{{.Trigger.Channel.Id}}\" or \"{{.Trigger.Team.DefaultChannelId}}\") for this trigger type", i)
 		}
 		if chID == triggerChannelID {
 			continue

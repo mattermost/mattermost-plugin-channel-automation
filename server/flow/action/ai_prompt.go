@@ -175,7 +175,7 @@ func buildTriggerContext(trigger model.TriggerData) (metadata string, userConten
 			meta.WriteString("Team ID: " + t.Id + "\n")
 		}
 		if t.Name != "" {
-			user.WriteString("Team Name: " + t.Name + "\n")
+			meta.WriteString("Team Name: " + t.Name + "\n")
 		}
 		if t.DisplayName != "" {
 			user.WriteString("Team Display Name: " + t.DisplayName + "\n")
