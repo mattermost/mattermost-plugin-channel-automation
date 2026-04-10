@@ -66,7 +66,7 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 				return fmt.Errorf("team %s not found or not accessible", teamID)
 			}
 			if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
-				return fmt.Errorf("you must be a team admin on the team specified in the user_joined_team trigger")
+				return fmt.Errorf("you must be a team admin on all teams referenced by this flow")
 			}
 		}
 		return nil

@@ -118,6 +118,8 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 
 // NewSafeTeam creates a SafeTeam from a Mattermost Team,
 // stripping all sensitive fields.
+// Note: DefaultChannelId is not part of mmmodel.Team and must be populated
+// separately by the caller (e.g. via API.GetChannelByName).
 func NewSafeTeam(t *mmmodel.Team) *SafeTeam {
 	if t == nil {
 		return nil
