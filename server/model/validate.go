@@ -29,6 +29,9 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 	if t.ChannelCreated != nil {
 		count++
 	}
+	if t.UserJoinedTeam != nil {
+		count++
+	}
 	if count == 0 {
 		return fmt.Errorf("exactly one trigger type must be set")
 	}
@@ -71,6 +74,13 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 		if t.ChannelCreated.TeamID == "" {
 			return fmt.Errorf("channel_created trigger requires team_id")
 		}
+	case t.UserJoinedTeam != nil:
+		if t.UserJoinedTeam.TeamID == "" {
+			return fmt.Errorf("user_joined_team trigger requires team_id")
+		}
+		if ut := t.UserJoinedTeam.UserType; ut != "" && ut != "user" && ut != "guest" {
+			return fmt.Errorf("user_joined_team trigger user_type must be \"user\", \"guest\", or empty (both)")
+		}
 	default:
 		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}
@@ -81,8 +91,9 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 // targets the same channel that the trigger is bound to. For triggers with a
 // channel_id (message_posted, schedule, membership_changed), the action channel
 // must be either the literal trigger channel ID or a template containing
-// ".Trigger.Channel.Id". For channel_created (no trigger channel ID), only the
-// template form is accepted.
+// ".Trigger.Channel.Id". For triggers without a bound channel (channel_created,
+// user_joined_team), any Go template expression is accepted (e.g.
+// "{{.Trigger.Channel.Id}}" or "{{.Trigger.Team.DefaultChannelId}}").
 func ValidateSendMessageChannel(f *Flow) error {
 	triggerChannelID := f.TriggerChannelID()
 
@@ -94,10 +105,11 @@ func ValidateSendMessageChannel(f *Flow) error {
 		if isTriggerChannelTemplate(chID) {
 			continue
 		}
-		// triggerChannelID is empty for triggers that are not tied to a channel (channel_created).
-		// In that case only the template form is valid — fail early with a clear message.
+		// triggerChannelID is empty for triggers that are not tied to a channel
+		// (channel_created, user_joined_team). In that case only template
+		// expressions are valid — fail early with a clear message.
 		if triggerChannelID == "" {
-			return fmt.Errorf("action %d: send_message channel_id must use the template expression \"{{.Trigger.Channel.Id}}\" for this trigger type", i)
+			return fmt.Errorf("action %d: send_message channel_id must use a template expression (e.g. \"{{.Trigger.Channel.Id}}\" or \"{{.Trigger.Team.DefaultChannelId}}\") for this trigger type", i)
 		}
 		if chID == triggerChannelID {
 			continue
@@ -108,9 +120,10 @@ func ValidateSendMessageChannel(f *Flow) error {
 }
 
 // isTriggerChannelTemplate returns true if s is a Go template expression that
-// references .Trigger.Channel.Id, with any amount of whitespace around it.
+// resolves to a channel ID at runtime. This includes .Trigger.Channel.Id,
+// .Trigger.Team.DefaultChannelId, or any other template referencing trigger data.
 func isTriggerChannelTemplate(s string) bool {
-	return strings.Contains(s, "{{") && strings.Contains(s, ".Trigger.Channel.Id")
+	return strings.Contains(s, "{{") && (strings.Contains(s, ".Trigger.") || strings.Contains(s, ".Steps"))
 }
 
 // ValidateActions validates a list of actions.

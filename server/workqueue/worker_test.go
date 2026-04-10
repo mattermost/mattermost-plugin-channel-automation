@@ -125,6 +125,10 @@ func (s *testFlowStore) GetChannelCreatedFlowIDs() ([]string, error) {
 	return nil, nil
 }
 
+func (s *testFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) {
+	return nil, nil
+}
+
 func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool, *Store, *testFlowStore) {
 	t.Helper()
 

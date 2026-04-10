@@ -18,12 +18,19 @@ type Flow struct {
 // No fields are needed — the trigger fires on any new public channel.
 type ChannelCreatedConfig struct{}
 
+// UserJoinedTeamConfig holds trigger config for the user_joined_team trigger type.
+type UserJoinedTeamConfig struct {
+	TeamID   string `json:"team_id"`
+	UserType string `json:"user_type,omitempty"` // "user", "guest", or "" (both)
+}
+
 // Trigger defines when a flow should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
 	MembershipChanged *MembershipChangedConfig `json:"membership_changed,omitempty"`
 	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
+	UserJoinedTeam    *UserJoinedTeamConfig    `json:"user_joined_team,omitempty"`
 }
 
 // MembershipChangedConfig holds trigger config for the membership_changed trigger type.
