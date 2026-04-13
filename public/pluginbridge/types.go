@@ -1,6 +1,6 @@
 package pluginbridge
 
-import "github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
+import "github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 
 // Flow represents a trigger-action workflow.
 type Flow struct {
@@ -59,20 +59,12 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
-// MattermostAccessScope restricts which Mattermost teams and channels an AI agent
-// may access during tool use for this action.
-type MattermostAccessScope struct {
-	TeamID              string   `json:"team_id"`
-	AllowedChannelTypes []string `json:"allowed_channel_types,omitempty"`
-	AllowedChannelIDs   []string `json:"allowed_channel_ids,omitempty"`
-}
-
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt          string                        `json:"system_prompt,omitempty"`
-	Prompt                string                        `json:"prompt"`
-	ProviderType          string                        `json:"provider_type"`
-	ProviderID            string                        `json:"provider_id"`
-	AllowedTools          bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
-	MattermostAccessScope *MattermostAccessScope        `json:"mattermost_access_scope,omitempty"`
+	SystemPrompt          string                              `json:"system_prompt,omitempty"`
+	Prompt                string                              `json:"prompt"`
+	ProviderType          string                              `json:"provider_type"`
+	ProviderID            string                              `json:"provider_id"`
+	AllowedTools          AllowedToolsList                    `json:"allowed_tools,omitempty"`
+	MattermostAccessScope *bridgeclient.MattermostAccessScope `json:"mattermost_access_scope,omitempty"`
 }

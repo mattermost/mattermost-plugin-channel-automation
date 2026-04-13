@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mattermost/mattermost-plugin-channel-automation/public/pluginbridge"
 )
 
 func TestCollectChannelIDs_LiteralChannels(t *testing.T) {
@@ -156,7 +157,7 @@ func TestFlowJSON_AIPrompt_AllowedToolsLegacyStringArray(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, f.Actions, 1)
 	require.NotNil(t, f.Actions[0].AIPrompt)
-	assert.Equal(t, bridgeclient.AllowedToolsList{
+	assert.Equal(t, pluginbridge.AllowedToolsList{
 		{Name: "search"},
 		{Name: "create_post"},
 	}, f.Actions[0].AIPrompt.AllowedTools)

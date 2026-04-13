@@ -55,7 +55,6 @@ export interface AllowedToolRef {
 
 export interface MattermostAccessScope {
     team_id: string;
-    allowed_channel_types?: string[];
     allowed_channel_ids?: string[];
 }
 

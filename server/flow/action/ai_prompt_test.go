@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
-
+	"github.com/mattermost/mattermost-plugin-channel-automation/public/pluginbridge"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -277,10 +277,9 @@ func TestAIPromptAction_Execute_MattermostAccessScope(t *testing.T) {
 			Prompt:       "Do something",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			MattermostAccessScope: &model.MattermostAccessScope{
-				TeamID:              teamID,
-				AllowedChannelTypes: []string{"O", "P"},
-				AllowedChannelIDs:   []string{chID},
+			MattermostAccessScope: &bridgeclient.MattermostAccessScope{
+				TeamID:            teamID,
+				AllowedChannelIDs: []string{chID},
 			},
 		},
 	}
@@ -295,7 +294,6 @@ func TestAIPromptAction_Execute_MattermostAccessScope(t *testing.T) {
 	assert.Equal(t, "scoped", output.Message)
 	require.NotNil(t, bc.lastReq.MattermostAccessScope)
 	assert.Equal(t, teamID, bc.lastReq.MattermostAccessScope.TeamID)
-	assert.Equal(t, []string{"O", "P"}, bc.lastReq.MattermostAccessScope.AllowedChannelTypes)
 	assert.Equal(t, []string{chID}, bc.lastReq.MattermostAccessScope.AllowedChannelIDs)
 }
 
@@ -334,7 +332,7 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 			Prompt:       "Do something",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			AllowedTools: bridgeclient.AllowedToolsList{
+			AllowedTools: pluginbridge.AllowedToolsList{
 				{ServerOrigin: "https://mcp.example", Name: "search"},
 				{Name: "create_post"},
 			},

@@ -22,7 +22,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 ### Actions
 
 - **Send Message** — Post a message as the plugin bot, with optional threading support.
-- **AI Prompt** — Send a rendered prompt to an AI agent provided by the [Mattermost AI Plugin](https://github.com/mattermost/mattermost-plugin-ai) and capture the response.
+- **AI Prompt** — Send a rendered prompt to an AI agent provided by the [Mattermost AI Plugin](https://github.com/mattermost/mattermost-plugin-agents) and capture the response.
 
 ## Getting Started
 
