@@ -12,6 +12,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/bot"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/command"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
@@ -40,6 +41,7 @@ type Plugin struct {
 	bridgeClient *bridgeclient.Client
 
 	botUserID       string
+	botManager      *bot.Manager
 	registry        *flow.Registry
 	flowStore       model.Store
 	historyStore    model.ExecutionStore
@@ -68,6 +70,8 @@ func (p *Plugin) OnActivate() error {
 		return err
 	}
 	p.botUserID = botUserID
+
+	p.botManager = bot.NewManager(p.API)
 
 	bc := bridgeclient.NewClient(p.API)
 	p.bridgeClient = bc
@@ -115,7 +119,7 @@ func (p *Plugin) OnActivate() error {
 		maxWorkers = 4
 	}
 
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, p.API, maxWorkers)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, p.botManager, p.API, maxWorkers)
 	p.workerPool.Start()
 
 	// Start schedule manager after worker pool so scheduled items can be processed.
@@ -380,6 +384,50 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 	}
 
 	p.workerPool.Notify()
+}
+
+// TeamMemberWillBeAdded restricts managed team bots to their assigned team.
+func (p *Plugin) TeamMemberWillBeAdded(_ *plugin.Context, teamMember *mmmodel.TeamMember) (*mmmodel.TeamMember, string) {
+	if !p.botManager.IsTeamBot(teamMember.UserId) {
+		return nil, ""
+	}
+
+	assignedTeam, err := p.botManager.GetTeamForBot(teamMember.UserId)
+	if err != nil {
+		p.API.LogError("Failed to look up team for bot in TeamMemberWillBeAdded",
+			"bot_user_id", teamMember.UserId,
+			"err", err.Error(),
+		)
+		return nil, "internal error checking team bot restrictions"
+	}
+
+	if teamMember.TeamId != assignedTeam {
+		return nil, "this automation bot is restricted to a single team"
+	}
+
+	return nil, ""
+}
+
+// ChannelMemberWillBeAdded restricts managed team bots to public channels.
+func (p *Plugin) ChannelMemberWillBeAdded(_ *plugin.Context, channelMember *mmmodel.ChannelMember) (*mmmodel.ChannelMember, string) {
+	if !p.botManager.IsTeamBot(channelMember.UserId) {
+		return nil, ""
+	}
+
+	channel, appErr := p.API.GetChannel(channelMember.ChannelId)
+	if appErr != nil {
+		p.API.LogError("Failed to get channel in ChannelMemberWillBeAdded",
+			"channel_id", channelMember.ChannelId,
+			"err", appErr.Error(),
+		)
+		return nil, "internal error checking channel type for automation bot"
+	}
+
+	if channel.Type != mmmodel.ChannelTypeOpen {
+		return nil, "automation bots can only be added to public channels"
+	}
+
+	return nil, ""
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

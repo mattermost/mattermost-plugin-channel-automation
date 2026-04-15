@@ -17,13 +17,15 @@ func NewFlowExecutor(registry *Registry) *FlowExecutor {
 }
 
 // Execute runs all actions in the flow sequentially, building up the FlowContext.
+// teamBotUserID is the resolved bot user ID for flows with a TeamBotConfig; empty otherwise.
 // Returns the context (with any partial step outputs) and an error on the first
 // failure or if an action type is unknown.
-func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) (*model.FlowContext, error) {
+func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData, teamBotUserID string) (*model.FlowContext, error) {
 	ctx := &model.FlowContext{
-		CreatedBy: f.CreatedBy,
-		Trigger:   triggerData,
-		Steps:     make(map[string]model.StepOutput),
+		CreatedBy:     f.CreatedBy,
+		TeamBotUserID: teamBotUserID,
+		Trigger:       triggerData,
+		Steps:         make(map[string]model.StepOutput),
 	}
 
 	for _, action := range f.Actions {

@@ -31,7 +31,7 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration}, p.botManager)
 	flowAPI.RegisterRoutes(apiRouter)
 
 	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)
@@ -39,6 +39,7 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	apiRouter.HandleFunc("/config", p.handleGetClientConfig).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/teams/{team_id}/bot", p.handleGetTeamBot).Methods(http.MethodGet)
 
 	return router
 }
@@ -80,6 +81,40 @@ func (p *Plugin) handleGetAgentTools(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(tools); err != nil {
 		p.API.LogError("Failed to encode response", "user_id", userID, "agent_id", agentID, "error", err.Error())
+	}
+}
+
+// teamBotResponse is the JSON response for the team bot endpoint.
+type teamBotResponse struct {
+	BotUserID string `json:"bot_user_id"`
+	TeamID    string `json:"team_id"`
+	Username  string `json:"username"`
+}
+
+// handleGetTeamBot returns (or creates) the automation bot for a team.
+func (p *Plugin) handleGetTeamBot(w http.ResponseWriter, r *http.Request) {
+	teamID := mux.Vars(r)["team_id"]
+
+	botUserID, err := p.botManager.EnsureTeamBot(teamID)
+	if err != nil {
+		p.API.LogError("Failed to ensure team bot", "team_id", teamID, "err", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create or retrieve team bot", err.Error())
+		return
+	}
+
+	botUser, appErr := p.API.GetUser(botUserID)
+	if appErr != nil {
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get bot user", appErr.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(teamBotResponse{
+		BotUserID: botUserID,
+		TeamID:    teamID,
+		Username:  botUser.Username,
+	}); err != nil {
+		p.API.LogError("Failed to encode team bot response", "error", err.Error())
 	}
 }
 

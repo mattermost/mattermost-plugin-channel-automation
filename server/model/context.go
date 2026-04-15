@@ -4,9 +4,10 @@ import mmmodel "github.com/mattermost/mattermost/server/public/model"
 
 // FlowContext is the runtime context built up during flow execution.
 type FlowContext struct {
-	CreatedBy string                `json:"created_by"`
-	Trigger   TriggerData           `json:"trigger"`
-	Steps     map[string]StepOutput `json:"steps"`
+	CreatedBy      string                `json:"created_by"`
+	TeamBotUserID  string                `json:"team_bot_user_id,omitempty"`
+	Trigger        TriggerData           `json:"trigger"`
+	Steps          map[string]StepOutput `json:"steps"`
 }
 
 // TriggerData holds the data from the event that triggered the flow.

@@ -88,9 +88,14 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		channelID = ctx.Trigger.Channel.Id
 	}
 
+	userID := ctx.CreatedBy
+	if cfg.ExecutionMode == "team_bot" && ctx.TeamBotUserID != "" {
+		userID = ctx.TeamBotUserID
+	}
+
 	req := bridgeclient.CompletionRequest{
 		Posts:     posts,
-		UserID:    ctx.CreatedBy,
+		UserID:    userID,
 		ChannelID: channelID,
 	}
 

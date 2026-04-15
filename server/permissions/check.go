@@ -74,6 +74,48 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 	return nil
 }
 
+// ValidateTeamBotConfig checks that a flow's TeamBotConfig is structurally
+// valid and that execution_mode values on actions are recognized. Channel IDs
+// in TeamBotConfig are not validated here -- they are used at runtime to add
+// the bot to channels before execution, and the ChannelMemberWillBeAdded hook
+// enforces the public-channel restriction.
+func ValidateTeamBotConfig(api plugin.API, f *model.Flow) error {
+	hasTeamBotAction := false
+	for _, a := range f.Actions {
+		if a.AIPrompt == nil {
+			continue
+		}
+		switch a.AIPrompt.ExecutionMode {
+		case "", "creator":
+			// valid
+		case "team_bot":
+			hasTeamBotAction = true
+		default:
+			return fmt.Errorf("action %q has invalid execution_mode %q; must be \"team_bot\" or \"creator\"", a.ID, a.AIPrompt.ExecutionMode)
+		}
+	}
+
+	if f.TeamBotConfig == nil {
+		if hasTeamBotAction {
+			return fmt.Errorf("flow has actions with execution_mode \"team_bot\" but no team_bot_config")
+		}
+		return nil
+	}
+
+	if f.TeamBotConfig.TeamID == "" {
+		return fmt.Errorf("team_bot_config.team_id is required")
+	}
+
+	if _, appErr := api.GetTeam(f.TeamBotConfig.TeamID); appErr != nil {
+		if appErr.StatusCode >= http.StatusInternalServerError {
+			return fmt.Errorf("failed to verify team_bot_config team: %w", appErr)
+		}
+		return fmt.Errorf("team %s not found or not accessible", f.TeamBotConfig.TeamID)
+	}
+
+	return nil
+}
+
 // HandlePermissionError determines the appropriate HTTP status and log level
 // based on whether the permission check failed due to an API/infrastructure
 // error (500) or the user genuinely lacking permissions (403).

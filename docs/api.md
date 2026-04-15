@@ -259,6 +259,38 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 
 ---
 
+### Get or create team bot
+
+```
+GET /teams/{team_id}/bot
+```
+
+Returns the automation bot for a team, creating one if it does not already exist. The bot is restricted to public channels on the specified team via plugin hooks (`TeamMemberWillBeAdded`, `ChannelMemberWillBeAdded`).
+
+**Response:** `200 OK`
+
+```json
+{
+    "bot_user_id": "bot-user-id",
+    "team_id": "team-id",
+    "username": "automation-myteam"
+}
+```
+
+| Field         | Type   | Description                      |
+| ------------- | ------ | -------------------------------- |
+| `bot_user_id` | string | User ID of the automation bot    |
+| `team_id`     | string | Team the bot is scoped to        |
+| `username`    | string | Username of the bot              |
+
+**Errors:**
+
+| Status | Body                                        |
+| ------ | ------------------------------------------- |
+| 500    | `failed to create or retrieve team bot`     |
+
+---
+
 ### List executions for a flow
 
 ```
@@ -364,16 +396,17 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ### Flow
 
-| Field        | Type                | Description                                                    |
-| ------------ | ------------------- | -------------------------------------------------------------- |
-| `id`         | string              | 26-character unique ID (server-assigned)                       |
-| `name`       | string              | Display name                                                   |
-| `enabled`    | boolean             | Whether the flow is active                                     |
-| `trigger`    | [Trigger](#trigger) | When the flow fires                                            |
-| `actions`    | [Action](#action)[] | Steps to execute                                               |
-| `created_at` | integer             | Creation time in milliseconds since epoch (server-assigned)    |
-| `updated_at` | integer             | Last update time in milliseconds since epoch (server-assigned) |
-| `created_by` | string              | User ID of the creator (server-assigned)                       |
+| Field              | Type                                | Description                                                    |
+| ------------------ | ----------------------------------- | -------------------------------------------------------------- |
+| `id`               | string                              | 26-character unique ID (server-assigned)                       |
+| `name`             | string                              | Display name                                                   |
+| `enabled`          | boolean                             | Whether the flow is active                                     |
+| `trigger`          | [Trigger](#trigger)                 | When the flow fires                                            |
+| `actions`          | [Action](#action)[]                 | Steps to execute                                               |
+| `team_bot_config`  | [TeamBotConfig](#teambotconfig)     | _(optional)_ Team-scoped bot configuration                     |
+| `created_at`       | integer                             | Creation time in milliseconds since epoch (server-assigned)    |
+| `updated_at`       | integer                             | Last update time in milliseconds since epoch (server-assigned) |
+| `created_by`       | string                              | User ID of the creator (server-assigned)                       |
 
 ### ExecutionRecord
 
@@ -398,6 +431,17 @@ An array of [ExecutionRecord](#executionrecord) objects.
 | `channel_id` | string  | Channel ID where the action operated                |
 | `message`    | string  | Output message from the action                      |
 | `truncated`  | boolean | _(optional)_ Whether the message was truncated      |
+
+### TeamBotConfig
+
+Configures a team-scoped automation bot for the flow. When set, the plugin provisions a bot restricted to public channels on the specified team. AI prompt actions with `execution_mode: "team_bot"` will run completions using this bot's identity.
+
+| Field         | Type     | Description                                                                 |
+| ------------- | -------- | --------------------------------------------------------------------------- |
+| `team_id`     | string   | Team the bot is scoped to (required)                                        |
+| `channel_ids` | string[] | _(optional)_ Public channel IDs to add the bot to before execution          |
+
+All channels in `channel_ids` must be public (type `"O"`) and belong to the specified team. The bot is restricted via plugin hooks: it cannot be added to private channels or other teams.
 
 ### Trigger
 
@@ -467,6 +511,11 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| `execution_mode`   | string                          | _(optional)_ `"team_bot"` or `"creator"` (default). Controls whose identity runs the completion request.                |
+
+When `execution_mode` is `"team_bot"`, the completion request uses the team bot's user ID (restricted to public channels). When `"creator"` (or omitted), it uses the flow creator's user ID and MCP connections. A flow can chain both modes across separate actions to use Mattermost tools via the bot and external MCP tools via the creator.
+
+If any action uses `execution_mode: "team_bot"`, the flow must have a `team_bot_config`.
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 

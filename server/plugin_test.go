@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/bot"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
@@ -396,10 +397,12 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 
 	// Create a WorkerPool but don't start it — we just need Notify() to not block.
 	executor := flow.NewFlowExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+	bm := bot.NewManager(api)
+	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, bm, api, 1)
 
 	p := &Plugin{
 		botUserID:      "bot-id",
+		botManager:     bm,
 		registry:       registry,
 		flowStore:      flowStore,
 		triggerService: triggerService,

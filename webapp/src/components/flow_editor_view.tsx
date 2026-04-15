@@ -8,7 +8,7 @@ import 'triggers/channel_created';
 import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
-import type {AIBotInfo, AIToolInfo, Action, AllowedToolRef} from 'types';
+import type {AIBotInfo, AIToolInfo, Action, AllowedToolRef, TeamBotConfig} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -22,6 +22,7 @@ interface ActionForm {
     prompt: string;
     provider_id: string;
     allowed_tool_refs: AllowedToolRef[];
+    execution_mode: string;
 }
 
 const styles = {
@@ -195,7 +196,7 @@ function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
 }
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], execution_mode: ''};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -211,6 +212,7 @@ function actionToForm(a: Action): ActionForm {
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
+            execution_mode: a.ai_prompt.execution_mode ?? '',
         };
     }
     if (a.send_message) {
@@ -225,9 +227,10 @@ function actionToForm(a: Action): ActionForm {
             prompt: '',
             provider_id: '',
             allowed_tool_refs: [],
+            execution_mode: '',
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: []};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], execution_mode: ''};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -292,6 +295,8 @@ const FlowEditorView: React.FC = () => {
         () => getTriggerConfig(defaultTriggerType)?.defaultFormState() ?? {},
     );
     const [actions, setActions] = useState<ActionForm[]>([]);
+    const [teamBotTeamId, setTeamBotTeamId] = useState('');
+    const [teamBotChannelIds, setTeamBotChannelIds] = useState('');
     const [agents, setAgents] = useState<AIBotInfo[]>([]);
     const [agentsError, setAgentsError] = useState<string | null>(null);
     const [agentTools, setAgentTools] = useState<Map<number, AIToolInfo[]>>(new Map());
@@ -363,6 +368,10 @@ const FlowEditorView: React.FC = () => {
                 }
                 setName(flow.name);
                 setEnabled(flow.enabled);
+                if (flow.team_bot_config) {
+                    setTeamBotTeamId(flow.team_bot_config.team_id ?? '');
+                    setTeamBotChannelIds((flow.team_bot_config.channel_ids ?? []).join(', '));
+                }
                 const tt = getTriggerType(flow.trigger);
                 setTriggerType(tt);
                 const config = getTriggerConfig(tt);
@@ -448,10 +457,20 @@ const FlowEditorView: React.FC = () => {
 
         const trigger = triggerConfig?.toTrigger(triggerState) ?? {};
 
+        let teamBotConfig: TeamBotConfig | undefined;
+        if (teamBotTeamId.trim()) {
+            const channelIds = teamBotChannelIds.split(',').map((s) => s.trim()).filter(Boolean);
+            teamBotConfig = {team_id: teamBotTeamId.trim()};
+            if (channelIds.length > 0) {
+                teamBotConfig.channel_ids = channelIds;
+            }
+        }
+
         const data = {
             name,
             enabled,
             trigger,
+            team_bot_config: teamBotConfig,
             actions: actions.map((a): Action => {
                 if (a.type === 'ai_prompt') {
                     const action: Action = {
@@ -467,6 +486,9 @@ const FlowEditorView: React.FC = () => {
                     }
                     if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = a.allowed_tool_refs;
+                    }
+                    if (a.execution_mode && action.ai_prompt) {
+                        action.ai_prompt.execution_mode = a.execution_mode;
                     }
                     return action;
                 }
@@ -497,7 +519,7 @@ const FlowEditorView: React.FC = () => {
             setError(err instanceof Error ? err.message : 'Failed to save flow');
             setSaving(false);
         }
-    }, [flowId, name, enabled, triggerType, triggerState, triggerConfig, actions, history, workflowsUrl]);
+    }, [flowId, name, enabled, triggerType, triggerState, triggerConfig, actions, teamBotTeamId, teamBotChannelIds, history, workflowsUrl]);
 
     if (loading) {
         return <p>{'Loading...'}</p>;
@@ -538,6 +560,41 @@ const FlowEditorView: React.FC = () => {
                     {' Enabled'}
                 </label>
             </div>
+            <h3>{'Team Bot (optional)'}</h3>
+            <p style={hintStyle}>
+                {'Configure a team-scoped bot to run AI actions with restricted permissions (public channels only). Leave Team ID empty to skip.'}
+            </p>
+            <div style={styles.formGroup}>
+                <label
+                    htmlFor='team-bot-team-id'
+                    style={styles.label}
+                >{'Team ID'}</label>
+                <input
+                    id='team-bot-team-id'
+                    style={styles.input}
+                    type='text'
+                    placeholder='Team ID for the automation bot'
+                    value={teamBotTeamId}
+                    onChange={(e) => setTeamBotTeamId(e.target.value)}
+                />
+            </div>
+            {teamBotTeamId.trim() && (
+                <div style={styles.formGroup}>
+                    <label
+                        htmlFor='team-bot-channel-ids'
+                        style={styles.label}
+                    >{'Public Channel IDs (comma-separated)'}</label>
+                    <input
+                        id='team-bot-channel-ids'
+                        style={styles.input}
+                        type='text'
+                        placeholder='ch-id-1, ch-id-2'
+                        value={teamBotChannelIds}
+                        onChange={(e) => setTeamBotChannelIds(e.target.value)}
+                    />
+                    <p style={hintStyle}>{'Channels the bot will be added to before executing.'}</p>
+                </div>
+            )}
             <h3>{'Trigger'}</h3>
             {triggerConfig && (
                 <details style={styles.details}>
@@ -702,6 +759,37 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>{'Execution Mode'}</label>
+                                <div style={{display: 'flex', gap: 16}}>
+                                    <label>
+                                        <input
+                                            type='radio'
+                                            name={`action-${index}-exec-mode`}
+                                            value=''
+                                            checked={!action.execution_mode || action.execution_mode === 'creator'}
+                                            onChange={() => handleActionChange(index, 'execution_mode', '')}
+                                        />
+                                        {' Creator'}
+                                    </label>
+                                    <label>
+                                        <input
+                                            type='radio'
+                                            name={`action-${index}-exec-mode`}
+                                            value='team_bot'
+                                            checked={action.execution_mode === 'team_bot'}
+                                            disabled={!teamBotTeamId.trim()}
+                                            onChange={() => handleActionChange(index, 'execution_mode', 'team_bot')}
+                                        />
+                                        {' Team Bot'}
+                                    </label>
+                                </div>
+                                <p style={hintStyle}>
+                                    {action.execution_mode === 'team_bot' ?
+                                        'Runs as the team automation bot (public channels only).' :
+                                        'Runs with your identity and MCP connections.'}
+                                </p>
                             </div>
                             <div style={styles.formGroup}>
                                 <label

@@ -195,3 +195,114 @@ func TestCheckFlowPermissions_NonChannelCreated_ChannelAdminRequired(t *testing.
 	err := CheckFlowPermissions(api, "user1", f)
 	require.NoError(t, err)
 }
+
+func TestValidateTeamBotConfig_NoConfig(t *testing.T) {
+	api := &plugintest.API{}
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.NoError(t, err)
+}
+
+func TestValidateTeamBotConfig_TeamBotActionWithoutConfig(t *testing.T) {
+	api := &plugintest.API{}
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt:        "test",
+				ProviderType:  "agent",
+				ProviderID:    "bot1",
+				ExecutionMode: "team_bot",
+			}},
+		},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no team_bot_config")
+}
+
+func TestValidateTeamBotConfig_InvalidExecutionMode(t *testing.T) {
+	api := &plugintest.API{}
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt:        "test",
+				ProviderType:  "agent",
+				ProviderID:    "bot1",
+				ExecutionMode: "invalid",
+			}},
+		},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid execution_mode")
+}
+
+func TestValidateTeamBotConfig_MissingTeamID(t *testing.T) {
+	api := &plugintest.API{}
+
+	f := &model.Flow{
+		Trigger:       model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		TeamBotConfig: &model.TeamBotConfig{},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "team_id is required")
+}
+
+func TestValidateTeamBotConfig_ChannelIDsNotValidated(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		TeamBotConfig: &model.TeamBotConfig{
+			TeamID:     "team1",
+			ChannelIDs: []string{"ch1", "ch-doesnt-exist", "ch-private"},
+		},
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt:        "test",
+				ProviderType:  "agent",
+				ProviderID:    "bot1",
+				ExecutionMode: "team_bot",
+			}},
+		},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.NoError(t, err, "channel IDs are not validated at creation time; enforcement happens at runtime via hooks")
+}
+
+func TestValidateTeamBotConfig_CreatorModeAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		TeamBotConfig: &model.TeamBotConfig{
+			TeamID: "team1",
+		},
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt:        "test",
+				ProviderType:  "agent",
+				ProviderID:    "bot1",
+				ExecutionMode: "creator",
+			}},
+		},
+	}
+
+	err := ValidateTeamBotConfig(api, f)
+	require.NoError(t, err)
+}

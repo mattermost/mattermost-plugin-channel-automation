@@ -58,7 +58,7 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
@@ -96,7 +96,7 @@ func TestFlowExecutor_MultiAction_CumulativeContext(t *testing.T) {
 		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.NoError(t, err)
 	api.AssertNumberOfCalls(t, "CreatePost", 2)
 }
@@ -125,7 +125,7 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `action "act1" failed`)
 	// Second action should never be called.
@@ -182,7 +182,7 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.NoError(t, err)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 	// Posts: [trigger metadata (system), user-generated content (user), user prompt (user)]
@@ -216,7 +216,7 @@ func TestFlowExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "restricted to the triggering channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
@@ -237,7 +237,7 @@ func TestFlowExecutor_UnknownActionType(t *testing.T) {
 		Post: &model.SafePost{Id: "post1", ChannelId: "ch1"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown action type")
 }
@@ -264,8 +264,155 @@ func TestFlowExecutor_PermissionDenied(t *testing.T) {
 		User: &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	_, err := executor.Execute(f, triggerData, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not have permission to post in channel")
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
+}
+
+func TestFlowExecutor_TeamBotExecutionMode(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	bc := &mockBridgeClient{agentResponse: "bot response"}
+
+	registry := NewRegistry()
+	registry.RegisterAction(action.NewAIPromptAction(api, bc))
+
+	executor := NewFlowExecutor(registry)
+
+	f := &model.Flow{
+		ID:        "flow1",
+		Name:      "Team Bot Test",
+		CreatedBy: "creator1",
+		Actions: []model.Action{
+			{
+				ID: "ai_step",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:        "test prompt",
+					ProviderType:  "agent",
+					ProviderID:    "ai-bot",
+					ExecutionMode: "team_bot",
+				},
+			},
+		},
+	}
+	triggerData := model.TriggerData{
+		Post:    &model.SafePost{Id: "post1", ChannelId: "ch1", Message: "hello"},
+		Channel: &model.SafeChannel{Id: "ch1"},
+		User:    &model.SafeUser{Id: "user1", Username: "alice"},
+	}
+
+	_, err := executor.Execute(f, triggerData, "team-bot-user-id")
+	require.NoError(t, err)
+	assert.Equal(t, "team-bot-user-id", bc.lastReq.UserID)
+}
+
+func TestFlowExecutor_CreatorExecutionMode(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	bc := &mockBridgeClient{agentResponse: "creator response"}
+
+	registry := NewRegistry()
+	registry.RegisterAction(action.NewAIPromptAction(api, bc))
+
+	executor := NewFlowExecutor(registry)
+
+	f := &model.Flow{
+		ID:        "flow1",
+		Name:      "Creator Mode Test",
+		CreatedBy: "creator1",
+		Actions: []model.Action{
+			{
+				ID: "ai_step",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:        "test prompt",
+					ProviderType:  "agent",
+					ProviderID:    "ai-bot",
+					ExecutionMode: "creator",
+				},
+			},
+		},
+	}
+	triggerData := model.TriggerData{
+		Post:    &model.SafePost{Id: "post1", ChannelId: "ch1", Message: "hello"},
+		Channel: &model.SafeChannel{Id: "ch1"},
+		User:    &model.SafeUser{Id: "user1", Username: "alice"},
+	}
+
+	_, err := executor.Execute(f, triggerData, "team-bot-user-id")
+	require.NoError(t, err)
+	assert.Equal(t, "creator1", bc.lastReq.UserID)
+}
+
+func TestFlowExecutor_ChainedTeamBotThenCreator(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+	var capturedUserIDs []string
+	bc := &trackingBridgeClient{
+		response:   "chained response",
+		captureIDs: &capturedUserIDs,
+	}
+
+	registry := NewRegistry()
+	registry.RegisterAction(action.NewAIPromptAction(api, bc))
+
+	executor := NewFlowExecutor(registry)
+
+	f := &model.Flow{
+		ID:        "flow1",
+		Name:      "Chained Modes Test",
+		CreatedBy: "creator1",
+		Actions: []model.Action{
+			{
+				ID: "bot-step",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:        "gather data",
+					ProviderType:  "agent",
+					ProviderID:    "ai-bot",
+					ExecutionMode: "team_bot",
+				},
+			},
+			{
+				ID: "creator-step",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:        "analyze {{(index .Steps \"bot-step\").Message}}",
+					ProviderType:  "agent",
+					ProviderID:    "ai-bot",
+					ExecutionMode: "creator",
+				},
+			},
+		},
+	}
+	triggerData := model.TriggerData{
+		Post:    &model.SafePost{Id: "post1", ChannelId: "ch1", Message: "hello"},
+		Channel: &model.SafeChannel{Id: "ch1"},
+		User:    &model.SafeUser{Id: "user1", Username: "alice"},
+	}
+
+	_, err := executor.Execute(f, triggerData, "team-bot-id")
+	require.NoError(t, err)
+	require.Len(t, capturedUserIDs, 2)
+	assert.Equal(t, "team-bot-id", capturedUserIDs[0])
+	assert.Equal(t, "creator1", capturedUserIDs[1])
+}
+
+type trackingBridgeClient struct {
+	response   string
+	captureIDs *[]string
+}
+
+func (m *trackingBridgeClient) AgentCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
+	*m.captureIDs = append(*m.captureIDs, req.UserID)
+	return m.response, nil
+}
+
+func (m *trackingBridgeClient) ServiceCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
+	*m.captureIDs = append(*m.captureIDs, req.UserID)
+	return m.response, nil
 }

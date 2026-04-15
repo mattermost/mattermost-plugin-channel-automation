@@ -143,7 +143,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, maxWorkers)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, maxWorkers)
 	wp.pollInterval = 50 * time.Millisecond // speed up tests
 
 	return wp, store, flowStore
@@ -415,7 +415,7 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -457,7 +457,7 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -499,7 +499,7 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -545,7 +545,7 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{
@@ -595,7 +595,7 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{

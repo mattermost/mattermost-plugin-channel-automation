@@ -561,6 +561,86 @@ func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 	assert.Equal(t, "Handle this incident", bc.lastReq.Posts[2].Message)
 }
 
+func TestAIPromptAction_Execute_TeamBotExecutionMode(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "bot response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:        "Do something",
+			ProviderType:  "agent",
+			ProviderID:    "ai-bot",
+			ExecutionMode: "team_bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy:     "creator1",
+		TeamBotUserID: "team-bot-user-id",
+		Trigger:       model.TriggerData{},
+		Steps:         make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "team-bot-user-id", bc.lastReq.UserID)
+}
+
+func TestAIPromptAction_Execute_CreatorExecutionMode(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "creator response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:        "Do something",
+			ProviderType:  "agent",
+			ProviderID:    "ai-bot",
+			ExecutionMode: "creator",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy:     "creator1",
+		TeamBotUserID: "team-bot-user-id",
+		Trigger:       model.TriggerData{},
+		Steps:         make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "creator1", bc.lastReq.UserID)
+}
+
+func TestAIPromptAction_Execute_DefaultExecutionModeUsesCreator(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Do something",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		CreatedBy:     "creator1",
+		TeamBotUserID: "team-bot-user-id",
+		Trigger:       model.TriggerData{},
+		Steps:         make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "creator1", bc.lastReq.UserID)
+}
+
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}

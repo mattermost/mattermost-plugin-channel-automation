@@ -10,6 +10,7 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/bot"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
@@ -22,6 +23,7 @@ type WorkerPool struct {
 	executor     *flow.FlowExecutor
 	flowStore    model.Store
 	historyStore model.ExecutionStore
+	botManager   *bot.Manager
 	api          plugin.API
 	maxWorkers   int
 	pollInterval time.Duration
@@ -33,12 +35,13 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
-func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, api plugin.API, maxWorkers int) *WorkerPool {
+func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, botManager *bot.Manager, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
 		store:        store,
 		executor:     executor,
 		flowStore:    flowStore,
 		historyStore: historyStore,
+		botManager:   botManager,
 		api:          api,
 		maxWorkers:   maxWorkers,
 		pollInterval: 30 * time.Second,
@@ -231,7 +234,32 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 
-	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
+	// Resolve the team bot user ID if the flow uses one. The bot and its
+	// channel memberships are provisioned at flow creation/update time;
+	// here we only need the user ID for the execution context.
+	var teamBotUserID string
+	if f.TeamBotConfig != nil && wp.botManager != nil {
+		var botErr error
+		teamBotUserID, botErr = wp.botManager.EnsureTeamBot(f.TeamBotConfig.TeamID)
+		if botErr != nil {
+			wp.api.LogError("Failed to resolve team bot",
+				"work_item_id", item.ID,
+				"flow_id", f.ID,
+				"team_id", f.TeamBotConfig.TeamID,
+				"err", botErr.Error(),
+			)
+			if storeErr := wp.store.Fail(item.ID); storeErr != nil {
+				wp.api.LogError("Failed to mark work item as failed",
+					"work_item_id", item.ID,
+					"err", storeErr.Error(),
+				)
+			}
+			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to resolve team bot: %s", botErr.Error()), time.Now().UnixMilli())
+			return
+		}
+	}
+
+	ctx, execErr := wp.executor.Execute(f, item.TriggerData, teamBotUserID)
 	completedAt := time.Now().UnixMilli()
 
 	if execErr != nil {

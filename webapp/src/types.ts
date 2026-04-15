@@ -59,6 +59,7 @@ export interface AIPromptActionParams {
     provider_type: string;
     provider_id: string;
     allowed_tools?: AllowedToolRef[];
+    execution_mode?: string; // "team_bot" | "creator"
 }
 
 export interface Action {
@@ -79,12 +80,18 @@ export interface AIToolInfo {
     server_origin?: string;
 }
 
+export interface TeamBotConfig {
+    team_id: string;
+    channel_ids?: string[];
+}
+
 export interface Flow {
     id: string;
     name: string;
     enabled: boolean;
     trigger: Trigger;
     actions: Action[];
+    team_bot_config?: TeamBotConfig;
     created_at: number;
     updated_at: number;
     created_by: string;

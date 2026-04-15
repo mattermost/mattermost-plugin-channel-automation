@@ -132,6 +132,65 @@ func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 	assert.Equal(t, []string{"ch-notify"}, ids)
 }
 
+func TestCollectChannelIDs_IncludesTeamBotConfigChannels(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+		TeamBotConfig: &TeamBotConfig{
+			TeamID:     "team1",
+			ChannelIDs: []string{"ch2", "ch3"},
+		},
+		Actions: []Action{
+			{SendMessage: &SendMessageActionConfig{ChannelID: "ch1"}},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch1", "ch2", "ch3"}, ids)
+}
+
+func TestCollectChannelIDs_TeamBotConfigDuplicatesRemoved(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+		TeamBotConfig: &TeamBotConfig{
+			TeamID:     "team1",
+			ChannelIDs: []string{"ch1", "ch2"},
+		},
+	}
+
+	ids := CollectChannelIDs(f)
+	assert.Equal(t, []string{"ch1", "ch2"}, ids)
+}
+
+func TestFlowJSON_AIPrompt_ExecutionMode(t *testing.T) {
+	const raw = `{
+		"id": "f1",
+		"name": "n",
+		"enabled": true,
+		"trigger": {"schedule": {"channel_id": "c1", "interval": "1h"}},
+		"team_bot_config": {"team_id": "t1", "channel_ids": ["ch1"]},
+		"actions": [{
+			"id": "a1",
+			"ai_prompt": {
+				"prompt": "p",
+				"provider_type": "agent",
+				"provider_id": "bot1",
+				"execution_mode": "team_bot"
+			}
+		}],
+		"created_at": 0,
+		"updated_at": 0,
+		"created_by": "u1"
+	}`
+	var f Flow
+	err := json.Unmarshal([]byte(raw), &f)
+	require.NoError(t, err)
+	require.NotNil(t, f.TeamBotConfig)
+	assert.Equal(t, "t1", f.TeamBotConfig.TeamID)
+	assert.Equal(t, []string{"ch1"}, f.TeamBotConfig.ChannelIDs)
+	require.NotNil(t, f.Actions[0].AIPrompt)
+	assert.Equal(t, "team_bot", f.Actions[0].AIPrompt.ExecutionMode)
+}
+
 func TestFlowJSON_AIPrompt_AllowedToolsLegacyStringArray(t *testing.T) {
 	const raw = `{
 		"id": "f1",

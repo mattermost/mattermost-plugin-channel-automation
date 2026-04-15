@@ -4,14 +4,21 @@ import "github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 
 // Flow represents a trigger-action workflow.
 type Flow struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Enabled   bool     `json:"enabled"`
-	Trigger   Trigger  `json:"trigger"`
-	Actions   []Action `json:"actions"`
-	CreatedAt int64    `json:"created_at"`
-	UpdatedAt int64    `json:"updated_at"`
-	CreatedBy string   `json:"created_by"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Enabled       bool           `json:"enabled"`
+	Trigger       Trigger        `json:"trigger"`
+	Actions       []Action       `json:"actions"`
+	TeamBotConfig *TeamBotConfig `json:"team_bot_config,omitempty"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
+	CreatedBy     string         `json:"created_by"`
+}
+
+// TeamBotConfig configures a team-scoped automation bot for the flow.
+type TeamBotConfig struct {
+	TeamID     string   `json:"team_id"`
+	ChannelIDs []string `json:"channel_ids,omitempty"`
 }
 
 // ChannelCreatedConfig holds trigger config for the channel_created trigger type.
@@ -61,9 +68,10 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string                        `json:"system_prompt,omitempty"`
-	Prompt       string                        `json:"prompt"`
-	ProviderType string                        `json:"provider_type"`
-	ProviderID   string                        `json:"provider_id"`
-	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
+	SystemPrompt  string                        `json:"system_prompt,omitempty"`
+	Prompt        string                        `json:"prompt"`
+	ProviderType  string                        `json:"provider_type"`
+	ProviderID    string                        `json:"provider_id"`
+	AllowedTools  bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
+	ExecutionMode string                        `json:"execution_mode,omitempty"` // "team_bot" or "creator" (default)
 }

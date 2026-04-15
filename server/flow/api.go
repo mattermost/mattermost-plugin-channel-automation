@@ -17,6 +17,12 @@ import (
 
 const maxRequestBodySize = 1 << 20 // 1 MB
 
+// TeamBotProvisioner provisions team-scoped bots and adds them to channels.
+type TeamBotProvisioner interface {
+	EnsureTeamBot(teamID string) (botUserID string, err error)
+	AddBotToChannels(botUserID string, channelIDs []string) error
+}
+
 // APIHandler provides HTTP handlers for flow CRUD operations.
 type APIHandler struct {
 	store           model.Store
@@ -24,11 +30,12 @@ type APIHandler struct {
 	api             plugin.API
 	scheduleManager *ScheduleManager
 	config          model.Configuration
+	botProvisioner  TeamBotProvisioner
 }
 
 // NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config}
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration, botProvisioner TeamBotProvisioner) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config, botProvisioner: botProvisioner}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -162,8 +169,18 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := permissions.ValidateTeamBotConfig(h.api, &f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
+		return
+	}
+
+	if err := h.provisionTeamBot(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
 
@@ -289,8 +306,18 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := permissions.ValidateTeamBotConfig(h.api, &f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
+		return
+	}
+
+	if err := h.provisionTeamBot(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
 
@@ -310,6 +337,29 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(&f); err != nil {
 		h.api.LogError("Failed to encode flow", "error", err.Error())
 	}
+}
+
+// provisionTeamBot ensures the team bot exists and is a member of the
+// configured channels. Called at flow create/update time before saving
+// so the bot is ready before any execution. Returns an error if the bot
+// cannot be provisioned or added to any channel.
+func (h *APIHandler) provisionTeamBot(f *model.Flow) error {
+	if f.TeamBotConfig == nil || h.botProvisioner == nil {
+		return nil
+	}
+
+	botUserID, err := h.botProvisioner.EnsureTeamBot(f.TeamBotConfig.TeamID)
+	if err != nil {
+		return fmt.Errorf("failed to provision team bot: %w", err)
+	}
+
+	if len(f.TeamBotConfig.ChannelIDs) > 0 {
+		if err := h.botProvisioner.AddBotToChannels(botUserID, f.TeamBotConfig.ChannelIDs); err != nil {
+			return fmt.Errorf("failed to add team bot to channels: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {

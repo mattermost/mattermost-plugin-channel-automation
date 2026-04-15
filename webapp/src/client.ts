@@ -78,6 +78,16 @@ export async function getAgentTools(agentId: string): Promise<AIToolInfo[]> {
     return tools ?? [];
 }
 
+export interface TeamBotInfo {
+    bot_user_id: string;
+    team_id: string;
+    username: string;
+}
+
+export async function getTeamBot(teamId: string): Promise<TeamBotInfo> {
+    return doFetch<TeamBotInfo>(`${BASE_URL}/teams/${teamId}/bot`);
+}
+
 export interface ClientConfig {
     enable_ui: boolean;
 }
