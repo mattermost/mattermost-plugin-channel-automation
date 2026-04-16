@@ -225,10 +225,16 @@ func TestExecutionStore_PurgeFlow(t *testing.T) {
 	assert.Nil(t, got)
 
 	// Global index should only contain the other flow's record.
-	records, err = store.ListRecent(10)
-	require.NoError(t, err)
-	assert.Len(t, records, 1)
-	assert.Equal(t, "x3", records[0].ID)
+	// Inspect raw KV data directly — ListRecent self-heals stale entries,
+	// so it would pass even if PurgeFlow didn't clean the global index.
+	kv.mu.Lock()
+	globalIndexBytes, exists := kv.data[globalIndexKey]
+	kv.mu.Unlock()
+	require.True(t, exists)
+
+	var globalIndex []string
+	require.NoError(t, json.Unmarshal(globalIndexBytes, &globalIndex))
+	assert.Equal(t, []string{"x3"}, globalIndex)
 
 	// Records from the other flow should be untouched.
 	got, err = store.Get("x3")

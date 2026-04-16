@@ -111,8 +111,12 @@ func (s *Store) PurgeFlow(flowID string) error {
 	}
 
 	// Remove purged IDs from the global index.
+	// Note: records evicted from the per-flow index by the size cap
+	// (maxFlowIndexSize) are not tracked here and will expire via TTL.
 	if len(ids) > 0 {
-		s.removeStaleFromIndex(globalIndexKey, ids)
+		if err := s.removeIDsFromIndex(globalIndexKey, ids); err != nil {
+			return fmt.Errorf("failed to clean global execution index: %w", err)
+		}
 	}
 
 	// Delete the per-flow index.
@@ -181,6 +185,35 @@ func (s *Store) removeStaleFromIndex(key string, staleIDs []string) {
 	}
 
 	_ = s.setIndex(key, filtered)
+}
+
+// removeIDsFromIndex removes the given IDs from an index, propagating errors.
+// Use this instead of removeStaleFromIndex when failures must be observable.
+func (s *Store) removeIDsFromIndex(key string, removeIDs []string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+
+	ids, err := s.getIndex(key)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	removeSet := make(map[string]struct{}, len(removeIDs))
+	for _, id := range removeIDs {
+		removeSet[id] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, remove := removeSet[id]; !remove {
+			filtered = append(filtered, id)
+		}
+	}
+
+	return s.setIndex(key, filtered)
 }
 
 func (s *Store) getIndex(key string) ([]string, error) {
