@@ -9,7 +9,7 @@ import (
 // channelAutomationInstructionsBase documents trigger types, actions, templates, and workflow
 // for create_automation and update_automation (returned by GET /automation-instructions).
 const channelAutomationInstructionsBase = `Channel automations are trigger-action workflows that fire when events occur.
-Requires channel admin (or system admin) permission for the trigger channel.
+Requires channel admin (or system admin) permission for the trigger channel. For the channel_created trigger, team admin permission on the trigger's team_id is required instead.
 
 AGENT DISCOVERY: For an ai_prompt action with provider_type "agent", use the list_agents tool to discover bots.
 Each agent's ID is a 26-character Mattermost user ID — use that value as provider_id in the ai_prompt config.
@@ -48,13 +48,13 @@ TRIGGERS: Set exactly one trigger type inside the "trigger" object.
 - "message_posted": fires when a human user posts a message in the channel. Bot messages are automatically filtered out, so there is no risk of bot-triggered loops. High-traffic channels will trigger frequently.
   {"trigger": {"message_posted": {"channel_id": "<channel-id>"}}}
 - "schedule": fires on a recurring schedule.
-  - interval: Go duration string (minimum "5m"). Examples: "1h" (hourly), "24h" (daily), "168h" (weekly).
+  - interval: Go duration string (minimum "1h"). Examples: "1h" (hourly), "24h" (daily), "168h" (weekly).
   - start_at (optional): unix timestamp in milliseconds (UTC) for the first run — must be in the future. The automation fires at this time, then repeats every interval. If omitted, the first run happens immediately. Use this to schedule a daily recap at e.g. 9am.
   {"trigger": {"schedule": {"channel_id": "<channel-id>", "interval": "24h", "start_at": 1899936000000}}}
 - "membership_changed": fires when a member joins or leaves the channel.
   {"trigger": {"membership_changed": {"channel_id": "<channel-id>"}}}
-- "channel_created": fires when any new public channel is created. Note: server-wide — fires for every new public channel created by any user.
-  {"trigger": {"channel_created": {}}}
+- "channel_created": fires when a new public channel is created on the specified team. Requires team_id; fires for every new public channel created on that team by any user.
+  {"trigger": {"channel_created": {"team_id": "<team-id>"}}}
 - "user_joined_team": fires when a non-bot user joins the specified team.
   {"trigger": {"user_joined_team": {"team_id": "<team-id>"}}}
 

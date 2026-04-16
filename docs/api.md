@@ -436,7 +436,7 @@ Exactly one key should be set, indicating the trigger type:
 | `message_posted`     | [MessagePostedConfig](#messagepostedconfig)           | _(optional)_ Fires on new messages in a channel                   |
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
-| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
+| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created on a team |
 
 #### MessagePostedConfig
 
@@ -461,10 +461,12 @@ Exactly one key should be set, indicating the trigger type:
 
 #### ChannelCreatedConfig
 
-Empty object — no fields required. The trigger fires on any new public channel creation.
+| Field     | Type   | Description                                                    |
+| --------- | ------ | -------------------------------------------------------------- |
+| `team_id` | string | Team to watch for new public channels (required)               |
 
 ```json
-{ "channel_created": {} }
+{ "channel_created": { "team_id": "team-id-1" } }
 ```
 
 ### Action
@@ -518,7 +520,7 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 ### `channel_created`
 
-Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
+Fires when a new public channel (type `"O"`) is created on the specified `team_id`. DMs, group messages, and private channels are excluded. Authorization for this trigger is team-scoped: the creating user must be a team admin on `team_id` (or a system admin), and any literal action channel references must belong to the same team.
 
 ---
 
