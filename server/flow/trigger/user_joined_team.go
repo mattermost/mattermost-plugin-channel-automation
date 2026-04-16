@@ -4,7 +4,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// UserJoinedTeamTrigger matches when a user joins any team.
+// UserJoinedTeamTrigger matches when a user joins a team.
 type UserJoinedTeamTrigger struct{}
 
 func (t *UserJoinedTeamTrigger) Type() string { return model.TriggerTypeUserJoinedTeam }
