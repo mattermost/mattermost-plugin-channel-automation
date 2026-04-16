@@ -191,14 +191,21 @@ func TestExecutionStore_ListFromIndex_SkipsExpired(t *testing.T) {
 func TestExecutionStore_PurgeFlow(t *testing.T) {
 	store, kv := setupStore(t)
 
+	// Save records for two flows so we can verify cross-flow isolation.
 	require.NoError(t, store.Save(makeRecord("x1", "f1")))
 	require.NoError(t, store.Save(makeRecord("x2", "f1")))
+	require.NoError(t, store.Save(makeRecord("x3", "f2")))
 
 	// Per-flow index should exist.
 	kv.mu.Lock()
 	_, exists := kv.data[flowIndexPrefix+"f1"]
 	kv.mu.Unlock()
 	require.True(t, exists)
+
+	// Global index should contain all 3 records.
+	records, err := store.ListRecent(10)
+	require.NoError(t, err)
+	assert.Len(t, records, 3)
 
 	require.NoError(t, store.PurgeFlow("f1"))
 
@@ -208,8 +215,23 @@ func TestExecutionStore_PurgeFlow(t *testing.T) {
 	kv.mu.Unlock()
 	assert.False(t, exists)
 
-	// Individual records still exist (left to expire via TTL).
+	// Individual records should be deleted.
 	got, err := store.Get("x1")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+
+	got, err = store.Get("x2")
+	require.NoError(t, err)
+	assert.Nil(t, got)
+
+	// Global index should only contain the other flow's record.
+	records, err = store.ListRecent(10)
+	require.NoError(t, err)
+	assert.Len(t, records, 1)
+	assert.Equal(t, "x3", records[0].ID)
+
+	// Records from the other flow should be untouched.
+	got, err = store.Get("x3")
 	require.NoError(t, err)
 	assert.NotNil(t, got)
 }
