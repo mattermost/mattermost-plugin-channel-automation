@@ -33,6 +33,12 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		})
 		assert.NotContains(t, out.Instructions, "refer the user to:")
 	})
+
+	t.Run("nil config returns base text only", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		assert.Contains(t, out.Instructions, "Channel automations are trigger-action workflows")
+		assert.NotContains(t, out.Instructions, "refer the user to:")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {

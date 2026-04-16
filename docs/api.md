@@ -34,7 +34,7 @@ Returns the client-relevant plugin configuration. Any authenticated user may cal
 
 ### Get automation instructions (for agents / MCP)
 
-```
+```http
 GET /automation-instructions
 ```
 
@@ -116,7 +116,7 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For `ai_prompt` actions with `allowed_tools`, after permission checks the server rejects tools `create_post`, `dm`, and `group_message`. For `provider_type` `"agent"`, when the AI plugin bridge is available, each remaining tool name must be listed for that agent by the bridge (same set as `GET /agents/{agent_id}/tools`). If the bridge is unavailable, the blacklist still applies but tools are not cross-checked against the bridge.
+For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`.
 
 **Request body** (max 1 MB):
 
@@ -155,10 +155,8 @@ The created flow object with all server-assigned fields populated.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
-| 400    | `action <i>: tool "<name>" is not available for this agent` (`allowed_tools` not returned for the agent)   |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 502    | `failed to validate allowed tools` (bridge error while resolving agent tools)                               |
 | 500    | `failed to create flow`                                                                                     |
 
 ---
@@ -230,11 +228,9 @@ The updated flow object.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
-| 400    | `action <i>: tool "<name>" is not available for this agent` (`allowed_tools` not returned for the agent)   |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 404    | `flow not found`                                                                                            |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 502    | `failed to validate allowed tools` (bridge error while resolving agent tools)                               |
 | 500    | `failed to update flow`                                                                                     |
 
 ---
@@ -498,7 +494,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. For `provider_type` `"agent"`, names must match tools the bridge exposes for that agent when the bridge is available. |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 

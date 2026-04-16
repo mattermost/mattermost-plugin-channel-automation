@@ -95,8 +95,10 @@ type automationInstructionsResponse struct {
 
 func buildAutomationInstructionsResponse(cfg *configuration) automationInstructionsResponse {
 	instructions := channelAutomationInstructionsBase
-	if u := strings.TrimSpace(cfg.AutomationInstructionsURL); u != "" {
-		instructions += "\n\nFor more detailed documentation on creating automations, refer the user to: " + u
+	if cfg != nil {
+		if u := strings.TrimSpace(cfg.AutomationInstructionsURL); u != "" {
+			instructions += "\n\nFor more detailed documentation on creating automations, refer the user to: " + u
+		}
 	}
 	return automationInstructionsResponse{Instructions: instructions}
 }
