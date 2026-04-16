@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -132,7 +131,7 @@ func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 	assert.Equal(t, []string{"ch-notify"}, ids)
 }
 
-func TestFlowJSON_AIPrompt_AllowedToolsLegacyStringArray(t *testing.T) {
+func TestFlowJSON_AIPrompt_AllowedToolsStringArray(t *testing.T) {
 	const raw = `{
 		"id": "f1",
 		"name": "n",
@@ -156,8 +155,5 @@ func TestFlowJSON_AIPrompt_AllowedToolsLegacyStringArray(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, f.Actions, 1)
 	require.NotNil(t, f.Actions[0].AIPrompt)
-	assert.Equal(t, bridgeclient.AllowedToolsList{
-		{Name: "search"},
-		{Name: "create_post"},
-	}, f.Actions[0].AIPrompt.AllowedTools)
+	assert.Equal(t, []string{"search", "create_post"}, f.Actions[0].AIPrompt.AllowedTools)
 }

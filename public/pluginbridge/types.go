@@ -1,7 +1,5 @@
 package pluginbridge
 
-import "github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
-
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`
@@ -65,5 +63,5 @@ type AIPromptActionConfig struct {
 	Prompt       string                        `json:"prompt"`
 	ProviderType string                        `json:"provider_type"`
 	ProviderID   string                        `json:"provider_id"`
-	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
+	AllowedTools []string `json:"allowed_tools,omitempty"`
 }

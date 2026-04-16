@@ -42,6 +42,12 @@
                 "type": "bool",
                 "default": false,
                 "help_text": "When enabled, the Channel Automation product menu will be visible in the webapp. Changes require a page reload to take effect."
+            },
+            {
+                "key": "AutomationInstructionsURL",
+                "display_name": "Automation instructions URL",
+                "type": "text",
+                "help_text": "Optional URL to user-facing documentation for creating automations. When set, this URL is appended in plain text to the instructions returned by the API (for agents/MCP) so the model can refer users to it."
             }
         ]
     }
