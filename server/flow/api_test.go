@@ -803,7 +803,7 @@ func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "must use the template expression")
+	assert.Contains(t, w.Body.String(), "must use a template expression")
 }
 
 func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
@@ -1172,4 +1172,78 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "exactly one trigger type")
+}
+
+func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "team admin")
+}
+
+func TestAPI_CreateFlow_UserJoinedTeam_GetTeam500(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(
+		nil, &mmmodel.AppError{StatusCode: http.StatusInternalServerError, Message: "db down"},
+	)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Join Flow",
+		"enabled": true,
+		"trigger": {"user_joined_team": {"team_id": "team1"}},
+		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }

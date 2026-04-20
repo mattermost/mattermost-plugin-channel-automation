@@ -17,6 +17,7 @@ type TriggerData struct {
 	Post       *SafePost       `json:"post,omitempty"`
 	Channel    *SafeChannel    `json:"channel,omitempty"`
 	User       *SafeUser       `json:"user,omitempty"`
+	Team       *SafeTeam       `json:"team,omitempty"`
 	Schedule   *ScheduleInfo   `json:"schedule,omitempty"`
 	Membership *MembershipInfo `json:"membership,omitempty"`
 }
@@ -30,6 +31,15 @@ type MembershipInfo struct {
 type ScheduleInfo struct {
 	FiredAt  int64  `json:"fired_at"` // Unix ms when schedule fired
 	Interval string `json:"interval"` // configured interval
+}
+
+// SafeTeam contains only the team fields needed for template rendering.
+// Sensitive fields (Email, InviteId, AllowedDomains) are excluded.
+type SafeTeam struct {
+	Id               string `json:"id"`
+	Name             string `json:"name"`
+	DisplayName      string `json:"display_name"`
+	DefaultChannelId string `json:"default_channel_id,omitempty"`
 }
 
 // SafePost contains only the post fields needed for template rendering.
@@ -50,10 +60,16 @@ type SafeChannel struct {
 // SafeUser contains only the user fields needed for template rendering.
 // Sensitive fields (email, AuthData, password, NotifyProps) are excluded.
 type SafeUser struct {
-	Id        string `json:"id"`
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	Id          string `json:"id"`
+	Username    string `json:"username"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	IsGuestUser bool   `json:"is_guest,omitempty"`
+}
+
+// IsGuest returns whether the user has the guest role.
+func (u *SafeUser) IsGuest() bool {
+	return u.IsGuestUser
 }
 
 // NewSafePost creates a SafePost from a Mattermost Post.
@@ -92,10 +108,31 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 		return nil
 	}
 	return &SafeUser{
-		Id:        u.Id,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
+		Id:          u.Id,
+		Username:    u.Username,
+		FirstName:   u.FirstName,
+		LastName:    u.LastName,
+		IsGuestUser: u.IsGuest(),
+	}
+}
+
+// NewSafeTeam creates a SafeTeam from a Mattermost Team, stripping all
+// sensitive fields. A nil input yields a placeholder SafeTeam so templates
+// referencing team fields render something visible instead of blank when a
+// team lookup fails.
+// Note: DefaultChannelId is not part of mmmodel.Team and must be populated
+// separately by the caller (e.g. via API.GetChannelByName).
+func NewSafeTeam(t *mmmodel.Team) *SafeTeam {
+	if t == nil {
+		return &SafeTeam{
+			Name:        "[unknown team]",
+			DisplayName: "[unknown team]",
+		}
+	}
+	return &SafeTeam{
+		Id:          t.Id,
+		Name:        t.Name,
+		DisplayName: t.DisplayName,
 	}
 }
 

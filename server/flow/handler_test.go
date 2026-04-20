@@ -7,15 +7,16 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
 func TestRegistry_RegisterAndGetTrigger(t *testing.T) {
 	r := NewRegistry()
 	r.RegisterTrigger(&trigger.MessagePostedTrigger{})
 
-	h, ok := r.GetTrigger("message_posted")
+	h, ok := r.GetTrigger(model.TriggerTypeMessagePosted)
 	assert.True(t, ok)
-	assert.Equal(t, "message_posted", h.Type())
+	assert.Equal(t, model.TriggerTypeMessagePosted, h.Type())
 }
 
 func TestRegistry_RegisterAndGetAction(t *testing.T) {

@@ -368,7 +368,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		},
 	)
 	// Register LogDebug/LogError for varying argument counts across hooks.
-	for _, method := range []string{"LogDebug", "LogError"} {
+	for _, method := range []string{"LogDebug", "LogError", "LogWarn"} {
 		for _, n := range []int{3, 5, 7, 9, 11, 13, 15} {
 			args := make([]any, n)
 			for i := range args {
@@ -379,15 +379,19 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 	}
 	api.On("GetChannel", mock.Anything).Return(&mmmodel.Channel{Id: "ch1", Name: "test", DisplayName: "Test"}, nil)
 	api.On("GetUser", mock.Anything).Return(&mmmodel.User{Id: "user1", Username: "testuser"}, nil)
+	api.On("GetTeam", mock.Anything).Return(&mmmodel.Team{Id: "team1", Name: "testteam", DisplayName: "Test Team"}, nil).Maybe()
+	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(&mmmodel.Channel{Id: "town-square-id", Name: mmmodel.DefaultChannelName}, nil).Maybe()
 
 	registry := flow.NewRegistry()
 	switch triggerType {
-	case "message_posted":
+	case model.TriggerTypeMessagePosted:
 		registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
-	case "channel_created":
+	case model.TriggerTypeChannelCreated:
 		registry.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
-	case "membership_changed":
+	case model.TriggerTypeMembershipChanged:
 		registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
+	case model.TriggerTypeUserJoinedTeam:
+		registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 	}
 
 	flowStore := flow.NewStore(api, &sync.Mutex{})
@@ -412,7 +416,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 }
 
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "message_posted")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
 	// Save a flow triggered by messages in ch1.
 	f := &model.Flow{
@@ -435,7 +439,7 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 }
 
 func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "channel_created")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeChannelCreated)
 
 	f := &model.Flow{
 		ID:      "f1",
@@ -456,7 +460,7 @@ func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 }
 
 func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, "membership_changed")
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMembershipChanged)
 
 	f := &model.Flow{
 		ID:      "f1",
@@ -474,4 +478,147 @@ func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
 		item, _ := wqStore.ClaimNext()
 		return item != nil
 	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestUserHasJoinedTeam_SkipsBotUser(t *testing.T) {
+	// The botUserID short-circuit fires before GetUser, so no API mock needed.
+	p := &Plugin{botUserID: "bot-id"}
+
+	member := &mmmodel.TeamMember{UserId: "bot-id", TeamId: "team1"}
+
+	assert.NotPanics(t, func() {
+		p.UserHasJoinedTeam(nil, member, nil)
+	})
+}
+
+func TestUserHasJoinedTeam_SkipsIsBotUser(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetUser", "bot-user-id").Return(&mmmodel.User{Id: "bot-user-id", IsBot: true}, nil)
+
+	p := &Plugin{botUserID: "other-bot"}
+	p.SetAPI(api)
+
+	member := &mmmodel.TeamMember{UserId: "bot-user-id", TeamId: "team1"}
+
+	assert.NotPanics(t, func() {
+		p.UserHasJoinedTeam(nil, member, nil)
+	})
+}
+
+func TestUserHasJoinedTeam_ProcessesNormalUser(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeUserJoinedTeam)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Team Join Flow",
+		Enabled: true,
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
+	}
+	require.NoError(t, p.flowStore.Save(f))
+
+	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
+	p.UserHasJoinedTeam(nil, member, nil)
+
+	require.Eventually(t, func() bool {
+		item, _ := wqStore.ClaimNext()
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
+	kv := &inMemoryKV{data: make(map[string][]byte)}
+
+	api := &plugintest.API{}
+	api.On("KVGet", mock.Anything).Return(
+		func(key string) []byte {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			d := kv.data[key]
+			if d == nil {
+				return nil
+			}
+			cp := make([]byte, len(d))
+			copy(cp, d)
+			return cp
+		},
+		func(_ string) *mmmodel.AppError { return nil },
+	)
+	api.On("KVSet", mock.Anything, mock.Anything).Return(
+		func(key string, value []byte) *mmmodel.AppError {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			cp := make([]byte, len(value))
+			copy(cp, value)
+			kv.data[key] = cp
+			return nil
+		},
+	)
+	api.On("KVDelete", mock.Anything).Return(
+		func(key string) *mmmodel.AppError {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			delete(kv.data, key)
+			return nil
+		},
+	)
+	for _, method := range []string{"LogDebug", "LogError", "LogWarn"} {
+		for _, n := range []int{3, 5, 7, 9, 11, 13, 15} {
+			args := make([]any, n)
+			for i := range args {
+				args[i] = mock.Anything
+			}
+			api.On(method, args...).Return().Maybe()
+		}
+	}
+	api.On("GetUser", mock.Anything).Return(&mmmodel.User{Id: "user1", Username: "testuser"}, nil)
+	api.On("GetTeam", mock.Anything).Return(nil, &mmmodel.AppError{Message: "team lookup failed"})
+	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(nil, &mmmodel.AppError{Message: "channel lookup failed"})
+
+	registry := flow.NewRegistry()
+	registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
+
+	flowStore := flow.NewStore(api, &sync.Mutex{})
+	triggerService := flow.NewTriggerService(flowStore, registry)
+	wqStore := workqueue.NewStore(api, &sync.Mutex{})
+	executor := flow.NewFlowExecutor(registry)
+	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+
+	p := &Plugin{
+		botUserID:      "bot-id",
+		registry:       registry,
+		flowStore:      flowStore,
+		triggerService: triggerService,
+		workQueueStore: wqStore,
+		workerPool:     wp,
+	}
+	p.SetAPI(api)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Team Join Flow",
+		Enabled: true,
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "welcome"}}},
+	}
+	require.NoError(t, flowStore.Save(f))
+
+	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
+	p.UserHasJoinedTeam(nil, member, nil)
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		it, _ := wqStore.ClaimNext()
+		if it != nil {
+			item = it
+			return true
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.NotNil(t, item.TriggerData.Team)
+	assert.Empty(t, item.TriggerData.Team.Id)
+	assert.Equal(t, "[unknown team]", item.TriggerData.Team.Name)
+	assert.Equal(t, "[unknown team]", item.TriggerData.Team.DisplayName)
+	assert.Empty(t, item.TriggerData.Team.DefaultChannelId, "DefaultChannelId should stay empty on failure so SendMessage fails fast")
 }
