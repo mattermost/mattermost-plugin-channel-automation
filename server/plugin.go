@@ -416,13 +416,12 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 		return
 	}
 
-	safeTeam := &model.SafeTeam{Id: teamMember.TeamId}
 	team, appErr := p.API.GetTeam(teamMember.TeamId)
 	if appErr != nil {
 		p.API.LogWarn("Failed to get team for team join trigger, continuing with partial data", "team_id", teamMember.TeamId, "err", appErr.Error())
-	} else {
-		safeTeam = model.NewSafeTeam(team)
 	}
+
+	safeTeam := model.NewSafeTeam(team)
 
 	defaultChannel, appErr := p.API.GetChannelByName(teamMember.TeamId, mmmodel.DefaultChannelName, false)
 	if appErr != nil {

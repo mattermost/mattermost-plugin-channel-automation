@@ -116,13 +116,18 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 	}
 }
 
-// NewSafeTeam creates a SafeTeam from a Mattermost Team,
-// stripping all sensitive fields.
+// NewSafeTeam creates a SafeTeam from a Mattermost Team, stripping all
+// sensitive fields. A nil input yields a placeholder SafeTeam so templates
+// referencing team fields render something visible instead of blank when a
+// team lookup fails.
 // Note: DefaultChannelId is not part of mmmodel.Team and must be populated
 // separately by the caller (e.g. via API.GetChannelByName).
 func NewSafeTeam(t *mmmodel.Team) *SafeTeam {
 	if t == nil {
-		return nil
+		return &SafeTeam{
+			Name:        "[unknown team]",
+			DisplayName: "[unknown team]",
+		}
 	}
 	return &SafeTeam{
 		Id:          t.Id,

@@ -84,8 +84,13 @@ func TestNewSafeChannel_PreservesFields(t *testing.T) {
 	assert.Equal(t, "Test Channel", safe.DisplayName)
 }
 
-func TestNewSafeTeam_NilInput(t *testing.T) {
-	assert.Nil(t, NewSafeTeam(nil))
+func TestNewSafeTeam_NilInputReturnsPlaceholder(t *testing.T) {
+	safe := NewSafeTeam(nil)
+	require.NotNil(t, safe)
+	assert.Empty(t, safe.Id)
+	assert.Equal(t, "[unknown team]", safe.Name)
+	assert.Equal(t, "[unknown team]", safe.DisplayName)
+	assert.Empty(t, safe.DefaultChannelId)
 }
 
 func TestNewSafeTeam_PreservesFields(t *testing.T) {

@@ -525,3 +525,100 @@ func TestUserHasJoinedTeam_ProcessesNormalUser(t *testing.T) {
 		return item != nil
 	}, 2*time.Second, 10*time.Millisecond)
 }
+
+func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
+	kv := &inMemoryKV{data: make(map[string][]byte)}
+
+	api := &plugintest.API{}
+	api.On("KVGet", mock.Anything).Return(
+		func(key string) []byte {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			d := kv.data[key]
+			if d == nil {
+				return nil
+			}
+			cp := make([]byte, len(d))
+			copy(cp, d)
+			return cp
+		},
+		func(_ string) *mmmodel.AppError { return nil },
+	)
+	api.On("KVSet", mock.Anything, mock.Anything).Return(
+		func(key string, value []byte) *mmmodel.AppError {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			cp := make([]byte, len(value))
+			copy(cp, value)
+			kv.data[key] = cp
+			return nil
+		},
+	)
+	api.On("KVDelete", mock.Anything).Return(
+		func(key string) *mmmodel.AppError {
+			kv.mu.Lock()
+			defer kv.mu.Unlock()
+			delete(kv.data, key)
+			return nil
+		},
+	)
+	for _, method := range []string{"LogDebug", "LogError", "LogWarn"} {
+		for _, n := range []int{3, 5, 7, 9, 11, 13, 15} {
+			args := make([]any, n)
+			for i := range args {
+				args[i] = mock.Anything
+			}
+			api.On(method, args...).Return().Maybe()
+		}
+	}
+	api.On("GetUser", mock.Anything).Return(&mmmodel.User{Id: "user1", Username: "testuser"}, nil)
+	api.On("GetTeam", mock.Anything).Return(nil, &mmmodel.AppError{Message: "team lookup failed"})
+	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(nil, &mmmodel.AppError{Message: "channel lookup failed"})
+
+	registry := flow.NewRegistry()
+	registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
+
+	flowStore := flow.NewStore(api, &sync.Mutex{})
+	triggerService := flow.NewTriggerService(flowStore, registry)
+	wqStore := workqueue.NewStore(api, &sync.Mutex{})
+	executor := flow.NewFlowExecutor(registry)
+	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+
+	p := &Plugin{
+		botUserID:      "bot-id",
+		registry:       registry,
+		flowStore:      flowStore,
+		triggerService: triggerService,
+		workQueueStore: wqStore,
+		workerPool:     wp,
+	}
+	p.SetAPI(api)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Team Join Flow",
+		Enabled: true,
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "welcome"}}},
+	}
+	require.NoError(t, flowStore.Save(f))
+
+	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
+	p.UserHasJoinedTeam(nil, member, nil)
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		it, _ := wqStore.ClaimNext()
+		if it != nil {
+			item = it
+			return true
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.NotNil(t, item.TriggerData.Team)
+	assert.Empty(t, item.TriggerData.Team.Id)
+	assert.Equal(t, "[unknown team]", item.TriggerData.Team.Name)
+	assert.Equal(t, "[unknown team]", item.TriggerData.Team.DisplayName)
+	assert.Empty(t, item.TriggerData.Team.DefaultChannelId, "DefaultChannelId should stay empty on failure so SendMessage fails fast")
+}
