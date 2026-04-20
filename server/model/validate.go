@@ -120,10 +120,38 @@ func ValidateSendMessageChannel(f *Flow) error {
 }
 
 // isTriggerChannelTemplate returns true if s is a Go template expression that
-// resolves to a channel ID at runtime. This includes .Trigger.Channel.Id,
-// .Trigger.Team.DefaultChannelId, or any other template referencing trigger data.
+// resolves to a channel ID sourced from the trigger. The whole value must be a
+// single template expression (leading/trailing whitespace aside) and must
+// reference one of the allowlisted channel-bearing fields:
+//
+//   - {{.Trigger.Channel.Id}}            — the triggering channel
+//   - {{.Trigger.Team.DefaultChannelId}} — user_joined_team default channel
+//   - {{.Trigger.Post.ChannelId}}        — parent channel of a triggering post
+//
+// Templates referencing other fields (e.g. {{.Trigger.User.Id}}) or step
+// outputs (e.g. {{.Steps.<id>.ChannelID}}) are rejected at create time. Step
+// output chaining is not currently supported for send_message channel IDs.
+//
+// This is a UX guardrail, not a security boundary — CheckFlowPermissions is
+// the actual authorization layer for literal channel IDs. Templates are
+// intentionally excluded from permission checks because their values aren't
+// known until runtime.
 func isTriggerChannelTemplate(s string) bool {
-	return strings.Contains(s, "{{") && (strings.Contains(s, ".Trigger.") || strings.Contains(s, ".Steps"))
+	trimmed := strings.TrimSpace(s)
+	if !strings.HasPrefix(trimmed, "{{") || !strings.HasSuffix(trimmed, "}}") {
+		return false
+	}
+	allowed := []string{
+		".Trigger.Channel.Id",
+		".Trigger.Team.DefaultChannelId",
+		".Trigger.Post.ChannelId",
+	}
+	for _, a := range allowed {
+		if strings.Contains(trimmed, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateActions validates a list of actions.
