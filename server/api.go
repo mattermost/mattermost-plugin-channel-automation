@@ -32,7 +32,7 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration}, p.bridgeClient)
 	flowAPI.RegisterRoutes(apiRouter)
 
 	hooksAPI := hooks.NewAPIHandler(p.flowStore, p.API)

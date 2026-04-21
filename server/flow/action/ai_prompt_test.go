@@ -22,6 +22,9 @@ type mockBridgeClient struct {
 	serviceResponse string
 	serviceErr      error
 
+	agentTools    []bridgeclient.BridgeToolInfo
+	agentToolsErr error
+
 	lastAgent   string
 	lastService string
 	lastReq     bridgeclient.CompletionRequest
@@ -37,6 +40,10 @@ func (m *mockBridgeClient) ServiceCompletion(service string, req bridgeclient.Co
 	m.lastService = service
 	m.lastReq = req
 	return m.serviceResponse, m.serviceErr
+}
+
+func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeToolInfo, error) {
+	return m.agentTools, m.agentToolsErr
 }
 
 func newTestAPI() *plugintest.API {
@@ -263,9 +270,21 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to render template")
 }
 
+// mmTool builds a BridgeToolInfo for an embedded Mattermost MCP server tool.
+func mmTool(name string) bridgeclient.BridgeToolInfo {
+	return bridgeclient.BridgeToolInfo{Name: name, ServerOrigin: "embedded://mattermost"}
+}
+
 func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	api := newTestAPI()
-	bc := &mockBridgeClient{agentResponse: "ok"}
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentTools: []bridgeclient.BridgeToolInfo{
+			mmTool("search_posts"),         // Before + After
+			mmTool("add_user_to_channel"),  // Before only
+			{Name: "external_search"},      // non-MM tool, no hooks
+		},
+	}
 	a := NewAIPromptAction(api, bc)
 
 	chID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -275,28 +294,41 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 			Prompt:       "q",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			AllowedTools: []string{"search_posts", "read_channel"},
+			AllowedTools: []string{"search_posts", "add_user_to_channel", "external_search"},
 			Guardrails:   &model.Guardrails{ChannelIDs: []string{chID}},
 		},
 	}
 	ctx := &model.FlowContext{
-		FlowID:  "flow-99",
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		FlowID:    "flow-99",
+		CreatedBy: "creator1",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	_, err := a.Execute(act, ctx)
 	require.NoError(t, err)
 	require.NotNil(t, bc.lastReq.ToolHooks)
-	assert.Len(t, bc.lastReq.ToolHooks, 2)
-	cfg := bc.lastReq.ToolHooks["search_posts"]
-	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", cfg.BeforeCallback)
-	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/after", cfg.AfterCallback)
+	// Only Mattermost MCP tools with at least one hook should be wired.
+	require.Len(t, bc.lastReq.ToolHooks, 2)
+
+	sp := bc.lastReq.ToolHooks["search_posts"]
+	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", sp.BeforeCallback)
+	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/after", sp.AfterCallback)
+
+	auc := bc.lastReq.ToolHooks["add_user_to_channel"]
+	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", auc.BeforeCallback)
+	assert.Empty(t, auc.AfterCallback, "add_user_to_channel has no After hook in the catalog")
+
+	_, hasExternal := bc.lastReq.ToolHooks["external_search"]
+	assert.False(t, hasExternal, "non-Mattermost MCP tools must not get hook callbacks")
 }
 
 func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T) {
 	api := newTestAPI()
-	bc := &mockBridgeClient{agentResponse: "ok"}
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentTools:    []bridgeclient.BridgeToolInfo{mmTool("search_posts")},
+	}
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
@@ -309,7 +341,7 @@ func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T
 			Guardrails:   &model.Guardrails{ChannelIDs: []string{}},
 		},
 	}
-	ctx := &model.FlowContext{FlowID: "f1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+	ctx := &model.FlowContext{FlowID: "f1", CreatedBy: "creator1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
 
 	_, err := a.Execute(act, ctx)
 	require.NoError(t, err)
@@ -318,7 +350,10 @@ func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T
 
 func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 	api := newTestAPI()
-	bc := &mockBridgeClient{agentResponse: "tool result"}
+	bc := &mockBridgeClient{
+		agentResponse: "tool result",
+		agentTools:    []bridgeclient.BridgeToolInfo{{Name: "search"}},
+	}
 	a := NewAIPromptAction(api, bc)
 
 	act := &model.Action{
@@ -327,19 +362,65 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 			Prompt:       "Do something",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			AllowedTools: []string{"search", "create_post"},
+			AllowedTools: []string{"search"},
 		},
 	}
 	ctx := &model.FlowContext{
-		Trigger: model.TriggerData{},
-		Steps:   make(map[string]model.StepOutput),
+		CreatedBy: "creator1",
+		Trigger:   model.TriggerData{},
+		Steps:     make(map[string]model.StepOutput),
 	}
 
 	output, err := a.Execute(act, ctx)
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "tool result", output.Message)
-	assert.Equal(t, []string{"search", "create_post"}, bc.lastReq.AllowedTools)
+	assert.Equal(t, []string{"search"}, bc.lastReq.AllowedTools)
+}
+
+func TestAIPromptAction_Execute_AllowedTools_RejectedAtRuntime(t *testing.T) {
+	api := newTestAPI()
+	// Agent no longer exposes the tool the automation was saved with.
+	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{}}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Do something",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"search_posts"},
+		},
+	}
+	ctx := &model.FlowContext{CreatedBy: "creator1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "allowed_tools validation failed")
+}
+
+func TestAIPromptAction_Execute_AllowedTools_DemotedToolRejected(t *testing.T) {
+	api := newTestAPI()
+	// create_post is in the catalog with Allowed=false.
+	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{mmTool("create_post")}}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "post something",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"create_post"},
+		},
+	}
+	ctx := &model.FlowContext{CreatedBy: "creator1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+
+	_, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not permitted in automations")
 }
 
 func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {

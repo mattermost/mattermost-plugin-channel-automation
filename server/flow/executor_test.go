@@ -30,6 +30,10 @@ func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.Completi
 	return m.agentResponse, nil
 }
 
+func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeToolInfo, error) {
+	return nil, nil
+}
+
 func TestFlowExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)

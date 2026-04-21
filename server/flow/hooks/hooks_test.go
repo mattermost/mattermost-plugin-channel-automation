@@ -185,6 +185,50 @@ func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
 	assert.NotEmpty(t, resp.Error)
 }
 
+func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "add_user_to_channel",
+		Args:     map[string]any{"user_id": "user1"},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, resp.Error, "channel_id")
+	assert.Contains(t, resp.Error, chAllow)
+}
+
+func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "add_user_to_channel",
+		Args:     map[string]any{"channel_id": chDeny, "user_id": "user1"},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, resp.Error, "not permitted")
+	assert.Contains(t, resp.Error, chDeny)
+}
+
+func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "add_user_to_channel",
+		Args:     map[string]any{"channel_id": chAllow, "user_id": "user1"},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
 func TestHooks_Before_GetChannelInfo_ResolveAndReject(t *testing.T) {
 	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
 	api := &plugintest.API{}

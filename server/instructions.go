@@ -9,7 +9,17 @@ import (
 // channelAutomationInstructionsBase documents trigger types, actions, templates, and workflow
 // for create_automation and update_automation (returned by GET /automation-instructions).
 const channelAutomationInstructionsBase = `Channel automations are trigger-action workflows that fire when events occur.
-Requires channel admin (or system admin) permission for the trigger channel. For the channel_created trigger, team admin permission on the trigger's team_id is required instead.
+
+PERMISSION PREFLIGHT — VERIFY BEFORE DOING ANYTHING ELSE:
+The user must have permission to create an automation for the trigger they are asking about, otherwise create_automation will fail. Verify up-front so you don't waste the user's time gathering details for an automation they cannot create. The user is permitted when ANY of the following is true:
+- They are a system administrator. The agent context surfaces this as "System role: System Administrator" — if you see that line, permission is granted; skip the rest of this preflight.
+- The trigger fires in a direct message (DM) or group message (GM) channel. DMs/GMs have no admins, so any participant may create an automation for that channel.
+- They are a channel admin of the trigger channel (for message_posted, schedule, membership_changed triggers).
+- They are a team admin of the trigger team (for the channel_created and user_joined_team triggers, which are scoped by team_id rather than channel_id).
+
+How to check the channel role: call get_channel_info with the trigger channel_id. The response includes the requesting user's role in that channel as one of "admin", "member", "guest", or "not_member". Only "admin" satisfies the channel-admin requirement. Channel type "D" (DM) or "G" (GM) on the returned channel also satisfies the requirement regardless of role. For team-scoped triggers (channel_created, user_joined_team) you cannot verify team admin from get_channel_info; tell the user that team admin permission on the target team is required and proceed only if they confirm they have it (or are a system admin).
+
+If the user does NOT have permission, stop and explain which role they need (system admin, channel admin of <channel>, team admin of <team>, or that the trigger must be in a DM/GM).
 
 AGENT DISCOVERY: For an ai_prompt action with provider_type "agent", use the list_agents tool to discover bots.
 Each agent's ID is a 26-character Mattermost user ID — use that value as provider_id in the ai_prompt config.

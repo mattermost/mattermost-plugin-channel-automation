@@ -129,16 +129,15 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "tool_name is required"})
 		return
 	}
-	if !isMattermostMCPServerTool(req.ToolName) {
+	entry, catOK := LookupMattermostMCPTool(req.ToolName)
+	if !catOK {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{
 			Error: fmt.Sprintf("tool %q is not a known Mattermost MCP server tool; channel guardrails reject unrecognized tools",
 				req.ToolName),
 		})
 		return
 	}
-
-	entry, regOK := toolRegistry[req.ToolName]
-	if !regOK || entry.Before == nil {
+	if entry.Before == nil {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{
 			Error: fmt.Sprintf("tool %q is not supported with channel guardrails (Mattermost MCP tools must be explicitly allowlisted for guardrails)",
 				req.ToolName),
@@ -205,16 +204,15 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: "tool_name is required"})
 		return
 	}
-	if !isMattermostMCPServerTool(req.ToolName) {
+	entry, catOK := LookupMattermostMCPTool(req.ToolName)
+	if !catOK {
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{
 			Error: fmt.Sprintf("tool %q is not a known Mattermost MCP server tool; channel guardrails reject unrecognized tools",
 				req.ToolName),
 		})
 		return
 	}
-
-	entry, regOK := toolRegistry[req.ToolName]
-	if !regOK || entry.After == nil {
+	if entry.After == nil {
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{
 			Error: fmt.Sprintf("tool %q is not supported with channel guardrails (Mattermost MCP tools must be explicitly allowlisted for guardrails)",
 				req.ToolName),

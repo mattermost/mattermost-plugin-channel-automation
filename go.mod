@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/gorilla/mux v1.8.1
-	github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260420220839-53b59d8a7271
+	github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260421194757-7bf46e4ff91f
 	github.com/mattermost/mattermost-plugin-starter-template v0.5.1-0.20260301071036-fce92410a612
 	github.com/mattermost/mattermost/server/public v0.3.0
 	github.com/pkg/errors v0.9.1

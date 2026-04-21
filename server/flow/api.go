@@ -10,6 +10,7 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
@@ -24,11 +25,13 @@ type APIHandler struct {
 	api             plugin.API
 	scheduleManager *ScheduleManager
 	config          model.Configuration
+	bridge          hooks.AgentToolsLister
 }
 
-// NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config}
+// NewAPIHandler creates a new flow API handler. bridge may be nil in tests
+// that do not exercise allowed_tools validation.
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config, bridge: bridge}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -156,6 +159,11 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
 	if err := permissions.CheckFlowPermissions(h.api, f.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
@@ -265,6 +273,11 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}

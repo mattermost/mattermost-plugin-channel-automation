@@ -56,6 +56,18 @@ func beforeReadChannel(ctx HookCtx, args map[string]any) error {
 	return nil
 }
 
+func beforeAddUserToChannel(ctx HookCtx, args map[string]any) error {
+	allowed := formatAllowedChannels(ctx.Guardrails)
+	cid := stringArg(args, "channel_id")
+	if cid == "" {
+		return fmt.Errorf("add_user_to_channel requires channel_id; allowed channel_ids: %s", allowed)
+	}
+	if !channelAllowed(ctx.AllowedCh, cid) {
+		return fmt.Errorf("channel_id %q is not permitted by guardrails; allowed channel_ids: %s", cid, allowed)
+	}
+	return nil
+}
+
 func beforeGetChannelMembers(ctx HookCtx, args map[string]any) error {
 	allowed := formatAllowedChannels(ctx.Guardrails)
 	cid := stringArg(args, "channel_id")
