@@ -32,19 +32,24 @@ type mockFlowStore struct {
 
 func (m *mockFlowStore) Get(id string) (*model.Flow, error) { return m.flows[id], nil }
 func (m *mockFlowStore) List() ([]*model.Flow, error)       { return nil, nil }
+
 func (m *mockFlowStore) ListByTriggerChannel(_ string) ([]*model.Flow, error) {
 	return nil, nil
 }
+
 func (m *mockFlowStore) ListScheduled() ([]*model.Flow, error)       { return nil, nil }
 func (m *mockFlowStore) Save(_ *model.Flow) error                    { return nil }
 func (m *mockFlowStore) Delete(_ string) error                       { return nil }
 func (m *mockFlowStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
+
 func (m *mockFlowStore) GetFlowIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }
+
 func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
+
 func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error) { return nil, nil }
 
 func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Router {

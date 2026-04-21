@@ -26,9 +26,6 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 	if f == nil {
 		return nil
 	}
-	if userID == "" {
-		return fmt.Errorf("cannot validate allowed_tools: missing user id")
-	}
 
 	// Cache results per agent so a flow with multiple ai_prompt actions
 	// pointing at the same agent only triggers one bridge call.
@@ -37,6 +34,9 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 	for i, a := range f.Actions {
 		if a.AIPrompt == nil || len(a.AIPrompt.AllowedTools) == 0 {
 			continue
+		}
+		if userID == "" {
+			return fmt.Errorf("action %d: cannot validate allowed_tools: missing user id", i)
 		}
 		agentID := a.AIPrompt.ProviderID
 		if agentID == "" {
