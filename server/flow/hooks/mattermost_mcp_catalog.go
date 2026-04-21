@@ -1,6 +1,9 @@
 package hooks
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"maps"
+)
 
 // EmbeddedMattermostMCPOrigin identifies tools served by the Mattermost
 // agents plugin's embedded MCP server. Mirrors mcp.EmbeddedClientKey from
@@ -119,8 +122,6 @@ func IsAllowedMattermostMCPTool(name string) (known, allowed bool) {
 // tests. Mutating the returned map does not affect the catalog.
 func MattermostMCPTools() map[string]MattermostMCPTool {
 	out := make(map[string]MattermostMCPTool, len(mattermostMCPServerTools))
-	for k, v := range mattermostMCPServerTools {
-		out[k] = v
-	}
+	maps.Copy(out, mattermostMCPServerTools)
 	return out
 }

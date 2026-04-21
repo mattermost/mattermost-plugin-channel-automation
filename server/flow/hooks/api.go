@@ -310,35 +310,6 @@ type HookCtx struct {
 	TeamFromFlowErr string
 }
 
-// maxLoggedPayload caps the size of args/output payloads emitted to debug logs to
-// avoid flooding logs with very large MCP tool payloads.
-const maxLoggedPayload = 4096
-
-func argsForLog(args map[string]any) string {
-	if len(args) == 0 {
-		return "{}"
-	}
-	b, err := json.Marshal(args)
-	if err != nil {
-		return fmt.Sprintf("<unmarshalable args: %v>", err)
-	}
-	return truncateForLog(string(b))
-}
-
-func outputForLog(output json.RawMessage) string {
-	if len(output) == 0 {
-		return ""
-	}
-	return truncateForLog(string(output))
-}
-
-func truncateForLog(s string) string {
-	if len(s) <= maxLoggedPayload {
-		return s
-	}
-	return s[:maxLoggedPayload] + fmt.Sprintf("...(truncated, %d bytes total)", len(s))
-}
-
 func stringArg(args map[string]any, key string) string {
 	if args == nil {
 		return ""

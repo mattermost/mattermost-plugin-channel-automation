@@ -19,9 +19,11 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-const chAllow = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-const chDeny = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-const teamAutomation = "tttttttttttttttttttttttttt" // 26-char test team id (automation anchor)
+const (
+	chAllow        = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	chDeny         = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	teamAutomation = "tttttttttttttttttttttttttt" // 26-char test team id (automation anchor)
+)
 
 // mockFlowStore implements model.Store for hook tests.
 type mockFlowStore struct {

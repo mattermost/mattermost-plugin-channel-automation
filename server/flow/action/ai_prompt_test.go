@@ -280,9 +280,9 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	bc := &mockBridgeClient{
 		agentResponse: "ok",
 		agentTools: []bridgeclient.BridgeToolInfo{
-			mmTool("search_posts"),         // Before + After
-			mmTool("add_user_to_channel"),  // Before only
-			{Name: "external_search"},      // non-MM tool, no hooks
+			mmTool("search_posts"),        // Before + After
+			mmTool("add_user_to_channel"), // Before only
+			{Name: "external_search"},     // non-MM tool, no hooks
 		},
 	}
 	a := NewAIPromptAction(api, bc)
