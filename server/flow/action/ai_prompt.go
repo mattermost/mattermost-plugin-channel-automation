@@ -106,7 +106,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		}
 		req.AllowedTools = cfg.AllowedTools
 	}
-	if cfg.Guardrails != nil && len(cfg.Guardrails.ChannelIDs) > 0 && len(cfg.AllowedTools) > 0 {
+	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
 		base := fmt.Sprintf("/api/v1/hooks/tools/%s/%s", ctx.FlowID, action.ID)
 		for _, t := range cfg.AllowedTools {

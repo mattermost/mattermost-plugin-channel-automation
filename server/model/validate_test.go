@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -262,7 +263,7 @@ func TestValidateActions(t *testing.T) {
 			ID: "ask-ai",
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
-				Guardrails: &Guardrails{ChannelIDs: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
 			},
 		}})
 		require.Error(t, err)
@@ -275,7 +276,7 @@ func TestValidateActions(t *testing.T) {
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
 				AllowedTools: []string{"search_posts"},
-				Guardrails:   &Guardrails{ChannelIDs: []string{"not-a-valid-id"}},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{{ChannelID: "not-a-valid-id"}}},
 			},
 		}})
 		require.Error(t, err)
@@ -288,23 +289,39 @@ func TestValidateActions(t *testing.T) {
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
 				AllowedTools: []string{"search_posts"},
-				Guardrails:   &Guardrails{ChannelIDs: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{
+					{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"},
+					{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"},
+				}},
 			},
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "duplicate channel id")
 	})
 
-	t.Run("guardrails empty channel_ids slice ok", func(t *testing.T) {
+	t.Run("guardrails empty channels slice ok", func(t *testing.T) {
 		err := ValidateActions([]Action{{
 			ID: "ask-ai",
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
 				AllowedTools: []string{"search_posts"},
-				Guardrails:   &Guardrails{ChannelIDs: []string{}},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{}},
 			},
 		}})
 		require.NoError(t, err)
+	})
+
+	t.Run("guardrails JSON shape stays as channel_ids", func(t *testing.T) {
+		const id = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+		raw, err := json.Marshal(&Guardrails{Channels: []GuardrailChannel{{ChannelID: id, TeamID: "should-not-leak"}}})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"channel_ids":["aaaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(raw))
+
+		var g Guardrails
+		require.NoError(t, json.Unmarshal([]byte(`{"channel_ids":["aaaaaaaaaaaaaaaaaaaaaaaaaa"]}`), &g))
+		require.Len(t, g.Channels, 1)
+		assert.Equal(t, id, g.Channels[0].ChannelID)
+		assert.Empty(t, g.Channels[0].TeamID, "team_id should never be parsed from the wire")
 	})
 
 	t.Run("nil guardrails ok", func(t *testing.T) {

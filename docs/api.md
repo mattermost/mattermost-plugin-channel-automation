@@ -526,7 +526,11 @@ Hook handlers maintain an explicit catalog of **production** Mattermost built-in
 
 When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
 
-For `get_team_info` and `get_team_members`, guardrails additionally require that `team_id` matches the automation’s team: the `channel_created` trigger’s `team_id`, or the team of the trigger channel for other trigger types. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup).
+For `get_team_info` and `get_team_members`, guardrails restrict `team_id` to the **allowed-team set**: the union of (a) the automation’s trigger team (the `channel_created` trigger’s `team_id`, or the team of the trigger channel for other trigger types) and (b) the team of every channel listed in `channel_ids`. This means a guardrail set may span multiple teams and team tools work for all of them. Direct- and group-message channels in `channel_ids` contribute nothing to the allowed-team set (they have no team) but still work for channel-scoped tools. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup).
+
+Channel-tool outputs are also pruned to never reference a removed channel: `get_user_channels` strips `team_info_by_id` entries that no surviving channel belongs to, `get_channel_info` strips `team_by_id` / `member_count_by_channel_id` / `channel_role_by_id` entries the same way, and `read_post` rejects responses whose `posts` span more than one channel.
+
+Channel → team lookups for the allowed-team set are memoized per-channel inside the hook handler (channel → team is immutable in Mattermost), so each unique guardrail channel triggers at most one `GetChannel` call per plugin run.
 
 Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 

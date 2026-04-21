@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-plugin-agents/public/mcptool"
@@ -22,11 +23,71 @@ const maxHookBodySize = 1 << 20 // 1 MB
 type APIHandler struct {
 	store model.Store
 	api   plugin.API
+	// channelTeamCache memoizes channel_id -> team_id (or "" for DM/GM).
+	// Channel -> team is immutable in Mattermost so entries never expire.
+	// On plugin restart the cache rebuilds on demand.
+	channelTeamCache sync.Map
 }
 
 // NewAPIHandler constructs a hooks API handler.
 func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
 	return &APIHandler{store: store, api: api}
+}
+
+// resolveChannelTeam returns the team ID for the given channel, consulting
+// the cache first and falling back to plugin.API.GetChannel. The result is
+// memoized including the empty-team case (DM/GM channels).
+func (h *APIHandler) resolveChannelTeam(channelID string) (string, error) {
+	if channelID == "" {
+		return "", nil
+	}
+	if v, ok := h.channelTeamCache.Load(channelID); ok {
+		return v.(string), nil
+	}
+	ch, appErr := h.api.GetChannel(channelID)
+	if appErr != nil {
+		return "", fmt.Errorf("resolve channel %q team: %s", channelID, appErr.Error())
+	}
+	if ch == nil {
+		return "", fmt.Errorf("resolve channel %q team: channel not found", channelID)
+	}
+	h.channelTeamCache.Store(channelID, ch.TeamId)
+	return ch.TeamId, nil
+}
+
+// allowedSetsForGuardrails computes the AllowedCh and AllowedTeams sets for a
+// guardrail block, resolving channel -> team for any entry not already
+// carrying a TeamID. Channels whose team cannot be resolved are still added
+// to AllowedCh (so channel tools work) but contribute nothing to
+// AllowedTeams. The resolution is logged at debug for traceability.
+func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, flowID, actionID string) (map[string]struct{}, map[string]struct{}) {
+	chs := make(map[string]struct{}, len(gr.Channels))
+	teams := make(map[string]struct{}, len(gr.Channels))
+	for i := range gr.Channels {
+		c := &gr.Channels[i]
+		cid := strings.TrimSpace(c.ChannelID)
+		if cid == "" {
+			continue
+		}
+		chs[cid] = struct{}{}
+		if c.TeamID == "" {
+			tid, err := h.resolveChannelTeam(cid)
+			if err != nil {
+				h.api.LogDebug("hooks: failed to resolve guardrail channel team",
+					"flow_id", flowID,
+					"action_id", actionID,
+					"channel_id", cid,
+					"error", err.Error(),
+				)
+				continue
+			}
+			c.TeamID = tid
+		}
+		if c.TeamID != "" {
+			teams[c.TeamID] = struct{}{}
+		}
+	}
+	return chs, teams
 }
 
 // RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before|after.
@@ -48,7 +109,7 @@ func (h *APIHandler) loadGuardrailFlow(flowID, actionID string) (*model.Flow, *m
 			continue
 		}
 		gr := a.AIPrompt.Guardrails
-		if len(gr.ChannelIDs) == 0 {
+		if len(gr.Channels) == 0 {
 			return nil, nil, false
 		}
 		return f, gr, true
@@ -151,9 +212,15 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		teamFromFlowErr = teamErr.Error()
 	}
 
+	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
+	if expTeam != "" {
+		allowedTeams[expTeam] = struct{}{}
+	}
+
 	ctx := HookCtx{
 		Guardrails:      gr,
-		AllowedCh:       channelIDSet(gr.ChannelIDs),
+		AllowedCh:       allowedCh,
+		AllowedTeams:    allowedTeams,
 		API:             h.api,
 		UserID:          req.UserID,
 		ExpectedTeamID:  expTeam,
@@ -226,9 +293,15 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 		teamFromFlowErr = teamErr.Error()
 	}
 
+	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
+	if expTeam != "" {
+		allowedTeams[expTeam] = struct{}{}
+	}
+
 	ctx := HookCtx{
 		Guardrails:      gr,
-		AllowedCh:       channelIDSet(gr.ChannelIDs),
+		AllowedCh:       allowedCh,
+		AllowedTeams:    allowedTeams,
 		API:             h.api,
 		UserID:          req.UserID,
 		ExpectedTeamID:  expTeam,
@@ -246,24 +319,16 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 type HookCtx struct {
 	Guardrails *model.Guardrails
 	AllowedCh  map[string]struct{}
-	API        plugin.API
-	UserID     string
+	// AllowedTeams is the set of team IDs the LLM is allowed to query through
+	// team tools. It contains the team of every guardrail channel plus the
+	// flow's trigger team (when resolvable).
+	AllowedTeams map[string]struct{}
+	API          plugin.API
+	UserID       string
 	// ExpectedTeamID is the team this automation is anchored to (from the flow).
 	ExpectedTeamID string
 	// TeamFromFlowErr is non-empty when ExpectedTeamID could not be resolved; get_team_* hooks must fail.
 	TeamFromFlowErr string
-}
-
-func channelIDSet(ids []string) map[string]struct{} {
-	s := make(map[string]struct{}, len(ids))
-	for _, id := range ids {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		s[id] = struct{}{}
-	}
-	return s
 }
 
 // maxLoggedPayload caps the size of args/output payloads emitted to debug logs to

@@ -157,14 +157,14 @@ func ValidateActions(actions []Action) error {
 					return fmt.Errorf("action %d: guardrails requires non-empty allowed_tools", i)
 				}
 				seenCh := make(map[string]struct{})
-				for _, id := range a.AIPrompt.Guardrails.ChannelIDs {
-					if !mmmodel.IsValidId(id) {
-						return fmt.Errorf("action %d: invalid channel id %q in guardrails.channel_ids (expected 26-character Mattermost ID)", i, id)
+				for _, c := range a.AIPrompt.Guardrails.Channels {
+					if !mmmodel.IsValidId(c.ChannelID) {
+						return fmt.Errorf("action %d: invalid channel id %q in guardrails.channel_ids (expected 26-character Mattermost ID)", i, c.ChannelID)
 					}
-					if _, dup := seenCh[id]; dup {
-						return fmt.Errorf("action %d: duplicate channel id %q in guardrails.channel_ids", i, id)
+					if _, dup := seenCh[c.ChannelID]; dup {
+						return fmt.Errorf("action %d: duplicate channel id %q in guardrails.channel_ids", i, c.ChannelID)
 					}
-					seenCh[id] = struct{}{}
+					seenCh[c.ChannelID] = struct{}{}
 				}
 			}
 		}

@@ -295,7 +295,10 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
 			AllowedTools: []string{"search_posts", "add_user_to_channel", "external_search"},
-			Guardrails:   &model.Guardrails{ChannelIDs: []string{chID}},
+			Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{
+				ChannelID: chID,
+				TeamID:    "tttttttttttttttttttttttttt",
+			}}},
 		},
 	}
 	ctx := &model.FlowContext{
@@ -338,7 +341,7 @@ func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
 			AllowedTools: []string{"search_posts"},
-			Guardrails:   &model.Guardrails{ChannelIDs: []string{}},
+			Guardrails:   &model.Guardrails{Channels: []model.GuardrailChannel{}},
 		},
 	}
 	ctx := &model.FlowContext{FlowID: "f1", CreatedBy: "creator1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}

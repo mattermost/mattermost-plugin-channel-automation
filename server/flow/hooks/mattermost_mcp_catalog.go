@@ -65,7 +65,7 @@ type MattermostMCPTool struct {
 // also appear here with Allowed=true.
 var mattermostMCPServerTools = map[string]MattermostMCPTool{
 	// Posts (mcpserver/tools/posts.go — getPostTools)
-	"read_post":     {Allowed: true, Before: beforeReadPost, After: afterReadPost},
+	"read_post":     {Allowed: true, After: afterReadPost},
 	"create_post":   {Allowed: false},
 	"dm":            {Allowed: false},
 	"group_message": {Allowed: false},

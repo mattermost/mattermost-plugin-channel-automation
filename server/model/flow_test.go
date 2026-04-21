@@ -129,7 +129,7 @@ func TestCollectChannelIDs_AIPromptGuardrailsChannelIDs(t *testing.T) {
 				ID: "ai1",
 				AIPrompt: &AIPromptActionConfig{
 					Prompt: "x", ProviderType: "agent", ProviderID: "bot",
-					Guardrails: &Guardrails{ChannelIDs: []string{ch2}},
+					Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: ch2}}},
 				},
 			},
 		},

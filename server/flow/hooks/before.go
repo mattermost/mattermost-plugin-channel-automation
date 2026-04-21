@@ -80,20 +80,17 @@ func beforeGetChannelMembers(ctx HookCtx, args map[string]any) error {
 	return nil
 }
 
-func beforeReadPost(_ HookCtx, _ map[string]any) error {
-	return nil
-}
-
 func beforeGetTeamInfo(ctx HookCtx, args map[string]any) error {
 	if ctx.TeamFromFlowErr != "" {
 		return fmt.Errorf("%s", ctx.TeamFromFlowErr)
 	}
+	allowed := formatAllowedTeams(ctx.AllowedTeams)
 	tid := stringArg(args, "team_id")
 	if tid == "" {
-		return fmt.Errorf("get_team_info requires team_id when channel guardrails are active; automation team_id: %s", ctx.ExpectedTeamID)
+		return fmt.Errorf("get_team_info requires team_id when channel guardrails are active; allowed team_ids: %s", allowed)
 	}
-	if tid != ctx.ExpectedTeamID {
-		return fmt.Errorf("team_id %q does not match this automation's team %q", tid, ctx.ExpectedTeamID)
+	if _, ok := ctx.AllowedTeams[tid]; !ok {
+		return fmt.Errorf("team_id %q is not permitted by guardrails; allowed team_ids: %s", tid, allowed)
 	}
 	return nil
 }
@@ -102,12 +99,13 @@ func beforeGetTeamMembers(ctx HookCtx, args map[string]any) error {
 	if ctx.TeamFromFlowErr != "" {
 		return fmt.Errorf("%s", ctx.TeamFromFlowErr)
 	}
+	allowed := formatAllowedTeams(ctx.AllowedTeams)
 	tid := stringArg(args, "team_id")
 	if tid == "" {
-		return fmt.Errorf("get_team_members requires team_id; automation team_id: %s", ctx.ExpectedTeamID)
+		return fmt.Errorf("get_team_members requires team_id; allowed team_ids: %s", allowed)
 	}
-	if tid != ctx.ExpectedTeamID {
-		return fmt.Errorf("team_id %q does not match this automation's team %q", tid, ctx.ExpectedTeamID)
+	if _, ok := ctx.AllowedTeams[tid]; !ok {
+		return fmt.Errorf("team_id %q is not permitted by guardrails; allowed team_ids: %s", tid, allowed)
 	}
 	return nil
 }
