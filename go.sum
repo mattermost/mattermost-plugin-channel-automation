@@ -177,8 +177,8 @@ github.com/mattermost/ldap v0.0.0-20231116144001-0f480c025956 h1:Y1Tu/swM31pVwwb
 github.com/mattermost/ldap v0.0.0-20231116144001-0f480c025956/go.mod h1:SRl30Lb7/QoYyohYeVBuqYvvmXSZJxZgiV3Zf6VbxjI=
 github.com/mattermost/logr/v2 v2.0.22 h1:npFkXlkAWR9J8payh8ftPcCZvLbHSI125mAM5/r/lP4=
 github.com/mattermost/logr/v2 v2.0.22/go.mod h1:0sUKpO+XNMZApeumaid7PYaUZPBIydfuWZ0dqixXo+s=
-github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260416025343-880cf89e5477 h1:we3kZ/xxUUeN7n33SZHYDrrQ+cDwvJmIxAbCrpJvWJM=
-github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260416025343-880cf89e5477/go.mod h1:TAN+s5d+T3B4TG+FztZKdKWwoPRLHJFKU5tquk/Rw6A=
+github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260420220839-53b59d8a7271 h1:iH4DnVn9bbXJcOQK/4n33EuVc5bku6Z0pK3NfguiUv4=
+github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260420220839-53b59d8a7271/go.mod h1:TAN+s5d+T3B4TG+FztZKdKWwoPRLHJFKU5tquk/Rw6A=
 github.com/mattermost/mattermost-plugin-starter-template v0.5.1-0.20260301071036-fce92410a612 h1:shRSx0uJhFtiHmlCF8g+J8NB4njT4fKNjGlUdY5AW3c=
 github.com/mattermost/mattermost-plugin-starter-template v0.5.1-0.20260301071036-fce92410a612/go.mod h1:8NahzHZmrmgxP8vLiLD0nlE5iVA6z4zKERPcsRux8DQ=
 github.com/mattermost/mattermost/server/public v0.3.0 h1:AtzCjypbLcvSVQZMg0vKWL57vVfLSCC46j1nsOof2Ko=

@@ -125,6 +125,8 @@ Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `cr
 
 For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`.
 
+When `guardrails` is set on an `ai_prompt` action, `allowed_tools` must be non-empty, and each `guardrails.channel_ids` entry must be a distinct 26-character Mattermost ID.
+
 **Request body** (max 1 MB):
 
 ```json
@@ -162,6 +164,8 @@ The created flow object with all server-assigned fields populated.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
+| 400    | `action <i>: guardrails requires non-empty allowed_tools`                                                   |
+| 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
 | 500    | `failed to create flow`                                                                                     |
@@ -235,6 +239,8 @@ The updated flow object.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
+| 400    | `action <i>: guardrails requires non-empty allowed_tools`                                                   |
+| 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 404    | `flow not found`                                                                                            |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
@@ -504,8 +510,23 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
+| `guardrails`       | [Guardrails](#guardrails)       | _(optional)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. |
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+
+#### Guardrails
+
+| Field          | Type     | Description                                                                                                                                 |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `channel_ids`  | string[] | Mattermost channel IDs (26 characters each). When non-empty (and `allowed_tools` is set), the automation registers per-tool before/after hooks so only these channels are exposed to the agent via supported tools. Duplicate or empty entries are rejected. |
+
+Hook handlers maintain an explicit catalog of **production** Mattermost built-in MCP tool names from the agents plugin (dev-only tools such as `create_user` / `create_post_as_user` / `create_team` / `add_user_to_team` are excluded). On each before/after callback: names **not** in that catalog are rejected (so arbitrary or future-unreviewed tools cannot slip through). Names in the catalog but without a guardrail implementation are also rejected until support is added.
+
+When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
+
+For `get_team_info` and `get_team_members`, guardrails additionally require that `team_id` matches the automation’s team: the `channel_created` trigger’s `team_id`, or the team of the trigger channel for other trigger types. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup).
+
+Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 ---
 
@@ -552,6 +573,7 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 Action templates receive a `FlowContext` object with the following structure:
 
 ```
+{{.FlowID}}             — id of the flow being executed
 {{.CreatedBy}}          — user ID of the flow creator
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)

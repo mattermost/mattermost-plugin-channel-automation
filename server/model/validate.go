@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 )
 
 const minScheduleInterval = 1 * time.Hour
@@ -160,6 +162,21 @@ func ValidateActions(actions []Action) error {
 			for _, tool := range a.AIPrompt.AllowedTools {
 				if _, blocked := disallowedTools[tool]; blocked {
 					return fmt.Errorf("action %d: tool %q is not allowed in automations", i, tool)
+				}
+			}
+			if a.AIPrompt.Guardrails != nil {
+				if len(a.AIPrompt.AllowedTools) == 0 {
+					return fmt.Errorf("action %d: guardrails requires non-empty allowed_tools", i)
+				}
+				seenCh := make(map[string]struct{})
+				for _, id := range a.AIPrompt.Guardrails.ChannelIDs {
+					if !mmmodel.IsValidId(id) {
+						return fmt.Errorf("action %d: invalid channel id %q in guardrails.channel_ids (expected 26-character Mattermost ID)", i, id)
+					}
+					if _, dup := seenCh[id]; dup {
+						return fmt.Errorf("action %d: duplicate channel id %q in guardrails.channel_ids", i, id)
+					}
+					seenCh[id] = struct{}{}
 				}
 			}
 		}

@@ -119,6 +119,25 @@ func TestCollectChannelIDs_ChannelCreatedTrigger(t *testing.T) {
 	assert.Empty(t, ids, "channel_created with templated action channels should return no concrete IDs")
 }
 
+func TestCollectChannelIDs_AIPromptGuardrailsChannelIDs(t *testing.T) {
+	ch1 := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	ch2 := "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+	f := &Flow{
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: ch1}},
+		Actions: []Action{
+			{
+				ID: "ai1",
+				AIPrompt: &AIPromptActionConfig{
+					Prompt: "x", ProviderType: "agent", ProviderID: "bot",
+					Guardrails: &Guardrails{ChannelIDs: []string{ch2}},
+				},
+			},
+		},
+	}
+	ids := CollectChannelIDs(f)
+	assert.ElementsMatch(t, []string{ch1, ch2}, ids)
+}
+
 func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {
 	f := &Flow{
 		Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},

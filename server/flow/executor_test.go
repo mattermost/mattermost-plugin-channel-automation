@@ -58,8 +58,10 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	ctx, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
+	require.NotNil(t, ctx)
+	assert.Equal(t, "flow1", ctx.FlowID)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
 

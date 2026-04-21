@@ -86,13 +86,20 @@ type SendMessageActionConfig struct {
 	Body          string `json:"body"`
 }
 
+// Guardrails constrains MCP tool calls for an ai_prompt action (opt-in).
+// Additional fields may be added over time without breaking callers.
+type Guardrails struct {
+	ChannelIDs []string `json:"channel_ids,omitempty"`
+}
+
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt string      `json:"system_prompt,omitempty"`
+	Prompt       string      `json:"prompt"`
+	ProviderType string      `json:"provider_type"`
+	ProviderID   string      `json:"provider_id"`
+	AllowedTools []string    `json:"allowed_tools,omitempty"`
+	Guardrails   *Guardrails `json:"guardrails,omitempty"`
 }
 
 // Action defines a single step in a flow. Exactly one config pointer should be set.
@@ -143,6 +150,11 @@ func CollectChannelIDs(f *Flow) []string {
 	for i := range f.Actions {
 		if f.Actions[i].SendMessage != nil {
 			add(f.Actions[i].SendMessage.ChannelID)
+		}
+		if f.Actions[i].AIPrompt != nil && f.Actions[i].AIPrompt.Guardrails != nil {
+			for _, cid := range f.Actions[i].AIPrompt.Guardrails.ChannelIDs {
+				add(cid)
+			}
 		}
 	}
 

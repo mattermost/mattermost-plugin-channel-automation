@@ -256,6 +256,64 @@ func TestValidateActions(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `tool "group_message" is not allowed`)
 	})
+
+	t.Run("guardrails requires allowed_tools", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				Guardrails: &Guardrails{ChannelIDs: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "guardrails requires non-empty allowed_tools")
+	})
+
+	t.Run("guardrails invalid channel id", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{ChannelIDs: []string{"not-a-valid-id"}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid channel id")
+	})
+
+	t.Run("guardrails duplicate channel id", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{ChannelIDs: []string{"aaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "duplicate channel id")
+	})
+
+	t.Run("guardrails empty channel_ids slice ok", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{ChannelIDs: []string{}},
+			},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("nil guardrails ok", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "agent", ProviderID: "bot1"},
+		}})
+		require.NoError(t, err)
+	})
 }
 
 func TestValidateSendMessageChannel(t *testing.T) {

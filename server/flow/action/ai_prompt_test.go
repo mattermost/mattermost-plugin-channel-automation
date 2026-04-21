@@ -263,6 +263,59 @@ func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to render template")
 }
 
+func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	chID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	act := &model.Action{
+		ID: "ai-step",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "q",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"search_posts", "read_channel"},
+			Guardrails:   &model.Guardrails{ChannelIDs: []string{chID}},
+		},
+	}
+	ctx := &model.FlowContext{
+		FlowID:  "flow-99",
+		Trigger: model.TriggerData{},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, bc.lastReq.ToolHooks)
+	assert.Len(t, bc.lastReq.ToolHooks, 2)
+	cfg := bc.lastReq.ToolHooks["search_posts"]
+	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", cfg.BeforeCallback)
+	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/after", cfg.AfterCallback)
+}
+
+func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai-step",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "q",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"search_posts"},
+			Guardrails:   &model.Guardrails{ChannelIDs: []string{}},
+		},
+	}
+	ctx := &model.FlowContext{FlowID: "f1", Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	assert.Nil(t, bc.lastReq.ToolHooks)
+}
+
 func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "tool result"}

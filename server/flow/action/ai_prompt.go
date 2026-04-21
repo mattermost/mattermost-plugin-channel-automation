@@ -97,6 +97,17 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	if len(cfg.AllowedTools) > 0 {
 		req.AllowedTools = cfg.AllowedTools
 	}
+	if cfg.Guardrails != nil && len(cfg.Guardrails.ChannelIDs) > 0 && len(cfg.AllowedTools) > 0 {
+		hooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
+		base := fmt.Sprintf("/api/v1/hooks/tools/%s/%s", ctx.FlowID, action.ID)
+		for _, t := range cfg.AllowedTools {
+			hooks[t] = bridgeclient.ToolHookConfig{
+				BeforeCallback: base + "/before",
+				AfterCallback:  base + "/after",
+			}
+		}
+		req.ToolHooks = hooks
+	}
 	var response string
 	switch cfg.ProviderType {
 	case "agent":
