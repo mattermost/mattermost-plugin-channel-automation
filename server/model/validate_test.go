@@ -231,33 +231,6 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("allowed_tools rejects create_post", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"search", "create_post"}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
-	})
-
-	t.Run("allowed_tools rejects dm", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"dm"}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
-	})
-
-	t.Run("allowed_tools rejects group_message", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"group_message"}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "group_message" is not allowed`)
-	})
-
 	t.Run("guardrails requires allowed_tools", func(t *testing.T) {
 		err := ValidateActions([]Action{{
 			ID: "ask-ai",

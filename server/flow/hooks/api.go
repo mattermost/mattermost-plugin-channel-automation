@@ -172,14 +172,6 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 	flowID := vars["flow_id"]
 	actionID := vars["action_id"]
 
-	h.api.LogDebug("hooks: before tool invocation",
-		"flow_id", flowID,
-		"action_id", actionID,
-		"tool_name", req.ToolName,
-		"user_id", req.UserID,
-		"args", argsForLog(req.Args),
-	)
-
 	f, gr, ok := h.loadGuardrailFlow(flowID, actionID)
 	if !ok {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "guardrails not found"})
@@ -243,13 +235,6 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 	flowID := vars["flow_id"]
 	actionID := vars["action_id"]
 
-	h.api.LogDebug("hooks: after tool invocation",
-		"flow_id", flowID,
-		"action_id", actionID,
-		"tool_name", req.ToolName,
-		"output", outputForLog(req.Output),
-	)
-
 	f, gr, ok := h.loadGuardrailFlow(flowID, actionID)
 	if !ok {
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: "guardrails not found"})
@@ -257,12 +242,6 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Error != "" {
-		h.api.LogDebug("hooks: after tool invocation (resolver error, passing through)",
-			"flow_id", flowID,
-			"action_id", actionID,
-			"tool_name", req.ToolName,
-			"resolver_error", req.Error,
-		)
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{})
 		return
 	}
