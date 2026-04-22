@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,9 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
+
+// fixedTime is a stable timestamp used in buildTriggerContext tests.
+var fixedTime = time.Date(2026, time.April, 22, 14, 30, 45, 0, time.UTC)
 
 // mockBridgeClient implements BridgeClient for testing.
 type mockBridgeClient struct {
@@ -379,11 +383,13 @@ func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) 
 	output, err := a.Execute(act, ctx)
 	require.NoError(t, err)
 	require.NotNil(t, output)
-	// Even with no user system prompt and empty trigger, scope instruction is always present
+	// Even with no user system prompt and empty trigger, scope instruction plus
+	// the auto-injected current date are always present.
 	require.Len(t, bc.lastReq.Posts, 2)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
 	assert.Contains(t, bc.lastReq.Posts[0].Message, "Complete only the specific task")
-	assert.NotContains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "Current Date: ")
 	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
 	assert.Equal(t, "Hello", bc.lastReq.Posts[1].Message)
 }
@@ -411,10 +417,19 @@ func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 }
 
 func TestBuildTriggerContext(t *testing.T) {
-	t.Run("empty trigger", func(t *testing.T) {
-		meta, userContent := buildTriggerContext(model.TriggerData{})
-		assert.Empty(t, meta)
+	t.Run("empty trigger still includes current date", func(t *testing.T) {
+		meta, userContent := buildTriggerContext(model.TriggerData{}, fixedTime)
+		assert.Contains(t, meta, "<trigger_context>")
+		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
 		assert.Empty(t, userContent)
+	})
+
+	t.Run("current date is emitted in UTC regardless of input location", func(t *testing.T) {
+		loc, err := time.LoadLocation("America/New_York")
+		require.NoError(t, err)
+		nyTime := time.Date(2026, time.April, 22, 10, 30, 45, 0, loc) // 14:30:45 UTC
+		meta, _ := buildTriggerContext(model.TriggerData{}, nyTime)
+		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
 	})
 
 	t.Run("post trigger separates metadata from user content", func(t *testing.T) {
@@ -434,7 +449,7 @@ func TestBuildTriggerContext(t *testing.T) {
 				Id:       "user1",
 				Username: "sysadmin",
 			},
-		})
+		}, fixedTime)
 		// Metadata (system-safe) should contain only IDs
 		assert.Contains(t, meta, "<trigger_context>")
 		assert.Contains(t, meta, "Post ID: post123")
@@ -462,7 +477,7 @@ func TestBuildTriggerContext(t *testing.T) {
 				Interval: "daily",
 				FiredAt:  1700000000000,
 			},
-		})
+		}, fixedTime)
 		assert.Contains(t, meta, "<trigger_context>")
 		assert.Contains(t, meta, "Schedule Interval: daily")
 		assert.Contains(t, meta, "Fired At: 1700000000000")
@@ -477,7 +492,7 @@ func TestBuildTriggerContext(t *testing.T) {
 				Id:   "chan1",
 				Name: "general",
 			},
-		})
+		}, fixedTime)
 		assert.Contains(t, meta, "Channel ID: chan1")
 		assert.Contains(t, meta, "Channel Name: general")
 		assert.Empty(t, userContent)
@@ -488,7 +503,7 @@ func TestBuildTriggerContext(t *testing.T) {
 			Post: &model.SafePost{
 				Id: "post123",
 			},
-		})
+		}, fixedTime)
 		assert.Contains(t, meta, "Post ID: post123")
 		assert.Empty(t, userContent)
 	})

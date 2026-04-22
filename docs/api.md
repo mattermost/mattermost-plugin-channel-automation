@@ -524,6 +524,16 @@ Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin b
 
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
+In addition to the configured `system_prompt` and `prompt`, the action automatically
+injects a trusted trigger-context system message that includes the current date as
+an RFC 3339 timestamp (UTC) annotated with the weekday:
+
+```
+Current Date: 2026-04-22T14:30:45Z (Wednesday)
+```
+
+This is sourced from the plugin server clock at execution time (not template-accessible).
+
 ---
 
 ## Template context

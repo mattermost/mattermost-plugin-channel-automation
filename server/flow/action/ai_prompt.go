@@ -3,6 +3,7 @@ package action
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin"
@@ -65,7 +66,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		}
 		posts = append(posts, bridgeclient.Post{Role: "system", Message: renderedSystem})
 	}
-	metadataMsg, userContentMsg := buildTriggerContext(ctx.Trigger)
+	metadataMsg, userContentMsg := buildTriggerContext(ctx.Trigger, time.Now())
 	scopeMsg := completionScopeInstruction
 	if metadataMsg != "" {
 		scopeMsg = metadataMsg + "\n\n" + scopeMsg
@@ -125,12 +126,15 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 }
 
 // buildTriggerContext builds trigger context split into two parts:
-//   - metadata: trusted data (IDs, schedule info) safe for the system prompt
+//   - metadata: trusted data (IDs, schedule info, current date/time) safe for the system prompt
 //   - userContent: user-generated content (post messages, channel names) that must go
 //     in a user-role message to prevent prompt injection
-func buildTriggerContext(trigger model.TriggerData) (metadata string, userContent string) {
+func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata string, userContent string) {
 	var meta strings.Builder
 	var user strings.Builder
+
+	utcNow := now.UTC()
+	meta.WriteString("Current Date: " + utcNow.Format(time.RFC3339) + " (" + utcNow.Weekday().String() + ")\n")
 
 	if trigger.Post != nil {
 		p := trigger.Post
