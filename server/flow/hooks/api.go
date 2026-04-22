@@ -17,7 +17,13 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-const maxHookBodySize = 1 << 20 // 1 MB
+const (
+	maxHookBodySize = 1 << 20 // 1 MB
+
+	// headerMattermostUserID is the request header Mattermost sets to the
+	// authenticated session user ID for plugin HTTP requests.
+	headerMattermostUserID = "Mattermost-User-ID"
+)
 
 // APIHandler serves tool hook callbacks for channel guardrails.
 type APIHandler struct {
@@ -94,6 +100,25 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, flowID, acti
 func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/before", h.handleBefore).Methods(http.MethodPost)
 	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/after", h.handleAfter).Methods(http.MethodPost)
+}
+
+// authorizeFlowCreator returns true if the request is authenticated as the
+// flow's creator. Otherwise it writes a 403 JSON error and returns false.
+// The flow must have a non-empty CreatedBy; flows missing a creator are
+// treated as unauthorized to prevent accidental open access.
+func (h *APIHandler) authorizeFlowCreator(w http.ResponseWriter, r *http.Request, f *model.Flow, errResp any) bool {
+	callerID := r.Header.Get(headerMattermostUserID)
+	if callerID == "" || f.CreatedBy == "" || callerID != f.CreatedBy {
+		h.api.LogWarn("hooks: unauthorized hook caller",
+			"flow_id", f.ID,
+			"caller_user_id", callerID,
+			"creator_user_id", f.CreatedBy,
+			"path", r.URL.Path,
+		)
+		writeJSON(w, http.StatusForbidden, errResp)
+		return false
+	}
+	return true
 }
 
 // loadGuardrailFlow loads the flow and the guardrails for the given action when
@@ -178,6 +203,10 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.authorizeFlowCreator(w, r, f, mcptool.BeforeHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
+		return
+	}
+
 	if req.ToolName == "" {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "tool_name is required"})
 		return
@@ -238,6 +267,10 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 	f, gr, ok := h.loadGuardrailFlow(flowID, actionID)
 	if !ok {
 		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: "guardrails not found"})
+		return
+	}
+
+	if !h.authorizeFlowCreator(w, r, f, mcptool.AfterHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
 		return
 	}
 

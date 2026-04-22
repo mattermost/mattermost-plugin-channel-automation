@@ -23,6 +23,9 @@ const (
 	chAllow        = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
 	chDeny         = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
 	teamAutomation = "tttttttttttttttttttttttttt" // 26-char test team id (automation anchor)
+	// creatorUserID is the default flow CreatedBy used by test helpers; the
+	// hook handlers require the Mattermost-User-ID header to match it.
+	creatorUserID = "user1"
 )
 
 // mockFlowStore implements model.Store for hook tests.
@@ -66,6 +69,11 @@ func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Ro
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 	).Return().Maybe()
+	// authorizeFlowCreator emits a warning when a non-creator caller is rejected.
+	api.On("LogWarn",
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+	).Return().Maybe()
 	api.On("GetChannel", chAllow).Return(&mmmodel.Channel{Id: chAllow, TeamId: teamAutomation}, (*mmmodel.AppError)(nil)).Maybe()
 	r := mux.NewRouter()
 	apiRouter := r.PathPrefix("/api/v1").Subrouter()
@@ -74,11 +82,18 @@ func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Ro
 }
 
 func postBefore(t *testing.T, r *mux.Router, flowID, actionID string, body any) (int, mcptool.BeforeHookResponse) {
+	return postBeforeAs(t, r, flowID, actionID, creatorUserID, body)
+}
+
+func postBeforeAs(t *testing.T, r *mux.Router, flowID, actionID, callerUserID string, body any) (int, mcptool.BeforeHookResponse) {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(body))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hooks/tools/"+flowID+"/"+actionID+"/before", &buf)
 	req.Header.Set("Content-Type", "application/json")
+	if callerUserID != "" {
+		req.Header.Set("Mattermost-User-ID", callerUserID)
+	}
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	var resp mcptool.BeforeHookResponse
@@ -87,11 +102,18 @@ func postBefore(t *testing.T, r *mux.Router, flowID, actionID string, body any) 
 }
 
 func postAfter(t *testing.T, r *mux.Router, flowID, actionID string, body any) (int, mcptool.AfterHookResponse) {
+	return postAfterAs(t, r, flowID, actionID, creatorUserID, body)
+}
+
+func postAfterAs(t *testing.T, r *mux.Router, flowID, actionID, callerUserID string, body any) (int, mcptool.AfterHookResponse) {
 	t.Helper()
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(body))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hooks/tools/"+flowID+"/"+actionID+"/after", &buf)
 	req.Header.Set("Content-Type", "application/json")
+	if callerUserID != "" {
+		req.Header.Set("Mattermost-User-ID", callerUserID)
+	}
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	var resp mcptool.AfterHookResponse
@@ -101,7 +123,8 @@ func postAfter(t *testing.T, r *mux.Router, flowID, actionID string, body any) (
 
 func guardrailFlow() *model.Flow {
 	return &model.Flow{
-		ID: "flow1",
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			MessagePosted: &model.MessagePostedConfig{ChannelID: chAllow},
 		},
@@ -362,7 +385,8 @@ func TestHooks_GuardrailsNotFound_WrongAction(t *testing.T) {
 
 func TestHooks_GuardrailsNotFound_NilGuardrailsOnAction(t *testing.T) {
 	f := &model.Flow{
-		ID: "flow1",
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
 		Actions: []model.Action{
 			{ID: "ai1", AIPrompt: &model.AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot", AllowedTools: []string{"search_posts"},
@@ -475,7 +499,8 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 		channels = append(channels, model.GuardrailChannel{ChannelID: id, TeamID: teamAutomation})
 	}
 	f := &model.Flow{
-		ID: "flow1",
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			MessagePosted: &model.MessagePostedConfig{ChannelID: ids[0]},
 		},
@@ -532,7 +557,8 @@ func TestHooks_After_ResolverErrorPassthrough(t *testing.T) {
 
 func flowChannelCreatedTeam(teamID string) *model.Flow {
 	return &model.Flow{
-		ID: "flow1",
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			ChannelCreated: &model.ChannelCreatedConfig{TeamID: teamID},
 		},
@@ -706,7 +732,8 @@ func TestHooks_After_GetTeamInfo_AllCandidatesRejected(t *testing.T) {
 // multiTeamGuardrailFlow returns a flow whose guardrail spans two teams.
 func multiTeamGuardrailFlow(chA, teamA, chB, teamB string) *model.Flow {
 	return &model.Flow{
-		ID: "flow1",
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			MessagePosted: &model.MessagePostedConfig{ChannelID: chA},
 		},
@@ -893,4 +920,60 @@ func TestHooks_After_ReadPost_RejectsMixedChannels(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, code)
 	assert.Contains(t, resp.Error, "spans multiple channels")
+}
+
+func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "flow1", "ai1", "someone-else", mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "flow1", "ai1", "", mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_After_RejectsNonCreatorCaller(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postAfterAs(t, r, "flow1", "ai1", "someone-else", mcptool.AfterHookRequest{
+		ToolName: "search_posts",
+		Output:   json.RawMessage(`{}`),
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_RejectsFlowMissingCreator(t *testing.T) {
+	f := guardrailFlow()
+	f.CreatedBy = ""
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": f}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, _ := postBeforeAs(t, r, "flow1", "ai1", creatorUserID, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
 }
