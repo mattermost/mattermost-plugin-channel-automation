@@ -35,9 +35,27 @@ type APIHandler struct {
 	channelTeamCache sync.Map
 }
 
+// HookCtx carries guardrail state and dependencies for a single hook invocation.
+type HookCtx struct {
+	Guardrails *model.Guardrails
+	AllowedCh  map[string]struct{}
+	// AllowedTeams is the set of team IDs the LLM is allowed to query through
+	// team tools. It contains the team of every guardrail channel plus the
+	// flow's trigger team (when resolvable).
+	AllowedTeams map[string]struct{}
+	API          plugin.API
+	UserID       string
+}
+
 // NewAPIHandler constructs a hooks API handler.
 func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
 	return &APIHandler{store: store, api: api}
+}
+
+// RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before|after.
+func (h *APIHandler) RegisterRoutes(r *mux.Router) {
+	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/before", h.handleBefore).Methods(http.MethodPost)
+	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/after", h.handleAfter).Methods(http.MethodPost)
 }
 
 // resolveChannelTeam returns the team ID for the given channel, consulting
@@ -96,12 +114,6 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, flowID, acti
 	return chs, teams
 }
 
-// RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before|after.
-func (h *APIHandler) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/before", h.handleBefore).Methods(http.MethodPost)
-	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/after", h.handleAfter).Methods(http.MethodPost)
-}
-
 // authorizeFlowCreator returns true if the request is authenticated as the
 // flow's creator. Otherwise it writes a 403 JSON error and returns false.
 // The flow must have a non-empty CreatedBy; flows missing a creator are
@@ -142,28 +154,29 @@ func (h *APIHandler) loadGuardrailFlow(flowID, actionID string) (*model.Flow, *m
 	return nil, nil, false
 }
 
-// expectedTeamID returns the Mattermost team ID the flow is anchored to: the
-// channel_created trigger's team_id, or the team of the trigger channel.
-func expectedTeamID(api plugin.API, f *model.Flow) (string, error) {
+// flowAnchorTeamID returns the Mattermost team ID the flow is anchored to: the
+// channel_created trigger's team_id, or the team of the trigger channel. It is
+// best-effort: benign "no anchor team" cases (no trigger channel, channel_created
+// without team_id, DM/GM trigger channel) return ("", nil). Only unexpected
+// failures (nil flow, GetChannel error) are returned as errors so callers can
+// log them.
+func flowAnchorTeamID(api plugin.API, f *model.Flow) (string, error) {
 	if f == nil {
-		return "", fmt.Errorf("cannot determine automation team: flow not loaded")
+		return "", fmt.Errorf("flow not loaded")
 	}
 	if f.Trigger.ChannelCreated != nil {
-		if f.Trigger.ChannelCreated.TeamID == "" {
-			return "", fmt.Errorf("cannot determine automation team: channel_created trigger has no team_id")
-		}
 		return f.Trigger.ChannelCreated.TeamID, nil
 	}
 	chID := f.TriggerChannelID()
 	if chID == "" {
-		return "", fmt.Errorf("cannot determine automation team: flow has no trigger channel")
+		return "", nil
 	}
 	ch, appErr := api.GetChannel(chID)
 	if appErr != nil {
-		return "", fmt.Errorf("cannot determine automation team: %w", appErr)
+		return "", fmt.Errorf("get channel %q: %w", chID, appErr)
 	}
-	if ch == nil || ch.TeamId == "" {
-		return "", fmt.Errorf("cannot determine automation team: channel missing team id")
+	if ch == nil {
+		return "", nil
 	}
 	return ch.TeamId, nil
 }
@@ -227,25 +240,20 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expTeam, teamErr := expectedTeamID(h.api, f)
-	teamFromFlowErr := ""
-	if teamErr != nil {
-		teamFromFlowErr = teamErr.Error()
-	}
-
 	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
-	if expTeam != "" {
+	if expTeam, err := flowAnchorTeamID(h.api, f); err != nil {
+		h.api.LogDebug("hooks: failed to resolve flow anchor team",
+			"flow_id", flowID, "action_id", actionID, "error", err.Error())
+	} else if expTeam != "" {
 		allowedTeams[expTeam] = struct{}{}
 	}
 
 	ctx := HookCtx{
-		Guardrails:      gr,
-		AllowedCh:       allowedCh,
-		AllowedTeams:    allowedTeams,
-		API:             h.api,
-		UserID:          req.UserID,
-		ExpectedTeamID:  expTeam,
-		TeamFromFlowErr: teamFromFlowErr,
+		Guardrails:   gr,
+		AllowedCh:    allowedCh,
+		AllowedTeams: allowedTeams,
+		API:          h.api,
+		UserID:       req.UserID,
 	}
 	if err := entry.Before(ctx, req.Args); err != nil {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: err.Error()})
@@ -299,25 +307,20 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expTeam, teamErr := expectedTeamID(h.api, f)
-	teamFromFlowErr := ""
-	if teamErr != nil {
-		teamFromFlowErr = teamErr.Error()
-	}
-
 	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
-	if expTeam != "" {
+	if expTeam, err := flowAnchorTeamID(h.api, f); err != nil {
+		h.api.LogDebug("hooks: failed to resolve flow anchor team",
+			"flow_id", flowID, "action_id", actionID, "error", err.Error())
+	} else if expTeam != "" {
 		allowedTeams[expTeam] = struct{}{}
 	}
 
 	ctx := HookCtx{
-		Guardrails:      gr,
-		AllowedCh:       allowedCh,
-		AllowedTeams:    allowedTeams,
-		API:             h.api,
-		UserID:          req.UserID,
-		ExpectedTeamID:  expTeam,
-		TeamFromFlowErr: teamFromFlowErr,
+		Guardrails:   gr,
+		AllowedCh:    allowedCh,
+		AllowedTeams: allowedTeams,
+		API:          h.api,
+		UserID:       req.UserID,
 	}
 	out, err := entry.After(ctx, req.Output)
 	if err != nil {
@@ -325,22 +328,6 @@ func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Output: out})
-}
-
-// HookCtx carries guardrail state and dependencies for a single hook invocation.
-type HookCtx struct {
-	Guardrails *model.Guardrails
-	AllowedCh  map[string]struct{}
-	// AllowedTeams is the set of team IDs the LLM is allowed to query through
-	// team tools. It contains the team of every guardrail channel plus the
-	// flow's trigger team (when resolvable).
-	AllowedTeams map[string]struct{}
-	API          plugin.API
-	UserID       string
-	// ExpectedTeamID is the team this automation is anchored to (from the flow).
-	ExpectedTeamID string
-	// TeamFromFlowErr is non-empty when ExpectedTeamID could not be resolved; get_team_* hooks must fail.
-	TeamFromFlowErr string
 }
 
 func stringArg(args map[string]any, key string) string {

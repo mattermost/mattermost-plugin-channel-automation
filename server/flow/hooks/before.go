@@ -81,8 +81,8 @@ func beforeGetChannelMembers(ctx HookCtx, args map[string]any) error {
 }
 
 func beforeGetTeamInfo(ctx HookCtx, args map[string]any) error {
-	if ctx.TeamFromFlowErr != "" {
-		return fmt.Errorf("%s", ctx.TeamFromFlowErr)
+	if len(ctx.AllowedTeams) == 0 {
+		return fmt.Errorf("no team is permitted by guardrails for this automation")
 	}
 	allowed := formatAllowedTeams(ctx.AllowedTeams)
 	tid := stringArg(args, "team_id")
@@ -96,8 +96,8 @@ func beforeGetTeamInfo(ctx HookCtx, args map[string]any) error {
 }
 
 func beforeGetTeamMembers(ctx HookCtx, args map[string]any) error {
-	if ctx.TeamFromFlowErr != "" {
-		return fmt.Errorf("%s", ctx.TeamFromFlowErr)
+	if len(ctx.AllowedTeams) == 0 {
+		return fmt.Errorf("no team is permitted by guardrails for this automation")
 	}
 	allowed := formatAllowedTeams(ctx.AllowedTeams)
 	tid := stringArg(args, "team_id")

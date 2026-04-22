@@ -150,8 +150,8 @@ func afterReadPost(ctx HookCtx, output json.RawMessage) (json.RawMessage, error)
 }
 
 func afterGetTeamInfo(ctx HookCtx, output json.RawMessage) (json.RawMessage, error) {
-	if ctx.TeamFromFlowErr != "" {
-		return nil, fmt.Errorf("%s", ctx.TeamFromFlowErr)
+	if len(ctx.AllowedTeams) == 0 {
+		return nil, fmt.Errorf("no team is permitted by guardrails for this automation")
 	}
 	var out mcptool.TeamInfoOutput
 	if err := json.Unmarshal(output, &out); err != nil {
@@ -183,8 +183,8 @@ func afterGetTeamInfo(ctx HookCtx, output json.RawMessage) (json.RawMessage, err
 }
 
 func afterGetTeamMembers(ctx HookCtx, output json.RawMessage) (json.RawMessage, error) {
-	if ctx.TeamFromFlowErr != "" {
-		return nil, fmt.Errorf("%s", ctx.TeamFromFlowErr)
+	if len(ctx.AllowedTeams) == 0 {
+		return nil, fmt.Errorf("no team is permitted by guardrails for this automation")
 	}
 	var out mcptool.TeamMembersOutput
 	if err := json.Unmarshal(output, &out); err != nil {
