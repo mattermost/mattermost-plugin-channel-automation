@@ -75,7 +75,7 @@ var mattermostMCPServerTools = map[string]MattermostMCPTool{
 
 	// Channels (mcpserver/tools/channels.go — getChannelTools)
 	"read_channel":        {Allowed: true, Before: beforeReadChannel, After: afterReadChannel},
-	"create_channel":      {Allowed: true},
+	"create_channel":      {Allowed: true, Before: beforeCreateChannel},
 	"get_channel_info":    {Allowed: true, Before: beforeGetChannelInfo, After: afterGetChannelInfo},
 	"get_channel_members": {Allowed: true, Before: beforeGetChannelMembers, After: afterGetChannelMembers},
 	"add_user_to_channel": {Allowed: true, Before: beforeAddUserToChannel},

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -287,7 +288,7 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	}
 	a := NewAIPromptAction(api, bc)
 
-	chID := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	chID := mmmodel.NewId()
 	act := &model.Action{
 		ID: "ai-step",
 		AIPrompt: &model.AIPromptActionConfig{
@@ -297,7 +298,7 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 			AllowedTools: []string{"search_posts", "add_user_to_channel", "external_search"},
 			Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{
 				ChannelID: chID,
-				TeamID:    "tttttttttttttttttttttttttt",
+				TeamID:    mmmodel.NewId(),
 			}}},
 		},
 	}

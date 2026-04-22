@@ -72,14 +72,16 @@ returned posts/channels are filtered to that allow-list:
 - add_user_to_channel
 
 Team-scoped — the tool's team_id argument must be the team that owns one of the allowed
-channels (channel→team is resolved automatically from guardrails.channel_ids):
+channels (channel→team is resolved automatically from guardrails.channel_ids), or the
+trigger team for channel_created/user_joined_team automations:
 - get_team_info
 - get_team_members
+- create_channel (the new channel must be created in an allowed team)
 
-Other built-in Mattermost MCP tools (create_channel, search_users, list_agents) may be used in
-allowed_tools but are NOT constrained by channel guardrails — they execute with the automation
-owner's full permissions regardless of guardrails.channel_ids. Mention this explicitly in
-summary item 2 when granting them.
+Other built-in Mattermost MCP tools (search_users, list_agents) may be used in allowed_tools
+but are NOT constrained by channel guardrails — they execute with the automation owner's full
+permissions regardless of guardrails.channel_ids. Mention this explicitly in summary item 2
+when granting them.
 
 Mutating tools that act on the user's behalf (create_post, dm, group_message) are rejected
 from allowed_tools entirely — guardrails do not unlock them. Use a send_message or send_dm
@@ -138,7 +140,7 @@ Action types:
      search_posts/read_channel/get_channel_info/etc., plus the team-scoped get_team_info and
      get_team_members which derive their allowed teams from the channels' teams). Omit guardrails
      when allowed_tools for that step contains no constrained Mattermost names. External tools and
-     unconstrained Mattermost tools (create_channel, search_users, list_agents) may be mixed in
+     unconstrained Mattermost tools (search_users, list_agents) may be mixed in
      the same step alongside constrained tools — they pass through unchanged. Prefer the trigger
      channel ID or a small explicit channel_ids set the user agrees to when guardrails apply.
    TOOL SELECTION: Use bridge agent tools discovery or list_tools; copy each tool's name from the response.

@@ -2,9 +2,11 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -236,7 +238,7 @@ func TestValidateActions(t *testing.T) {
 			ID: "ask-ai",
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
-				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"}}},
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
 			},
 		}})
 		require.Error(t, err)
@@ -257,14 +259,15 @@ func TestValidateActions(t *testing.T) {
 	})
 
 	t.Run("guardrails duplicate channel id", func(t *testing.T) {
+		dup := mmmodel.NewId()
 		err := ValidateActions([]Action{{
 			ID: "ask-ai",
 			AIPrompt: &AIPromptActionConfig{
 				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
 				AllowedTools: []string{"search_posts"},
 				Guardrails: &Guardrails{Channels: []GuardrailChannel{
-					{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"},
-					{ChannelID: "aaaaaaaaaaaaaaaaaaaaaaaaaa"},
+					{ChannelID: dup},
+					{ChannelID: dup},
 				}},
 			},
 		}})
@@ -285,13 +288,13 @@ func TestValidateActions(t *testing.T) {
 	})
 
 	t.Run("guardrails JSON shape stays as channel_ids", func(t *testing.T) {
-		const id = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
+		id := mmmodel.NewId()
 		raw, err := json.Marshal(&Guardrails{Channels: []GuardrailChannel{{ChannelID: id, TeamID: "should-not-leak"}}})
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"channel_ids":["aaaaaaaaaaaaaaaaaaaaaaaaaa"]}`, string(raw))
+		assert.JSONEq(t, fmt.Sprintf(`{"channel_ids":[%q]}`, id), string(raw))
 
 		var g Guardrails
-		require.NoError(t, json.Unmarshal([]byte(`{"channel_ids":["aaaaaaaaaaaaaaaaaaaaaaaaaa"]}`), &g))
+		require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"channel_ids":[%q]}`, id)), &g))
 		require.Len(t, g.Channels, 1)
 		assert.Equal(t, id, g.Channels[0].ChannelID)
 		assert.Empty(t, g.Channels[0].TeamID, "team_id should never be parsed from the wire")

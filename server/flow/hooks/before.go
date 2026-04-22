@@ -80,6 +80,21 @@ func beforeGetChannelMembers(ctx HookCtx, args map[string]any) error {
 	return nil
 }
 
+func beforeCreateChannel(ctx HookCtx, args map[string]any) error {
+	if len(ctx.AllowedTeams) == 0 {
+		return fmt.Errorf("no team is permitted by guardrails for this automation")
+	}
+	allowed := formatAllowedTeams(ctx.AllowedTeams)
+	tid := stringArg(args, "team_id")
+	if tid == "" {
+		return fmt.Errorf("create_channel requires team_id when channel guardrails are active; allowed team_ids: %s", allowed)
+	}
+	if _, ok := ctx.AllowedTeams[tid]; !ok {
+		return fmt.Errorf("team_id %q is not permitted by guardrails; allowed team_ids: %s", tid, allowed)
+	}
+	return nil
+}
+
 func beforeGetTeamInfo(ctx HookCtx, args map[string]any) error {
 	if len(ctx.AllowedTeams) == 0 {
 		return fmt.Errorf("no team is permitted by guardrails for this automation")

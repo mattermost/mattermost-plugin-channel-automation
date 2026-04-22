@@ -19,14 +19,15 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-const (
-	chAllow        = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-	chDeny         = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-	teamAutomation = "tttttttttttttttttttttttttt" // 26-char test team id (automation anchor)
-	// creatorUserID is the default flow CreatedBy used by test helpers; the
-	// hook handlers require the Mattermost-User-ID header to match it.
-	creatorUserID = "user1"
+var (
+	chAllow        = mmmodel.NewId()
+	chDeny         = mmmodel.NewId()
+	teamAutomation = mmmodel.NewId() // automation anchor team id
 )
+
+// creatorUserID is the default flow CreatedBy used by test helpers; the
+// hook handlers require the Mattermost-User-ID header to match it.
+const creatorUserID = "user1"
 
 // mockFlowStore implements model.Store for hook tests.
 type mockFlowStore struct {
@@ -255,6 +256,52 @@ func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
 		Args:     map[string]any{"channel_id": chAllow, "user_id": "user1"},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "create_channel",
+		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O"},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, resp.Error, "requires team_id")
+	assert.Contains(t, resp.Error, teamAutomation)
+}
+
+func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	wrongTeam := mmmodel.NewId()
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "create_channel",
+		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": wrongTeam},
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, resp.Error, "not permitted by guardrails")
+	assert.Contains(t, resp.Error, wrongTeam)
+	assert.Contains(t, resp.Error, teamAutomation)
+}
+
+func TestHooks_Before_CreateChannel_OK(t *testing.T) {
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": guardrailFlow()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "create_channel",
+		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": teamAutomation},
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -577,7 +624,7 @@ func flowChannelCreatedTeam(teamID string) *model.Flow {
 }
 
 func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
-	const team1 = "wwwwwwwwwwwwwwwwwwwwwwwwww"
+	team1 := mmmodel.NewId()
 	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
@@ -592,8 +639,8 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
-	const team1 = "wwwwwwwwwwwwwwwwwwwwwwwwww"
-	const team2 = "xxxxxxxxxxxxxxxxxxxxxxxxxx"
+	team1 := mmmodel.NewId()
+	team2 := mmmodel.NewId()
 	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
@@ -610,7 +657,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
-	const team1 = "wwwwwwwwwwwwwwwwwwwwwwwwww"
+	team1 := mmmodel.NewId()
 	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
@@ -627,8 +674,8 @@ func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
 
 func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 	// Guardrail spans two teams: chAllow in teamAutomation and chOther in teamOther.
-	const chOther = "cccccccccccccccccccccccccc"
-	const teamOther = "ssssssssssssssssssssssssss"
+	chOther := mmmodel.NewId()
+	teamOther := mmmodel.NewId()
 	f := guardrailFlow()
 	f.Actions[0].AIPrompt.Guardrails = &model.Guardrails{Channels: []model.GuardrailChannel{
 		{ChannelID: chAllow, TeamID: teamAutomation},
@@ -667,7 +714,7 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	wrongTeam := "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	wrongTeam := mmmodel.NewId()
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
 		Args:     map[string]any{"team_id": wrongTeam},
@@ -682,7 +729,7 @@ func TestHooks_After_GetTeamInfo_FilterCandidates(t *testing.T) {
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	otherTeam := "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	otherTeam := mmmodel.NewId()
 	out := mcptool.TeamInfoOutput{
 		Teams: []*mmmodel.Team{
 			{Id: otherTeam, DisplayName: "Other"},
@@ -711,7 +758,7 @@ func TestHooks_After_GetTeamInfo_AllCandidatesRejected(t *testing.T) {
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	otherTeam := "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	otherTeam := mmmodel.NewId()
 	out := mcptool.TeamInfoOutput{
 		Teams: []*mmmodel.Team{
 			{Id: otherTeam, DisplayName: "Other"},
@@ -753,12 +800,12 @@ func multiTeamGuardrailFlow(chA, teamA, chB, teamB string) *model.Flow {
 }
 
 func TestHooks_After_GetTeamInfo_MultiTeamKeepsBoth(t *testing.T) {
-	const (
-		chA   = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-		chB   = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-		teamA = "tttttttttttttttttttttttttt"
-		teamB = "ssssssssssssssssssssssssss"
-		teamC = "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	var (
+		chA   = mmmodel.NewId()
+		chB   = mmmodel.NewId()
+		teamA = mmmodel.NewId()
+		teamB = mmmodel.NewId()
+		teamC = mmmodel.NewId()
 	)
 	store := &mockFlowStore{flows: map[string]*model.Flow{
 		"flow1": multiTeamGuardrailFlow(chA, teamA, chB, teamB),
@@ -791,13 +838,13 @@ func TestHooks_After_GetTeamInfo_MultiTeamKeepsBoth(t *testing.T) {
 }
 
 func TestHooks_After_GetUserChannels_PrunesTeamInfoByID(t *testing.T) {
-	const (
-		chA   = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-		chB   = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-		chC   = "cccccccccccccccccccccccccc"
-		teamA = "tttttttttttttttttttttttttt"
-		teamB = "ssssssssssssssssssssssssss"
-		teamC = "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	var (
+		chA   = mmmodel.NewId()
+		chB   = mmmodel.NewId()
+		chC   = mmmodel.NewId()
+		teamA = mmmodel.NewId()
+		teamB = mmmodel.NewId()
+		teamC = mmmodel.NewId()
 	)
 	store := &mockFlowStore{flows: map[string]*model.Flow{
 		"flow1": multiTeamGuardrailFlow(chA, teamA, chB, teamB),
@@ -840,13 +887,13 @@ func TestHooks_After_GetUserChannels_PrunesTeamInfoByID(t *testing.T) {
 }
 
 func TestHooks_After_GetChannelInfo_PrunesAllTeamKeyedMaps(t *testing.T) {
-	const (
-		chA   = "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-		chB   = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-		chC   = "cccccccccccccccccccccccccc"
-		teamA = "tttttttttttttttttttttttttt"
-		teamB = "ssssssssssssssssssssssssss"
-		teamC = "uuuuuuuuuuuuuuuuuuuuuuuuuu"
+	var (
+		chA   = mmmodel.NewId()
+		chB   = mmmodel.NewId()
+		chC   = mmmodel.NewId()
+		teamA = mmmodel.NewId()
+		teamB = mmmodel.NewId()
+		teamC = mmmodel.NewId()
 	)
 	store := &mockFlowStore{flows: map[string]*model.Flow{
 		"flow1": multiTeamGuardrailFlow(chA, teamA, chB, teamB),

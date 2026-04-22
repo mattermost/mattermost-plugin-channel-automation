@@ -44,6 +44,14 @@ func TestMattermostMCPCatalog_AddUserToChannel_BeforeOnly(t *testing.T) {
 	assert.Nil(t, entry.After, "add_user_to_channel intentionally has no After hook")
 }
 
+func TestMattermostMCPCatalog_CreateChannel_BeforeOnly(t *testing.T) {
+	entry, ok := LookupMattermostMCPTool("create_channel")
+	require.True(t, ok)
+	assert.True(t, entry.Allowed)
+	assert.NotNil(t, entry.Before, "create_channel must have a Before hook to enforce team guardrails")
+	assert.Nil(t, entry.After, "create_channel intentionally has no After hook")
+}
+
 func TestIsAllowedMattermostMCPTool_UnknownTool(t *testing.T) {
 	known, allowed := IsAllowedMattermostMCPTool("not_a_real_tool")
 	assert.False(t, known)
