@@ -1,5 +1,6 @@
 export interface MessagePostedTriggerParams {
     channel_id: string;
+    include_thread_context?: boolean;
 }
 
 export interface ScheduleTriggerParams {

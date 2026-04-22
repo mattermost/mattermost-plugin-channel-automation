@@ -15,27 +15,52 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// mockBridgeClient implements BridgeClient for testing.
+// mockBridgeClient implements BridgeClient for testing. When the same
+// endpoint is invoked multiple times (e.g. summarization then the main
+// completion), callers can queue responses via agentResponses/serviceResponses
+// to differentiate the two calls. A non-empty queue takes precedence over the
+// single-shot agentResponse/serviceResponse fields.
 type mockBridgeClient struct {
 	agentResponse   string
 	agentErr        error
 	serviceResponse string
 	serviceErr      error
 
-	lastAgent   string
-	lastService string
-	lastReq     bridgeclient.CompletionRequest
+	agentResponses   []string
+	serviceResponses []string
+
+	lastAgent    string
+	lastService  string
+	lastReq      bridgeclient.CompletionRequest
+	agentReqs    []bridgeclient.CompletionRequest
+	serviceReqs  []bridgeclient.CompletionRequest
+	agentCalls   int
+	serviceCalls int
 }
 
 func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastAgent = agent
 	m.lastReq = req
+	m.agentReqs = append(m.agentReqs, req)
+	m.agentCalls++
+	if len(m.agentResponses) > 0 {
+		resp := m.agentResponses[0]
+		m.agentResponses = m.agentResponses[1:]
+		return resp, nil
+	}
 	return m.agentResponse, m.agentErr
 }
 
 func (m *mockBridgeClient) ServiceCompletion(service string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastService = service
 	m.lastReq = req
+	m.serviceReqs = append(m.serviceReqs, req)
+	m.serviceCalls++
+	if len(m.serviceResponses) > 0 {
+		resp := m.serviceResponses[0]
+		m.serviceResponses = m.serviceResponses[1:]
+		return resp, nil
+	}
 	return m.serviceResponse, m.serviceErr
 }
 
@@ -43,6 +68,7 @@ func newTestAPI() *plugintest.API {
 	api := &plugintest.API{}
 	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	return api
 }
 
@@ -580,4 +606,198 @@ func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, output)
 	assert.Contains(t, err.Error(), `unsupported provider_type "unknown"`)
+}
+
+func TestAIPromptAction_Execute_ThreadContext_SmallInlined(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "done"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply to the thread.",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "reply", ThreadId: "root", ChannelId: "ch1", Message: "and another"},
+			Thread: &model.SafeThread{
+				RootID:    "root",
+				PostCount: 3,
+				Messages: []model.SafePost{
+					{Id: "root", User: &model.SafeUser{Id: "u1", Username: "alice", FirstName: "Alice", LastName: "A."}, Message: "kickoff", CreateAt: 100},
+					{Id: "r1", User: &model.SafeUser{Id: "u2", Username: "bob", FirstName: "Bob", LastName: "B."}, Message: "my take", CreateAt: 200},
+					{Id: "r2", User: &model.SafeUser{Id: "u1", Username: "alice", FirstName: "Alice", LastName: "A."}, Message: "thanks", CreateAt: 300},
+				},
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	// Only the main completion should have fired — no summarization.
+	assert.Equal(t, 1, bc.agentCalls, "small thread must not trigger summarization")
+
+	triggerMeta := bc.lastReq.Posts[0]
+	assert.Equal(t, "system", triggerMeta.Role)
+	assert.Contains(t, triggerMeta.Message, "Thread Post Count: 3")
+	assert.Contains(t, triggerMeta.Message, "Thread Root ID: root")
+	assert.NotContains(t, triggerMeta.Message, "kickoff")
+
+	userContent := bc.lastReq.Posts[1]
+	assert.Equal(t, "user", userContent.Role)
+	assert.Contains(t, userContent.Message, "Thread Transcript")
+	assert.Contains(t, userContent.Message, "@alice (Alice A.): kickoff")
+	assert.Contains(t, userContent.Message, "@bob (Bob B.): my take")
+	assert.Contains(t, userContent.Message, "@alice (Alice A.): thanks")
+}
+
+func TestAIPromptAction_Execute_ThreadContext_LargeSummarized(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponses: []string{"SUMMARY: decisions and open questions", "main response"}}
+	a := NewAIPromptAction(api, bc)
+
+	messages := make([]model.SafePost, 0, 6)
+	for i := range 6 {
+		messages = append(messages, model.SafePost{
+			Id:       fmt.Sprintf("p%d", i),
+			User:     &model.SafeUser{Id: "u1", Username: "alice", FirstName: "Alice", LastName: "A."},
+			Message:  fmt.Sprintf("message %d", i),
+			CreateAt: int64(100 + i),
+		})
+	}
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply.",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Thread: &model.SafeThread{
+				RootID:    "root",
+				PostCount: 6,
+				Messages:  messages,
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "main response", output.Message)
+	require.Equal(t, 2, bc.agentCalls, "large thread should summarize then complete")
+
+	// First call is the summarization request.
+	summaryReq := bc.agentReqs[0]
+	require.Len(t, summaryReq.Posts, 2)
+	assert.Equal(t, "system", summaryReq.Posts[0].Role)
+	assert.Contains(t, summaryReq.Posts[0].Message, "summarizing a Mattermost thread")
+	assert.Equal(t, "user", summaryReq.Posts[1].Role)
+	assert.Contains(t, summaryReq.Posts[1].Message, "<thread_transcript>")
+	assert.Contains(t, summaryReq.Posts[1].Message, "@alice (Alice A.): message 0")
+
+	// Thread state after summarization.
+	assert.Equal(t, "SUMMARY: decisions and open questions", ctx.Trigger.Thread.Summary)
+	assert.Empty(t, ctx.Trigger.Thread.Messages, "messages should be dropped once summarized")
+
+	// Main completion carries the summary (not the transcript) in user content.
+	mainReq := bc.agentReqs[1]
+	userContent := mainReq.Posts[1]
+	assert.Equal(t, "user", userContent.Role)
+	assert.Contains(t, userContent.Message, "Thread Summary:")
+	assert.Contains(t, userContent.Message, "SUMMARY: decisions and open questions")
+	assert.NotContains(t, userContent.Message, "Thread Transcript")
+}
+
+func TestAIPromptAction_Execute_ThreadContext_SummarizationFailureFallsBack(t *testing.T) {
+	api := newTestAPI()
+	// First call (summarization) errors; second call (main) succeeds.
+	bc := &sequencedBridgeClient{
+		responses: []sequencedResp{
+			{err: fmt.Errorf("summarization failed")},
+			{resp: "main response"},
+		},
+	}
+	a := NewAIPromptAction(api, bc)
+
+	messages := make([]model.SafePost, 0, 5)
+	for i := range 5 {
+		messages = append(messages, model.SafePost{
+			Id:       fmt.Sprintf("p%d", i),
+			User:     &model.SafeUser{Id: "u1", Username: "alice", FirstName: "Alice", LastName: "A."},
+			Message:  fmt.Sprintf("m%d", i),
+			CreateAt: int64(i),
+		})
+	}
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply.",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Thread: &model.SafeThread{RootID: "root", PostCount: 5, Messages: messages},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "main response", output.Message)
+	assert.Empty(t, ctx.Trigger.Thread.Summary, "summary should stay empty after failure")
+	require.Len(t, ctx.Trigger.Thread.Messages, 5, "messages should be retained so transcript is inlined")
+
+	// Main completion's user content should include the transcript, not a summary.
+	mainReq := bc.reqs[1]
+	userContent := mainReq.Posts[1]
+	assert.Contains(t, userContent.Message, "Thread Transcript")
+	assert.Contains(t, userContent.Message, "@alice (Alice A.): m0")
+	assert.NotContains(t, userContent.Message, "Thread Summary")
+}
+
+// sequencedBridgeClient returns a predetermined response or error per call in
+// order. Used to test per-call branching (e.g. summarize fails, main succeeds).
+type sequencedBridgeClient struct {
+	responses []sequencedResp
+	reqs      []bridgeclient.CompletionRequest
+	calls     int
+}
+
+type sequencedResp struct {
+	resp string
+	err  error
+}
+
+func (s *sequencedBridgeClient) next() (string, error) {
+	if s.calls >= len(s.responses) {
+		return "", fmt.Errorf("sequencedBridgeClient: unexpected call %d", s.calls+1)
+	}
+	r := s.responses[s.calls]
+	s.calls++
+	return r.resp, r.err
+}
+
+func (s *sequencedBridgeClient) AgentCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
+	s.reqs = append(s.reqs, req)
+	return s.next()
+}
+
+func (s *sequencedBridgeClient) ServiceCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
+	s.reqs = append(s.reqs, req)
+	return s.next()
 }

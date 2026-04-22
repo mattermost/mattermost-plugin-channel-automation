@@ -209,6 +209,10 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 		User:    model.NewSafeUser(user),
 	}
 
+	if post.RootId != "" && anyFlowWantsThreadContext(flows) {
+		triggerData.Thread = p.fetchThreadContext(post.RootId)
+	}
+
 	for _, f := range flows {
 		item := &model.WorkItem{
 			ID:          mmmodel.NewId(),
@@ -236,6 +240,43 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	}
 
 	p.workerPool.Notify()
+}
+
+// anyFlowWantsThreadContext reports whether any flow in the list has opted
+// into thread context on its message_posted trigger.
+func anyFlowWantsThreadContext(flows []*model.Flow) bool {
+	for _, f := range flows {
+		if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.IncludeThreadContext {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchThreadContext retrieves the thread rooted at rootID and returns a
+// SafeThread with usernames resolved (deduped by user ID). On error, logs a
+// warning and returns nil — callers must tolerate a nil result.
+func (p *Plugin) fetchThreadContext(rootID string) *model.SafeThread {
+	list, appErr := p.API.GetPostThread(rootID)
+	if appErr != nil {
+		p.API.LogWarn("Failed to fetch thread for trigger context, continuing without it",
+			"root_id", rootID,
+			"err", appErr.Error(),
+		)
+		return nil
+	}
+	userFor := func(userID string) *model.SafeUser {
+		u, err := p.API.GetUser(userID)
+		if err != nil {
+			p.API.LogDebug("Failed to resolve user for thread context",
+				"user_id", userID,
+				"err", err.Error(),
+			)
+			return nil
+		}
+		return model.NewSafeUser(u)
+	}
+	return model.NewSafeThread(list, rootID, userFor)
 }
 
 // UserHasJoinedChannel is invoked after a user joins a channel.

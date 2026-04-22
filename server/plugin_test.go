@@ -506,6 +506,111 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
+func TestMessageHasBeenPosted_FetchesThreadWhenOptedIn(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	api := p.API.(*plugintest.API)
+
+	threadList := &mmmodel.PostList{
+		Order: []string{"root1", "reply1", "reply2"},
+		Posts: map[string]*mmmodel.Post{
+			"root1":  {Id: "root1", UserId: "user1", Message: "kickoff", CreateAt: 100},
+			"reply1": {Id: "reply1", UserId: "user2", Message: "first reply", CreateAt: 200},
+			"reply2": {Id: "reply2", UserId: "user1", Message: "my reply", CreateAt: 300},
+		},
+	}
+	api.On("GetPostThread", "root1").Return(threadList, nil).Once()
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Thread Flow",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadContext: true}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.flowStore.Save(f))
+
+	reply := &mmmodel.Post{Id: "reply2", UserId: "user1", ChannelId: "ch1", RootId: "root1", Message: "my reply"}
+	p.MessageHasBeenPosted(nil, reply)
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		it, _ := wqStore.ClaimNext()
+		if it != nil {
+			item = it
+			return true
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	require.NotNil(t, item.TriggerData.Thread, "Thread should be populated when flow opted in")
+	assert.Equal(t, "root1", item.TriggerData.Thread.RootID)
+	assert.Equal(t, 3, item.TriggerData.Thread.PostCount)
+	require.Len(t, item.TriggerData.Thread.Messages, 3)
+	assert.Equal(t, "root1", item.TriggerData.Thread.Messages[0].Id, "messages must be oldest-first")
+	api.AssertCalled(t, "GetPostThread", "root1")
+}
+
+func TestMessageHasBeenPosted_SkipsThreadFetchWhenNotOptedIn(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	api := p.API.(*plugintest.API)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "No Thread Flow",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.flowStore.Save(f))
+
+	reply := &mmmodel.Post{Id: "reply1", UserId: "user1", ChannelId: "ch1", RootId: "root1", Message: "reply"}
+	p.MessageHasBeenPosted(nil, reply)
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		it, _ := wqStore.ClaimNext()
+		if it != nil {
+			item = it
+			return true
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	assert.Nil(t, item.TriggerData.Thread, "Thread must not be fetched when flow did not opt in")
+	api.AssertNotCalled(t, "GetPostThread", mock.Anything)
+}
+
+func TestMessageHasBeenPosted_SkipsThreadFetchForRootPost(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	api := p.API.(*plugintest.API)
+
+	f := &model.Flow{
+		ID:      "f1",
+		Name:    "Thread Flow",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadContext: true}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.flowStore.Save(f))
+
+	// RootId is empty — this IS the root post, so there's no thread to fetch.
+	root := &mmmodel.Post{Id: "root1", UserId: "user1", ChannelId: "ch1", Message: "first message"}
+	p.MessageHasBeenPosted(nil, root)
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		it, _ := wqStore.ClaimNext()
+		if it != nil {
+			item = it
+			return true
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond)
+
+	assert.Nil(t, item.TriggerData.Thread, "Thread must not be fetched for a root post")
+	api.AssertNotCalled(t, "GetPostThread", mock.Anything)
+}
+
 func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeChannelCreated)
 

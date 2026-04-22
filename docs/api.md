@@ -413,9 +413,10 @@ Exactly one key should be set, indicating the trigger type:
 
 #### MessagePostedConfig
 
-| Field        | Type   | Description                 |
-| ------------ | ------ | --------------------------- |
-| `channel_id` | string | Channel to watch (required) |
+| Field                     | Type    | Description                                                                                                                                                                                                   |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `channel_id`              | string  | Channel to watch (required)                                                                                                                                                                                   |
+| `include_thread_context`  | boolean | _(optional, default `false`)_ When set, a reply post (`root_id != ""`) causes the plugin to fetch the parent thread and expose it at `{{.Trigger.Thread}}`. Root posts are unaffected. See [Thread](#trigger-data-fields) for consumption. |
 
 #### ScheduleConfig
 
@@ -490,6 +491,8 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 Fires when a new message is posted in the specified channel.
 
+When `include_thread_context` is `true` and the post is a reply (`root_id != ""`), the plugin additionally fetches the parent thread (via the Mattermost `GetPostThread` API) and attaches it to the trigger data as `{{.Trigger.Thread}}`. The `ai_prompt` action automatically summarizes threads with 5 or more messages before injecting them into the prompt; smaller threads are inlined verbatim. Fetch failures and summarization failures are logged and the flow continues — thread context is best-effort.
+
 ### `schedule`
 
 Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDuration` string (e.g. `"1h"`, `"24h"`). The minimum interval is 1 hour.
@@ -539,19 +542,22 @@ Action templates receive a `FlowContext` object with the following structure:
 {{.Trigger.Team}}       — the team the user joined (user_joined_team only)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)
 {{.Trigger.Membership}} — membership change metadata (membership_changed only)
+{{.Trigger.Thread}}     — parent thread of the triggering reply (message_posted with include_thread_context, reply posts only)
 {{.Steps.<action_id>}}  — output from a previous action step
 ```
 
 ### Trigger data fields
 
-**Post** _(message_posted trigger only):_
+**Post** _(message_posted trigger; also each element of `Trigger.Thread.Messages`):_
 
-| Field      | Access                        |
-| ---------- | ----------------------------- |
-| ID         | `{{.Trigger.Post.Id}}`        |
-| Channel ID | `{{.Trigger.Post.ChannelId}}` |
-| Thread ID  | `{{.Trigger.Post.ThreadId}}`  |
-| Message    | `{{.Trigger.Post.Message}}`   |
+| Field      | Access                   | Notes                                                                                                                                                                                         |
+| ---------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ID         | `{{.Id}}`                |                                                                                                                                                                                               |
+| Channel ID | `{{.ChannelId}}`         |                                                                                                                                                                                               |
+| Thread ID  | `{{.ThreadId}}`          |                                                                                                                                                                                               |
+| Message    | `{{.Message}}`           |                                                                                                                                                                                               |
+| User       | `{{.User}}`              | Nested [User](#trigger-data-fields) with `Id`, `Username`, `FirstName`, `LastName`, and an `AuthorDisplay` method (see User row). Populated only for thread messages — nil on the top-level triggering post (use `{{.Trigger.User}}` there). |
+| Create At  | `{{.CreateAt}}`          | Thread messages only. Unix ms.                                                                                                                                                                |
 
 **Channel** _(message_posted, membership_changed, channel_created):_
 
@@ -565,13 +571,14 @@ Action templates receive a `FlowContext` object with the following structure:
 
 > **Note:** For `user_joined_team` triggers, `{{.Trigger.Channel}}` is **not** available. Use `{{.Trigger.Team.DefaultChannelId}}` to reference the team's default channel.
 
-| Field      | Access                        |
-| ---------- | ----------------------------- |
-| ID         | `{{.Trigger.User.Id}}`        |
-| Username   | `{{.Trigger.User.Username}}`  |
-| First Name | `{{.Trigger.User.FirstName}}` |
-| Last Name  | `{{.Trigger.User.LastName}}`  |
-| Is Guest   | `{{.Trigger.User.IsGuest}}`   |
+| Field          | Access                            | Notes                                                                                                 |
+| -------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ID             | `{{.Trigger.User.Id}}`            |                                                                                                       |
+| Username       | `{{.Trigger.User.Username}}`      |                                                                                                       |
+| First Name     | `{{.Trigger.User.FirstName}}`     |                                                                                                       |
+| Last Name      | `{{.Trigger.User.LastName}}`      |                                                                                                       |
+| Is Guest       | `{{.Trigger.User.IsGuest}}`       |                                                                                                       |
+| Author Display | `{{.Trigger.User.AuthorDisplay}}` | Renders `@username (First Last)` with graceful fallbacks. Returns `"unknown"` on a nil receiver.      |
 
 **Membership** _(membership_changed trigger only):_
 
@@ -593,7 +600,17 @@ Action templates receive a `FlowContext` object with the following structure:
 | Field    | Access                           |
 | -------- | -------------------------------- |
 | Fired At | `{{.Trigger.Schedule.FiredAt}}`  |
-| Interval | `{{.Trigger.Schedule.Interval}}` |
+| Interval | `{{.Trigger.Schedule.Interval}}` | 
+
+**Thread** _(message_posted trigger with `include_thread_context`, only when the post is a reply):_
+
+| Field       | Access                              | Description                                                                                                                                               |
+| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root ID     | `{{.Trigger.Thread.RootID}}`        | ID of the thread root post.                                                                                                                               |
+| Post Count  | `{{.Trigger.Thread.PostCount}}`     | Number of posts in the thread (root included).                                                                                                            |
+| Summary     | `{{.Trigger.Thread.Summary}}`       | Populated by `ai_prompt` when `PostCount >= 5`. Empty otherwise — templates should fall back to `Messages`.                                               |
+| Messages    | `{{range .Trigger.Thread.Messages}}` | Ordered oldest first. Each element is a [Post](#trigger-data-fields) with author and `CreateAt` fields populated. Emptied after summarization — check `Summary` first. |
+| Transcript  | `{{.Trigger.Thread.TranscriptDisplay}}` | Plaintext transcript ("`authorDisplay: message`" per line). Empty after summarization — templates should render `Summary` in that case. |
 
 ### Step output fields
 
