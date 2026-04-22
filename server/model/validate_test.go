@@ -294,7 +294,7 @@ func TestValidateActions(t *testing.T) {
 		assert.JSONEq(t, fmt.Sprintf(`{"channel_ids":[%q]}`, id), string(raw))
 
 		var g Guardrails
-		require.NoError(t, json.Unmarshal([]byte(fmt.Sprintf(`{"channel_ids":[%q]}`, id)), &g))
+		require.NoError(t, json.Unmarshal(fmt.Appendf(nil, `{"channel_ids":[%q]}`, id), &g))
 		require.Len(t, g.Channels, 1)
 		assert.Equal(t, id, g.Channels[0].ChannelID)
 		assert.Empty(t, g.Channels[0].TeamID, "team_id should never be parsed from the wire")
