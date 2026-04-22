@@ -108,7 +108,6 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
-		base := fmt.Sprintf("/api/v1/hooks/tools/%s/%s", ctx.FlowID, action.ID)
 		for _, t := range cfg.AllowedTools {
 			entry, ok := hooks.LookupMattermostMCPTool(t)
 			if !ok {
@@ -117,10 +116,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 			}
 			cfg := bridgeclient.ToolHookConfig{}
 			if entry.Before != nil {
-				cfg.BeforeCallback = base + "/before"
+				cfg.BeforeCallback = hooks.HookURL(ctx.FlowID, action.ID, "before")
 			}
 			if entry.After != nil {
-				cfg.AfterCallback = base + "/after"
+				cfg.AfterCallback = hooks.HookURL(ctx.FlowID, action.ID, "after")
 			}
 			if cfg.BeforeCallback == "" && cfg.AfterCallback == "" {
 				continue

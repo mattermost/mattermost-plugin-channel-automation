@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -119,9 +120,12 @@ func TestCollectChannelIDs_ChannelCreatedTrigger(t *testing.T) {
 	assert.Empty(t, ids, "channel_created with templated action channels should return no concrete IDs")
 }
 
-func TestCollectChannelIDs_AIPromptGuardrailsChannelIDs(t *testing.T) {
-	ch1 := "aaaaaaaaaaaaaaaaaaaaaaaaaa"
-	ch2 := "bbbbbbbbbbbbbbbbbbbbbbbbbb"
+func TestCollectChannelIDs_AIPromptGuardrailsExcluded(t *testing.T) {
+	// Guardrail channels are an LLM read-only allowlist enforced at the hook
+	// layer, not channels the automation acts on. They must not appear in
+	// CollectChannelIDs, which feeds channel-admin permission checks.
+	ch1 := mmmodel.NewId()
+	ch2 := mmmodel.NewId()
 	f := &Flow{
 		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: ch1}},
 		Actions: []Action{
@@ -135,7 +139,7 @@ func TestCollectChannelIDs_AIPromptGuardrailsChannelIDs(t *testing.T) {
 		},
 	}
 	ids := CollectChannelIDs(f)
-	assert.ElementsMatch(t, []string{ch1, ch2}, ids)
+	assert.Equal(t, []string{ch1}, ids)
 }
 
 func TestCollectChannelIDs_ChannelCreatedWithLiteralAction(t *testing.T) {

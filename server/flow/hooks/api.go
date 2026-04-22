@@ -52,6 +52,13 @@ func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
 	return &APIHandler{store: store, api: api}
 }
 
+// HookURL returns the plugin-relative callback URL for a tool hook phase
+// ("before" or "after") on the given flow/action. Centralized so the route
+// registration and the URL emitted to the bridge cannot drift apart.
+func HookURL(flowID, actionID, phase string) string {
+	return fmt.Sprintf("/api/v1/hooks/tools/%s/%s/%s", flowID, actionID, phase)
+}
+
 // RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before|after.
 func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/before", h.handleBefore).Methods(http.MethodPost)
