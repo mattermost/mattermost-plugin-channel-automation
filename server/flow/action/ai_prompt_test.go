@@ -425,8 +425,7 @@ func TestBuildTriggerContext(t *testing.T) {
 	})
 
 	t.Run("current date is emitted in UTC regardless of input location", func(t *testing.T) {
-		loc, err := time.LoadLocation("America/New_York")
-		require.NoError(t, err)
+		loc := time.FixedZone("America/New_York", -4*60*60)
 		nyTime := time.Date(2026, time.April, 22, 10, 30, 45, 0, loc) // 14:30:45 UTC
 		meta, _ := buildTriggerContext(model.TriggerData{}, nyTime)
 		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
