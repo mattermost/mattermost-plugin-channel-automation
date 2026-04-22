@@ -15,6 +15,10 @@ In practice, validation (`ValidateSendMessageChannel`) already requires `send_me
 
 The list endpoint filters results to only flows the user has permission to view under the rules above.
 
+### MCP tool hook endpoints
+
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{flow_id}/{action_id}/before` and `POST /hooks/tools/{flow_id}/{action_id}/after`. These endpoints are invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the flow's `created_by` and returns `403 Forbidden` on mismatch (or when the flow has no recorded creator). System admin status does not bypass this check.
+
 ## Endpoints
 
 ### Get client configuration
