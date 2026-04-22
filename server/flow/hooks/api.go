@@ -147,18 +147,11 @@ func (h *APIHandler) loadGuardrailFlow(flowID, actionID string) (*model.Flow, *m
 	if err != nil || f == nil {
 		return nil, nil, false
 	}
-	for i := range f.Actions {
-		a := &f.Actions[i]
-		if a.ID != actionID || a.AIPrompt == nil || a.AIPrompt.Guardrails == nil {
-			continue
-		}
-		gr := a.AIPrompt.Guardrails
-		if len(gr.Channels) == 0 {
-			return nil, nil, false
-		}
-		return f, gr, true
+	gr := f.GuardrailsForAction(actionID)
+	if gr == nil || len(gr.Channels) == 0 {
+		return nil, nil, false
 	}
-	return nil, nil, false
+	return f, gr, true
 }
 
 // flowAnchorTeamID returns the Mattermost team ID the flow is anchored to: the

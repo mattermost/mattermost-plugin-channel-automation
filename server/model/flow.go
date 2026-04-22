@@ -48,6 +48,19 @@ type Trigger struct {
 	ChannelCreated    *ChannelCreatedConfig    `json:"channel_created,omitempty"`
 }
 
+// GuardrailsForAction returns the guardrails configured on the AI prompt
+// action with the given ID, or nil if the action does not exist, is not an
+// AI prompt action, or has no guardrails configured.
+func (f *Flow) GuardrailsForAction(actionID string) *Guardrails {
+	for i := range f.Actions {
+		a := &f.Actions[i]
+		if a.ID == actionID && a.AIPrompt != nil && a.AIPrompt.Guardrails != nil {
+			return a.AIPrompt.Guardrails
+		}
+	}
+	return nil
+}
+
 // TriggerChannelID returns the channel ID from the flow's trigger config,
 // regardless of trigger type. Returns empty string if no trigger is set.
 func (f *Flow) TriggerChannelID() string {
