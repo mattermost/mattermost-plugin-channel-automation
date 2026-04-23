@@ -290,6 +290,32 @@ func TestValidateActions(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `tool "group_message" is not allowed`)
 	})
+
+	t.Run("allowed_tools rejects create_post with whitespace and case variants", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"  Create_Post  "}},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
+	})
+
+	t.Run("allowed_tools rejects DM with case variant", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"DM"}},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
+	})
+
+	t.Run("allowed_tools ignores empty/whitespace entries", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"", "   "}},
+		}})
+		require.NoError(t, err)
+	})
 }
 
 func TestValidateSendMessageChannel(t *testing.T) {

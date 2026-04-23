@@ -198,7 +198,11 @@ func ValidateActions(actions []Action) error {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
 		}
 		if a.AIPrompt != nil {
-			for _, tool := range a.AIPrompt.AllowedTools {
+			for _, rawTool := range a.AIPrompt.AllowedTools {
+				tool := strings.ToLower(strings.TrimSpace(rawTool))
+				if tool == "" {
+					continue
+				}
 				if _, blocked := disallowedTools[tool]; blocked {
 					return fmt.Errorf("action %d: tool %q is not allowed in automations", i, tool)
 				}

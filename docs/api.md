@@ -123,7 +123,7 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`.
+For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`. Comparison is case-insensitive and ignores surrounding whitespace.
 
 **Request body** (max 1 MB):
 
