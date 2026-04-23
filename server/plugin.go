@@ -57,6 +57,10 @@ type Plugin struct {
 
 // OnActivate is invoked when the plugin is activated. If an error is returned, the plugin will be deactivated.
 func (p *Plugin) OnActivate() error {
+	if !pluginapi.IsEnterpriseLicensedOrDevelopment(p.API.GetConfig(), p.API.GetLicense()) {
+		return fmt.Errorf("this plugin requires an Enterprise license")
+	}
+
 	p.client = pluginapi.NewClient(p.API, p.Driver)
 
 	botUserID, err := p.client.Bot.EnsureBot(&mmmodel.Bot{
@@ -79,6 +83,7 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
 	p.registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
 	p.registry.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
+	p.registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
@@ -173,7 +178,7 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	}
 
 	event := &model.Event{
-		Type: "message_posted",
+		Type: model.TriggerTypeMessagePosted,
 		Post: post,
 	}
 
@@ -265,7 +270,7 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 	}
 
 	event := &model.Event{
-		Type:             "membership_changed",
+		Type:             model.TriggerTypeMembershipChanged,
 		Channel:          channel,
 		User:             user,
 		MembershipAction: action,
@@ -327,7 +332,7 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 	}
 
 	event := &model.Event{
-		Type:    "channel_created",
+		Type:    model.TriggerTypeChannelCreated,
 		Channel: channel,
 	}
 
@@ -376,6 +381,89 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 			"flow_id", f.ID,
 			"flow_name", f.Name,
 			"channel_id", channel.Id,
+		)
+	}
+
+	p.workerPool.Notify()
+}
+
+// UserHasJoinedTeam is invoked after a user joins a team.
+// The actor parameter (who performed the action) is ignored — we always
+// resolve the joining user from teamMember.UserId, matching the pattern
+// used by UserHasJoinedChannel/UserHasLeftChannel.
+func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMember, _ *mmmodel.User) {
+	if teamMember.UserId == p.botUserID {
+		return
+	}
+
+	user, appErr := p.API.GetUser(teamMember.UserId)
+	if appErr != nil {
+		p.API.LogError("Failed to get user for team join trigger", "user_id", teamMember.UserId, "err", appErr.Error())
+		return
+	}
+	if user.IsBot {
+		return
+	}
+
+	event := &model.Event{
+		Type: model.TriggerTypeUserJoinedTeam,
+		Team: &mmmodel.Team{Id: teamMember.TeamId},
+		User: user,
+	}
+
+	flows, err := p.triggerService.FindMatchingFlows(event)
+	if err != nil {
+		p.API.LogError("Failed to find flows for team join", "team_id", teamMember.TeamId, "user_id", teamMember.UserId, "err", err.Error())
+		return
+	}
+	if len(flows) == 0 {
+		return
+	}
+
+	team, appErr := p.API.GetTeam(teamMember.TeamId)
+	if appErr != nil {
+		p.API.LogWarn("Failed to get team for team join trigger, continuing with partial data", "team_id", teamMember.TeamId, "err", appErr.Error())
+	}
+
+	safeTeam := model.NewSafeTeam(team)
+
+	defaultChannel, appErr := p.API.GetChannelByName(teamMember.TeamId, mmmodel.DefaultChannelName, false)
+	if appErr != nil {
+		p.API.LogWarn("Failed to get default channel for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
+	} else {
+		safeTeam.DefaultChannelId = defaultChannel.Id
+	}
+
+	triggerData := model.TriggerData{
+		User: model.NewSafeUser(user),
+		Team: safeTeam,
+	}
+
+	for _, f := range flows {
+		item := &model.WorkItem{
+			ID:          mmmodel.NewId(),
+			FlowID:      f.ID,
+			FlowName:    f.Name,
+			TriggerData: triggerData,
+		}
+
+		if err := p.workQueueStore.Enqueue(item); err != nil {
+			p.API.LogError("Failed to enqueue work item",
+				"flow_id", f.ID,
+				"flow_name", f.Name,
+				"team_id", teamMember.TeamId,
+				"user_id", teamMember.UserId,
+				"err", err.Error(),
+			)
+			continue
+		}
+
+		p.API.LogDebug("Work item enqueued",
+			"work_item_id", item.ID,
+			"flow_id", f.ID,
+			"flow_name", f.Name,
+			"team_id", teamMember.TeamId,
+			"user_id", teamMember.UserId,
 		)
 	}
 

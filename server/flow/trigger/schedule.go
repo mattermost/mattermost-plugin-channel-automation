@@ -9,7 +9,7 @@ import (
 // ScheduleManager, not by matching events.
 type ScheduleTrigger struct{}
 
-func (t *ScheduleTrigger) Type() string { return "schedule" }
+func (t *ScheduleTrigger) Type() string { return model.TriggerTypeSchedule }
 
 // Matches always returns false — schedule triggers are time-based and
 // never match incoming events.

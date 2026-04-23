@@ -157,3 +157,35 @@ func TestFlowJSON_AIPrompt_AllowedToolsStringArray(t *testing.T) {
 	require.NotNil(t, f.Actions[0].AIPrompt)
 	assert.Equal(t, []string{"search", "create_post"}, f.Actions[0].AIPrompt.AllowedTools)
 }
+
+func TestCollectTeamIDs_LiteralTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Equal(t, []string{"team1"}, ids)
+}
+
+func TestCollectTeamIDs_EmptyTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: ""}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}
+
+func TestCollectTeamIDs_TemplatedTeamID(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "{{.SomeVar}}"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}
+
+func TestCollectTeamIDs_NonTeamTrigger(t *testing.T) {
+	f := &Flow{
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	ids := CollectTeamIDs(f)
+	assert.Nil(t, ids)
+}

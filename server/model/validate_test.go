@@ -138,6 +138,40 @@ func TestValidateTrigger_ChannelCreated(t *testing.T) {
 	})
 }
 
+func TestValidateTrigger_UserJoinedTeam(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid with user_type user", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "user"}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid with user_type guest", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "guest"}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("valid with empty user_type", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: ""}}, nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid user_type", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "admin"}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "user_type")
+	})
+
+	t.Run("missing team_id", func(t *testing.T) {
+		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{}}, nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "team_id")
+	})
+}
+
 func TestValidateTrigger_NoTriggerType(t *testing.T) {
 	err := ValidateTrigger(&Trigger{}, nil)
 	require.Error(t, err)
@@ -316,7 +350,7 @@ func TestValidateSendMessageChannel(t *testing.T) {
 		}
 		err := ValidateSendMessageChannel(f)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must use the template expression")
+		assert.Contains(t, err.Error(), "must use a template expression")
 	})
 
 	t.Run("schedule trigger enforces channel restriction", func(t *testing.T) {
@@ -341,6 +375,62 @@ func TestValidateSendMessageChannel(t *testing.T) {
 			Actions: []Action{{ID: "a", AIPrompt: &AIPromptActionConfig{Prompt: "test", ProviderType: "agent", ProviderID: "bot1"}}},
 		}
 		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("user_joined_team accepts Team.DefaultChannelId template", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("message_posted accepts Post.ChannelId template", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Post.ChannelId}}", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateSendMessageChannel(f))
+	})
+
+	t.Run("user_joined_team rejects Trigger.User.Id template", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.User.Id}}", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must use a template expression")
+	})
+
+	t.Run("channel_created rejects Steps template (chaining not supported)", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Steps.create_ch.ChannelID}}", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must use a template expression")
+	})
+
+	t.Run("message_posted rejects template with trailing literal", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "{{.Trigger.Channel.Id}}extra", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must reference the triggering channel")
+	})
+
+	t.Run("message_posted rejects template with leading literal", func(t *testing.T) {
+		f := &Flow{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "prefix{{.Trigger.Channel.Id}}", Body: "hi"}}},
+		}
+		err := ValidateSendMessageChannel(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must reference the triggering channel")
 	})
 }
 
