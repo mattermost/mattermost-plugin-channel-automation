@@ -160,9 +160,9 @@ func isTriggerChannelTemplate(s string) bool {
 // At least one action is required. Each action must have a unique, non-empty ID
 // matching the slug pattern (lowercase alphanumeric + hyphens) and exactly one
 // action config set. For ai_prompt actions, guardrail consistency is checked.
-// Tool-name policy (catalog membership, embedded-server allowlist) is enforced
-// at the API layer against the live bridge tool list — not here — because it
-// requires a per-user, per-agent bridge call.
+// Tool-name policy (catalog membership, embedded-server allowlist, disallowed
+// tools) is enforced at the API layer against the live bridge tool list — not
+// here — because it requires a per-user, per-agent bridge call.
 func ValidateActions(actions []Action) error {
 	if len(actions) == 0 {
 		return fmt.Errorf("at least one action is required")
