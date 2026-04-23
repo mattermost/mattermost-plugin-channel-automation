@@ -56,6 +56,10 @@ func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, erro
 
 func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error) { return nil, nil }
 
+func (m *mockFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) {
+	return nil, nil
+}
+
 func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Router {
 	t.Helper()
 	// Hook handlers emit a debug log at entry that includes per-call key/value

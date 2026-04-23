@@ -1,12 +1,19 @@
 package hooks
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
+
+// ErrToolDiscovery wraps failures to discover the agent's tool catalog
+// (bridge unavailable, HTTP error, etc.). These are runtime/dependency
+// failures rather than client validation errors, so callers should map
+// them to a 5xx response instead of 400.
+var ErrToolDiscovery = errors.New("tool discovery failed")
 
 // AgentToolsLister fetches the set of tools an agent exposes for a given user
 // from the Mattermost agents bridge. Implemented by *bridgeclient.Client; kept
@@ -46,11 +53,11 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 		available, ok := cache[agentID]
 		if !ok {
 			if bridge == nil {
-				return fmt.Errorf("action %d: cannot validate allowed_tools: bridge client unavailable", i)
+				return errors.Join(fmt.Errorf("action %d: cannot validate allowed_tools: bridge client unavailable", i), ErrToolDiscovery)
 			}
 			tools, err := bridge.GetAgentTools(agentID, userID)
 			if err != nil {
-				return fmt.Errorf("action %d: failed to list tools for agent %q: %w", i, agentID, err)
+				return errors.Join(fmt.Errorf("action %d: failed to list tools for agent %q: %w", i, agentID, err), ErrToolDiscovery)
 			}
 			available = make(map[string]bridgeclient.BridgeToolInfo, len(tools))
 			for _, t := range tools {
