@@ -170,6 +170,12 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, f.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
@@ -297,6 +303,12 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := permissions.CheckFlowPermissions(h.api, userID, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, userID, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

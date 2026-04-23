@@ -74,6 +74,46 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 	return nil
 }
 
+// CheckGuardrailChannelPermissions verifies that userID can read every
+// channel referenced by ai_prompt guardrails on the flow. Guardrails grant
+// the AI agent (which runs with broad bot credentials) the right to read
+// from those channels via MCP tools, so the author must themselves be able
+// to read each one. There is no sysadmin shortcut: sysadmins implicitly
+// satisfy PermissionReadChannel on every channel, so the same uniform
+// per-channel check is correct for everyone.
+func CheckGuardrailChannelPermissions(api plugin.API, userID string, f *model.Flow) error {
+	seen := make(map[string]struct{})
+	for i := range f.Actions {
+		ai := f.Actions[i].AIPrompt
+		if ai == nil || ai.Guardrails == nil {
+			continue
+		}
+		for _, c := range ai.Guardrails.Channels {
+			if c.ChannelID == "" {
+				continue
+			}
+			if _, dup := seen[c.ChannelID]; dup {
+				continue
+			}
+			seen[c.ChannelID] = struct{}{}
+
+			// GetChannel first so 5xx infrastructure failures surface
+			// distinctly from genuine "no such channel" / "no access" cases,
+			// matching the pattern used in the channel_created branch above.
+			if _, appErr := api.GetChannel(c.ChannelID); appErr != nil {
+				if appErr.StatusCode >= http.StatusInternalServerError {
+					return fmt.Errorf("failed to verify guardrail channel: %w", appErr)
+				}
+				return fmt.Errorf("you do not have permission to read one or more channels referenced by ai_prompt guardrails")
+			}
+			if !api.HasPermissionToChannel(userID, c.ChannelID, mmmodel.PermissionReadChannel) {
+				return fmt.Errorf("you do not have permission to read one or more channels referenced by ai_prompt guardrails")
+			}
+		}
+	}
+	return nil
+}
+
 // HandlePermissionError determines the appropriate HTTP status and log level
 // based on whether the permission check failed due to an API/infrastructure
 // error (500) or the user genuinely lacking permissions (403).
