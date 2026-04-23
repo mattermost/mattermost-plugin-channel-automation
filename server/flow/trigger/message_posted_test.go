@@ -48,6 +48,17 @@ func TestMessagePostedTrigger_Matches_NilPost(t *testing.T) {
 	assert.False(t, tr.Matches(trig, event))
 }
 
+func TestMessagePostedTrigger_Matches_NilConfig(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{}
+	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: &mmmodel.Post{ChannelId: "ch1"},
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
 func TestMessagePostedTrigger_Matches_ThreadReplyExcludedByDefault(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
 	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}

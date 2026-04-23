@@ -42,7 +42,7 @@ type MembershipChangedConfig struct {
 // MessagePostedConfig holds trigger config for the message_posted trigger type.
 type MessagePostedConfig struct {
 	ChannelID            string `json:"channel_id"`
-	IncludeThreadReplies bool   `json:"include_thread_replies,omitempty"` // when false (default), posts with a RootId are ignored
+	IncludeThreadReplies bool   `json:"include_thread_replies,omitempty"` // when false (default), thread replies (posts with a non-empty RootId) do not fire this trigger
 }
 
 // ScheduleConfig holds trigger config for the schedule trigger type.

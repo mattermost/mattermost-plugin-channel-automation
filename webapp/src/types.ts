@@ -1,6 +1,6 @@
 export interface MessagePostedTriggerParams {
     channel_id: string;
-    include_thread_replies?: boolean; // when omitted/false, thread replies do not trigger the flow
+    include_thread_replies?: boolean; // when omitted/false, thread replies are excluded from the message_posted trigger
 }
 
 export interface ScheduleTriggerParams {
