@@ -12,4 +12,5 @@ type Store interface {
 	GetFlowIDsForChannel(channelID string) ([]string, error)
 	GetFlowIDsForMembershipChannel(channelID string) ([]string, error)
 	GetChannelCreatedFlowIDs() ([]string, error)
+	GetFlowIDsForUserJoinedTeam(teamID string) ([]string, error)
 }

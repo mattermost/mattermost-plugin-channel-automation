@@ -454,6 +454,7 @@ Exactly one key should be set, indicating the trigger type:
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
 | `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created on a team |
+| `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | Fires when a user joins the configured team (`team_id` required)  |
 
 #### MessagePostedConfig
 
@@ -486,6 +487,17 @@ Exactly one key should be set, indicating the trigger type:
 { "channel_created": { "team_id": "team-id-1" } }
 ```
 
+#### UserJoinedTeamConfig
+
+| Field       | Type   | Description                                                                          |
+| ----------- | ------ | ------------------------------------------------------------------------------------ |
+| `team_id`   | string | Team to watch (required)                                                             |
+| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`)      |
+
+```json
+{ "user_joined_team": { "team_id": "team-id-1", "user_type": "user" } }
+```
+
 ### Action
 
 Exactly one type-specific config key should be set alongside `id`:
@@ -516,7 +528,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. |
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 #### Guardrails
 
@@ -560,6 +572,10 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 Fires when a new public channel (type `"O"`) is created on the specified `team_id`. DMs, group messages, and private channels are excluded. Authorization for this trigger is team-scoped: the creating user must be a team admin on `team_id` (or a system admin), and any literal action channel references must belong to the same team.
 
+### `user_joined_team`
+
+Fires when a user joins the configured team. Bot users are automatically excluded. The optional `user_type` field filters by user role: `"user"` matches only regular users, `"guest"` matches only guests, and `""` (default) matches both. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`. The user's guest status is available via `{{.Trigger.User.IsGuest}}`.
+
 ---
 
 ## Action types
@@ -574,7 +590,7 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
@@ -588,7 +604,8 @@ Action templates receive a `FlowContext` object with the following structure:
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
 {{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
-{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created)
+{{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created, user_joined_team)
+{{.Trigger.Team}}       — the team the user joined (user_joined_team only)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)
 {{.Trigger.Membership}} — membership change metadata (membership_changed only)
 {{.Steps.<action_id>}}  — output from a previous action step
@@ -613,7 +630,9 @@ Action templates receive a `FlowContext` object with the following structure:
 | Name         | `{{.Trigger.Channel.Name}}`        |
 | Display Name | `{{.Trigger.Channel.DisplayName}}` |
 
-**User** _(message_posted, membership_changed, channel_created):_
+**User** _(message_posted, membership_changed, channel_created, user_joined_team):_
+
+> **Note:** For `user_joined_team` triggers, `{{.Trigger.Channel}}` is **not** available. Use `{{.Trigger.Team.DefaultChannelId}}` to reference the team's default channel.
 
 | Field      | Access                        |
 | ---------- | ----------------------------- |
@@ -621,12 +640,22 @@ Action templates receive a `FlowContext` object with the following structure:
 | Username   | `{{.Trigger.User.Username}}`  |
 | First Name | `{{.Trigger.User.FirstName}}` |
 | Last Name  | `{{.Trigger.User.LastName}}`  |
+| Is Guest   | `{{.Trigger.User.IsGuest}}`   |
 
 **Membership** _(membership_changed trigger only):_
 
 | Field  | Access                            |
 | ------ | --------------------------------- |
 | Action | `{{.Trigger.Membership.Action}}`  |
+
+**Team** _(user_joined_team trigger only):_
+
+| Field              | Access                               |
+| ------------------ | ------------------------------------ |
+| ID                 | `{{.Trigger.Team.Id}}`               |
+| Name               | `{{.Trigger.Team.Name}}`             |
+| Display Name       | `{{.Trigger.Team.DisplayName}}`      |
+| Default Channel ID | `{{.Trigger.Team.DefaultChannelId}}` |
 
 **Schedule** _(schedule trigger only):_
 

@@ -202,6 +202,22 @@ func buildTriggerContext(trigger model.TriggerData) (metadata string, userConten
 		}
 	}
 
+	if trigger.Team != nil {
+		t := trigger.Team
+		if t.Id != "" {
+			meta.WriteString("Team ID: " + t.Id + "\n")
+		}
+		if t.Name != "" {
+			meta.WriteString("Team Name: " + t.Name + "\n")
+		}
+		if t.DisplayName != "" {
+			user.WriteString("Team Display Name: " + t.DisplayName + "\n")
+		}
+		if t.DefaultChannelId != "" {
+			meta.WriteString("Default Channel ID: " + t.DefaultChannelId + "\n")
+		}
+	}
+
 	if trigger.Schedule != nil {
 		s := trigger.Schedule
 		if s.Interval != "" {

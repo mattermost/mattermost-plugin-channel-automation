@@ -24,7 +24,7 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 		return nil
 	}
 
-	// channel_created flows use team-level authorization.
+	// channel_created and user_joined_team flows use team-level authorization.
 	// We call GetTeam first because HasPermissionToTeam is boolean-only and
 	// cannot distinguish infrastructure failures from genuine permission denials.
 	if f.Trigger.ChannelCreated != nil {
@@ -48,6 +48,25 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 			}
 			if ch.TeamId != teamID {
 				return fmt.Errorf("channel %s does not belong to the team specified in the channel_created trigger", chID)
+			}
+		}
+		return nil
+	}
+
+	if f.Trigger.UserJoinedTeam != nil {
+		teamIDs := model.CollectTeamIDs(f)
+		if len(teamIDs) == 0 {
+			return fmt.Errorf("system admin permission is required for flows without explicit team references")
+		}
+		for _, teamID := range teamIDs {
+			if _, appErr := api.GetTeam(teamID); appErr != nil {
+				if appErr.StatusCode >= http.StatusInternalServerError {
+					return fmt.Errorf("failed to verify team: %w", appErr)
+				}
+				return fmt.Errorf("team %s not found or not accessible", teamID)
+			}
+			if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
+				return fmt.Errorf("you must be a team admin on all teams referenced by this flow")
 			}
 		}
 		return nil
