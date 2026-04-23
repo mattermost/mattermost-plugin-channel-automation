@@ -82,6 +82,15 @@ func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Ro
 	return r
 }
 
+// argsJSON marshals a map of hook args to json.RawMessage, matching the
+// mcptool.BeforeHookRequest.Args field type.
+func argsJSON(t *testing.T, m map[string]any) json.RawMessage {
+	t.Helper()
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	return b
+}
+
 func postBefore(t *testing.T, r *mux.Router, flowID, actionID string, body any) (int, mcptool.BeforeHookResponse) {
 	return postBeforeAs(t, r, flowID, actionID, creatorUserID, body)
 }
@@ -150,7 +159,7 @@ func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hello"},
+		Args:     argsJSON(t, map[string]any{"query": "hello"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -166,7 +175,7 @@ func TestHooks_Before_SearchPostsChannelNotAllowed(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hello", "channel_id": chDeny},
+		Args:     argsJSON(t, map[string]any{"query": "hello", "channel_id": chDeny}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -183,7 +192,7 @@ func TestHooks_Before_SearchPostsOK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hello", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "hello", "channel_id": chAllow}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -197,7 +206,7 @@ func TestHooks_Before_ReadChannelOK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_channel",
-		Args:     map[string]any{"channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"channel_id": chAllow}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -211,7 +220,7 @@ func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_members",
-		Args:     map[string]any{"channel_id": chDeny},
+		Args:     argsJSON(t, map[string]any{"channel_id": chDeny}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -225,7 +234,7 @@ func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
-		Args:     map[string]any{"user_id": "user1"},
+		Args:     argsJSON(t, map[string]any{"user_id": "user1"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -240,7 +249,7 @@ func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
-		Args:     map[string]any{"channel_id": chDeny, "user_id": "user1"},
+		Args:     argsJSON(t, map[string]any{"channel_id": chDeny, "user_id": "user1"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -255,7 +264,7 @@ func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
-		Args:     map[string]any{"channel_id": chAllow, "user_id": "user1"},
+		Args:     argsJSON(t, map[string]any{"channel_id": chAllow, "user_id": "user1"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -269,7 +278,7 @@ func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
-		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O"},
+		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -285,7 +294,7 @@ func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
 	wrongTeam := mmmodel.NewId()
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
-		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": wrongTeam},
+		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": wrongTeam}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -301,7 +310,7 @@ func TestHooks_Before_CreateChannel_OK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
-		Args:     map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": teamAutomation},
+		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": teamAutomation}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -316,7 +325,7 @@ func TestHooks_Before_GetChannelInfo_ResolveAndReject(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_info",
-		Args:     map[string]any{"channel_name": "town-square", "team_id": "team1"},
+		Args:     argsJSON(t, map[string]any{"channel_name": "town-square", "team_id": "team1"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -332,7 +341,7 @@ func TestHooks_Before_GetChannelInfo_ResolveOK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_info",
-		Args:     map[string]any{"channel_name": "town-square", "team_id": "team1"},
+		Args:     argsJSON(t, map[string]any{"channel_name": "town-square", "team_id": "team1"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -347,7 +356,7 @@ func TestHooks_Before_GetUserChannelsPassThrough(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_user_channels",
-		Args:     map[string]any{},
+		Args:     argsJSON(t, map[string]any{}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -364,7 +373,7 @@ func TestHooks_Before_ReadPost_NotRegistered(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_post",
-		Args:     map[string]any{"post_id": strings.Repeat("p", 26)},
+		Args:     argsJSON(t, map[string]any{"post_id": strings.Repeat("p", 26)}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -378,7 +387,7 @@ func TestHooks_Before_MattermostToolNotSupportedByGuardrails(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_users",
-		Args:     map[string]any{"term": "x"},
+		Args:     argsJSON(t, map[string]any{"term": "x"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -393,7 +402,7 @@ func TestHooks_Before_UnrecognizedToolRejected(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "some_external_or_typo_tool",
-		Args:     map[string]any{},
+		Args:     argsJSON(t, map[string]any{}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -408,7 +417,7 @@ func TestHooks_GuardrailsNotFound_MissingFlow(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "x", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -423,7 +432,7 @@ func TestHooks_GuardrailsNotFound_WrongAction(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "other", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "x", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -446,7 +455,7 @@ func TestHooks_GuardrailsNotFound_NilGuardrailsOnAction(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "x", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -568,7 +577,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hi", "channel_id": chDeny},
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chDeny}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -631,7 +640,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
-		Args:     map[string]any{"team_id": team1},
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -647,7 +656,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
-		Args:     map[string]any{"team_id": team2},
+		Args:     argsJSON(t, map[string]any{"team_id": team2}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -664,7 +673,7 @@ func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
-		Args:     map[string]any{"team_name": "Engineering"},
+		Args:     argsJSON(t, map[string]any{"team_name": "Engineering"}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -688,7 +697,7 @@ func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
-		Args:     map[string]any{"team_id": teamOther},
+		Args:     argsJSON(t, map[string]any{"team_id": teamOther}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -702,7 +711,7 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_OK(t *testing.T) {
 
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
-		Args:     map[string]any{"team_id": teamAutomation},
+		Args:     argsJSON(t, map[string]any{"team_id": teamAutomation}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -717,7 +726,7 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
 	wrongTeam := mmmodel.NewId()
 	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
-		Args:     map[string]any{"team_id": wrongTeam},
+		Args:     argsJSON(t, map[string]any{"team_id": wrongTeam}),
 		UserID:   "user1",
 	})
 	require.Equal(t, http.StatusOK, code)
@@ -976,7 +985,7 @@ func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
 
 	code, resp := postBeforeAs(t, r, "flow1", "ai1", "someone-else", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
 	})
 	require.Equal(t, http.StatusForbidden, code)
@@ -990,7 +999,7 @@ func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
 
 	code, resp := postBeforeAs(t, r, "flow1", "ai1", "", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
 	})
 	require.Equal(t, http.StatusForbidden, code)
@@ -1019,7 +1028,7 @@ func TestHooks_RejectsFlowMissingCreator(t *testing.T) {
 
 	code, _ := postBeforeAs(t, r, "flow1", "ai1", creatorUserID, mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
-		Args:     map[string]any{"query": "hi", "channel_id": chAllow},
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
 	})
 	require.Equal(t, http.StatusForbidden, code)

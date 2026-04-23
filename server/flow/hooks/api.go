@@ -240,6 +240,14 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var argsMap map[string]any
+	if len(req.Args) > 0 {
+		if err := json.Unmarshal(req.Args, &argsMap); err != nil {
+			writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "invalid args JSON in hook request"})
+			return
+		}
+	}
+
 	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
 	if expTeam, err := flowAnchorTeamID(h.api, f); err != nil {
 		h.api.LogDebug("hooks: failed to resolve flow anchor team",
@@ -255,7 +263,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		API:          h.api,
 		UserID:       req.UserID,
 	}
-	if err := entry.Before(ctx, req.Args); err != nil {
+	if err := entry.Before(ctx, argsMap); err != nil {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: err.Error()})
 		return
 	}
