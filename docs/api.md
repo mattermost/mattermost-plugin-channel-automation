@@ -505,7 +505,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
@@ -543,7 +543,7 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
