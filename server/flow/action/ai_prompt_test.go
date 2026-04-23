@@ -417,10 +417,11 @@ func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 }
 
 func TestBuildTriggerContext(t *testing.T) {
-	t.Run("empty trigger still includes current date", func(t *testing.T) {
+	t.Run("empty trigger still includes current date and unix timestamp", func(t *testing.T) {
 		meta, userContent := buildTriggerContext(model.TriggerData{}, fixedTime)
 		assert.Contains(t, meta, "<trigger_context>")
 		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
+		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp: %d", fixedTime.Unix()))
 		assert.Empty(t, userContent)
 	})
 
@@ -429,6 +430,7 @@ func TestBuildTriggerContext(t *testing.T) {
 		nyTime := time.Date(2026, time.April, 22, 10, 30, 45, 0, loc) // 14:30:45 UTC
 		meta, _ := buildTriggerContext(model.TriggerData{}, nyTime)
 		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
+		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp: %d", nyTime.Unix()))
 	})
 
 	t.Run("post trigger separates metadata from user content", func(t *testing.T) {
