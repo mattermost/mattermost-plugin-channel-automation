@@ -1,8 +1,6 @@
 package model
 
-import (
-	"strings"
-)
+import "strings"
 
 // Flow represents a trigger-action workflow.
 type Flow struct {
@@ -18,7 +16,8 @@ type Flow struct {
 
 // MessagePostedConfig holds trigger config for the message_posted trigger type.
 type MessagePostedConfig struct {
-	ChannelID string `json:"channel_id"`
+	ChannelID            string `json:"channel_id"`
+	IncludeThreadReplies bool   `json:"include_thread_replies,omitempty"` // when false (default), thread replies (posts with a non-empty RootId) do not fire this trigger
 }
 
 // ScheduleConfig holds trigger config for the schedule trigger type.

@@ -384,7 +384,6 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 
 func TestAIPromptAction_Execute_AllowedTools_RejectedAtRuntime(t *testing.T) {
 	api := newTestAPI()
-	// Agent no longer exposes the tool the automation was saved with.
 	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{}}
 	a := NewAIPromptAction(api, bc)
 
@@ -407,7 +406,6 @@ func TestAIPromptAction_Execute_AllowedTools_RejectedAtRuntime(t *testing.T) {
 
 func TestAIPromptAction_Execute_AllowedTools_DemotedToolRejected(t *testing.T) {
 	api := newTestAPI()
-	// create_post is in the catalog with Allowed=false.
 	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{mmTool("create_post")}}
 	a := NewAIPromptAction(api, bc)
 
