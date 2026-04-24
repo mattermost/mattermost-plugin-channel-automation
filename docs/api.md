@@ -382,8 +382,8 @@ An array of [ExecutionRecord](#executionrecord) objects.
 | `id`           | string                               | Unique execution ID (server-assigned)                     |
 | `flow_id`      | string                               | ID of the flow that was executed                          |
 | `flow_name`    | string                               | Name of the flow at execution time                        |
-| `status`       | string                               | `"success"` or `"error"`                                  |
-| `error`        | string                               | _(optional)_ Error message if status is `"error"`         |
+| `status`       | string                               | `"success"` or `"failed"`                                 |
+| `error`        | string                               | _(optional)_ Error message if status is `"failed"`        |
 | `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
 | `trigger_data` | [TriggerData](#trigger-data-fields)  | Snapshot of the trigger event data                        |
 | `created_at`   | integer                              | Time the execution was queued (ms since epoch)            |

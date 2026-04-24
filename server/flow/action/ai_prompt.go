@@ -135,7 +135,7 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 
 	utcNow := now.UTC()
 	meta.WriteString("Current Date: " + utcNow.Format(time.RFC3339) + " (" + utcNow.Weekday().String() + ")\n")
-	meta.WriteString(fmt.Sprintf("Current Unix Timestamp (ms): %d\n", model.TimeToTimestamp(utcNow)))
+	fmt.Fprintf(&meta, "Current Unix Timestamp (ms): %d\n", model.TimeToTimestamp(utcNow))
 
 	if trigger.Post != nil {
 		p := trigger.Post
@@ -195,7 +195,7 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 		if s.Interval != "" {
 			meta.WriteString("Schedule Interval: " + s.Interval + "\n")
 		}
-		meta.WriteString(fmt.Sprintf("Fired At: %d\n", s.FiredAt))
+		fmt.Fprintf(&meta, "Fired At: %d\n", s.FiredAt)
 	}
 
 	metaContent := strings.TrimSpace(meta.String())
