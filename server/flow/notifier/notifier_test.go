@@ -67,6 +67,7 @@ func TestNotifyFailure_SkipsOnKVError(t *testing.T) {
 	n := NewCreatorNotifier(api, "bot1")
 	n.NotifyFailure(sampleDetails())
 
+	api.AssertExpectations(t)
 	api.AssertNotCalled(t, "GetDirectChannel", mock.Anything, mock.Anything)
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
@@ -88,11 +89,13 @@ func TestNotifyFailure_LogsOnDMOpenFailure(t *testing.T) {
 	api.On("KVSetWithOptions", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 	api.On("GetDirectChannel", "creator1", "bot1").
 		Return((*mmmodel.Channel)(nil), mmmodel.NewAppError("GetDirectChannel", "dm.fail", nil, "boom", 500))
+	api.On("KVDelete", mock.Anything).Return(nil)
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 	n := NewCreatorNotifier(api, "bot1")
 	n.NotifyFailure(sampleDetails())
 
+	api.AssertExpectations(t)
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 

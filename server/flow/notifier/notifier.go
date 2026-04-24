@@ -79,6 +79,7 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
 		)
+		n.releaseCooldown(d.FlowID)
 		return
 	}
 
@@ -93,6 +94,8 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
 		)
+		n.releaseCooldown(d.FlowID)
+		return
 	}
 }
 
@@ -120,6 +123,19 @@ func (n *CreatorNotifier) claimCooldown(flowID string) bool {
 	return ok
 }
 
+// releaseCooldown removes the cooldown entry so another notification attempt
+// can be made. Called when the notification fails after claiming the cooldown.
+func (n *CreatorNotifier) releaseCooldown(flowID string) {
+	key := kvKeyPrefix + flowID
+	appErr := n.api.KVDelete(key)
+	if appErr != nil {
+		n.api.LogError("Failed to release flow failure notification cooldown",
+			"flow_id", flowID,
+			"err", appErr.Error(),
+		)
+	}
+}
+
 func formatMessage(d FailureDetails) string {
 	var channelLine string
 	switch {
@@ -129,15 +145,20 @@ func formatMessage(d FailureDetails) string {
 		channelLine = fmt.Sprintf("- Channel: `%s`\n", d.ChannelID)
 	}
 
+	var actionLine string
+	if d.ActionID != "" || d.ActionType != "" {
+		actionLine = fmt.Sprintf("- Action: `%s` (`%s`)\n", d.ActionID, d.ActionType)
+	}
+
 	return fmt.Sprintf(
 		"Automation %q failed.\n\n"+
-			"- Action: `%s` (`%s`)\n"+
+			"%s"+
 			"- Error: %s\n"+
 			"%s"+
 			"- Execution ID: `%s`\n"+
 			"- Flow ID: `%s`\n\n"+
 			"This notification is rate-limited to once per hour per flow. "+
 			"Check the server logs for more details.",
-		d.FlowName, d.ActionID, d.ActionType, d.ErrorMsg, channelLine, d.ExecutionID, d.FlowID,
+		d.FlowName, actionLine, d.ErrorMsg, channelLine, d.ExecutionID, d.FlowID,
 	)
 }
