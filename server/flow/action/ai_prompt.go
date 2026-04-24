@@ -76,21 +76,30 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 	posts = append(posts, bridgeclient.Post{Role: "user", Message: rendered})
 
-	a.api.LogDebug("AI prompt action: rendered prompt",
-		"action_id", action.ID,
-		"provider_type", cfg.ProviderType,
-		"provider_id", cfg.ProviderID,
-		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
-	)
-
 	var channelID string
 	if ctx.Trigger.Channel != nil {
 		channelID = ctx.Trigger.Channel.Id
 	}
 
+	userID := ctx.CreatedBy
+	userIDSource := "created_by"
+	if ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
+		userID = ctx.Trigger.User.Id
+		userIDSource = "trigger"
+	}
+
+	a.api.LogDebug("AI prompt action: rendered prompt",
+		"action_id", action.ID,
+		"provider_type", cfg.ProviderType,
+		"provider_id", cfg.ProviderID,
+		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
+		"user_id", userID,
+		"user_id_source", userIDSource,
+	)
+
 	req := bridgeclient.CompletionRequest{
 		Posts:     posts,
-		UserID:    ctx.CreatedBy,
+		UserID:    userID,
 		ChannelID: channelID,
 	}
 

@@ -522,6 +522,8 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
+The completion request is attributed to the user who triggered the automation (`{{.Trigger.User}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the flow creator (`{{.CreatedBy}}`).
+
 Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ---
