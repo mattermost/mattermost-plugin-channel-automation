@@ -18,9 +18,10 @@ import (
 // If you add non-reference types to your configuration struct, be sure to rewrite Clone as a deep
 // copy appropriate for your types.
 type configuration struct {
-	MaxConcurrentFlowsLimit int
-	MaxFlowsPerChannelLimit int
-	EnableUI                bool
+	MaxConcurrentFlowsLimit   int
+	MaxFlowsPerChannelLimit   int
+	EnableUI                  bool
+	AutomationInstructionsURL string
 }
 
 // MaxFlowsPerChannel implements flow.Configuration.

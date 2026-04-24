@@ -3,7 +3,7 @@ package flow
 import (
 	"testing"
 
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
+	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"

@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
+	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"

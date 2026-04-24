@@ -6,7 +6,14 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"` if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
+All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the flow's trigger type:
+
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) on every literal channel referenced in the flow (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"`.
+- **Team-scoped triggers** (`channel_created`): the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the flow must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
+
+In practice, validation (`ValidateSendMessageChannel`) already requires `send_message.channel_id` to be either the literal trigger channel ID or the template `{{.Trigger.Channel.Id}}`, so for channel-scoped triggers the set of literal channels checked collapses to the trigger channel, and for `channel_created` any literal `send_message.channel_id` must belong to `team_id`.
+
+The list endpoint filters results to only flows the user has permission to view under the rules above.
 
 ## Endpoints
 
@@ -29,6 +36,30 @@ Returns the client-relevant plugin configuration. Any authenticated user may cal
 | Field       | Type    | Description                                                                 |
 | ----------- | ------- | --------------------------------------------------------------------------- |
 | `enable_ui` | boolean | Whether the Channel Automation UI is enabled in the webapp product switcher |
+
+---
+
+### Get automation instructions (for agents / MCP)
+
+```http
+GET /automation-instructions
+```
+
+Returns documentation for agents/MCP: a single **`instructions`** string (the body returned by the `get_automation_instructions` tool), including an optional closing paragraph with a plain documentation URL when **Automation instructions URL** is set in plugin settings.
+
+Any authenticated user may call this endpoint — no channel-admin check is performed (same as `GET /config`).
+
+**Response:** `200 OK`
+
+```json
+{
+  "instructions": "Channel automations are trigger-action workflows..."
+}
+```
+
+| Field          | Type   | Description                                                                                                                                                                                                 |
+| -------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions` | string | Detailed documentation for triggers, actions, templates, `allowed_tools`, and the required user-confirmation workflow. If the plugin setting **Automation instructions URL** is set, a closing paragraph is appended with that URL so the model can mention it to users. |
 
 ---
 
@@ -92,6 +123,8 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
+For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`. Comparison is case-insensitive and ignores surrounding whitespace.
+
 **Request body** (max 1 MB):
 
 ```json
@@ -128,6 +161,7 @@ The created flow object with all server-assigned fields populated.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
 | 500    | `failed to create flow`                                                                                     |
@@ -162,7 +196,7 @@ The flow object.
 PUT /flows/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format).
+Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create flow](#create-flow).
 
 **Request body** (max 1 MB):
 
@@ -200,6 +234,7 @@ The updated flow object.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 404    | `flow not found`                                                                                            |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
@@ -408,7 +443,7 @@ Exactly one key should be set, indicating the trigger type:
 | `message_posted`     | [MessagePostedConfig](#messagepostedconfig)           | _(optional)_ Fires on new messages in a channel                   |
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
-| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
+| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created on a team |
 | `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | Fires when a user joins the configured team (`team_id` required)  |
 
 #### MessagePostedConfig
@@ -435,10 +470,12 @@ Exactly one key should be set, indicating the trigger type:
 
 #### ChannelCreatedConfig
 
-Empty object — no fields required. The trigger fires on any new public channel creation.
+| Field     | Type   | Description                                                    |
+| --------- | ------ | -------------------------------------------------------------- |
+| `team_id` | string | Team to watch for new public channels (required)               |
 
 ```json
-{ "channel_created": {} }
+{ "channel_created": { "team_id": "team-id-1" } }
 ```
 
 #### UserJoinedTeamConfig
@@ -479,9 +516,9 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
@@ -503,7 +540,7 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 ### `channel_created`
 
-Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
+Fires when a new public channel (type `"O"`) is created on the specified `team_id`. DMs, group messages, and private channels are excluded. Authorization for this trigger is team-scoped: the creating user must be a team admin on `team_id` (or a system admin), and any literal action channel references must belong to the same team.
 
 ### `user_joined_team`
 
@@ -525,7 +562,7 @@ Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin b
 
 The completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the flow creator (`{{.CreatedBy}}`).
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
