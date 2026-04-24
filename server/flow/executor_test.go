@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
@@ -134,6 +135,10 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	_, err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `action "act1" failed`)
+	var actionErr *ActionError
+	require.True(t, errors.As(err, &actionErr), "expected *ActionError, got %T", err)
+	assert.Equal(t, "act1", actionErr.ActionID)
+	assert.Equal(t, "send_message", actionErr.ActionType)
 	// Second action should never be called.
 	api.AssertNumberOfCalls(t, "CreatePost", 1)
 }

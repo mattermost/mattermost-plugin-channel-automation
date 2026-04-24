@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -147,7 +148,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, maxWorkers)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, maxWorkers)
 	wp.pollInterval = 50 * time.Millisecond // speed up tests
 
 	return wp, store, flowStore
@@ -419,7 +420,7 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -461,7 +462,7 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -503,7 +504,7 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
@@ -549,7 +550,7 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{
@@ -599,7 +600,7 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	executor := flow.NewFlowExecutor(registry)
 	flowStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, flowStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = flowStore.Save(&model.Flow{
@@ -628,6 +629,114 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	f, _ := flowStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
+}
+
+// fakeFailureNotifier records all NotifyFailure calls for assertions.
+type fakeFailureNotifier struct {
+	mu    sync.Mutex
+	calls []notifier.FailureDetails
+}
+
+func (f *fakeFailureNotifier) NotifyFailure(d notifier.FailureDetails) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, d)
+}
+
+func (f *fakeFailureNotifier) snapshot() []notifier.FailureDetails {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]notifier.FailureDetails, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
+func TestWorkerPool_NotifierInvokedOnActionFailure(t *testing.T) {
+	failingAct := &testAction{execFn: func() error { return fmt.Errorf("simulated failure") }}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", mock.Anything).Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true)
+
+	registry := flow.NewRegistry()
+	registry.RegisterAction(failingAct)
+	executor := flow.NewFlowExecutor(registry)
+	flowStore := newTestFlowStore()
+	notifier := &fakeFailureNotifier{}
+
+	wp := NewWorkerPool(store, executor, flowStore, nil, notifier, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = flowStore.Save(&model.Flow{
+		ID: "f1", Name: "My Flow", Enabled: true, CreatedBy: "creator1",
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}},
+	})
+
+	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "My Flow"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	calls := notifier.snapshot()
+	require.Len(t, calls, 1, "expected one failure notification")
+	d := calls[0]
+	assert.Equal(t, "f1", d.FlowID)
+	assert.Equal(t, "My Flow", d.FlowName)
+	assert.Equal(t, "creator1", d.CreatedBy)
+	assert.Equal(t, "a1", d.ActionID)
+	assert.Equal(t, "send_message", d.ActionType)
+	assert.Equal(t, "w1", d.ExecutionID)
+	assert.Equal(t, "simulated failure", d.ErrorMsg)
+}
+
+func TestWorkerPool_NotifierNotInvokedOnSuccess(t *testing.T) {
+	act := &testAction{}
+	notifier := &fakeFailureNotifier{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", mock.Anything).Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true)
+
+	registry := flow.NewRegistry()
+	registry.RegisterAction(act)
+	executor := flow.NewFlowExecutor(registry)
+	flowStore := newTestFlowStore()
+
+	wp := NewWorkerPool(store, executor, flowStore, nil, notifier, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+
+	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	assert.Empty(t, notifier.snapshot(), "expected no failure notifications on success")
 }
 
 func TestWorkerPool_DisabledFlow(t *testing.T) {
