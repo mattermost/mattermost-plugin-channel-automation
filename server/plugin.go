@@ -116,7 +116,8 @@ func (p *Plugin) OnActivate() error {
 		maxWorkers = 4
 	}
 
-	failureNotifier := notifier.NewCreatorNotifier(p.API, p.botUserID)
+	cooldownStore := notifier.NewCooldownStore(p.API, notifier.NotificationCooldown)
+	failureNotifier := notifier.NewCreatorNotifier(p.API, cooldownStore, p.botUserID)
 	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, failureNotifier, p.API, maxWorkers)
 	p.workerPool.Start()
 

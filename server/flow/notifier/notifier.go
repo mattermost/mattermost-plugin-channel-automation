@@ -11,12 +11,9 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
-// notificationCooldown is the minimum interval between failure notifications
-// for the same flow. The KV store entry's TTL enforces this window cluster-wide.
-const notificationCooldown = time.Hour
-
-// kvKeyPrefix namespaces the cooldown keys in the plugin KV store.
-const kvKeyPrefix = "flow_failure_notify_"
+// NotificationCooldown is the minimum interval between failure notifications
+// for the same flow. The CooldownStore TTL enforces this window cluster-wide.
+const NotificationCooldown = time.Hour
 
 // FailureDetails carries the information needed to render a failure DM.
 // This is the single source of truth for failure-notification payloads;
@@ -42,33 +39,45 @@ type FailureNotifier interface {
 }
 
 // CreatorNotifier sends a DM from the plugin's bot user to the flow creator
-// when a flow execution fails, applying a per-flow cooldown via the
-// Mattermost plugin KV store so cluster nodes coordinate naturally.
+// when a flow execution fails, applying a per-flow cooldown via CooldownStore
+// so cluster nodes coordinate naturally.
 type CreatorNotifier struct {
 	api       plugin.API
+	cooldown  CooldownStore
 	botUserID string
 }
 
-// NewCreatorNotifier creates a CreatorNotifier.
-func NewCreatorNotifier(api plugin.API, botUserID string) *CreatorNotifier {
-	return &CreatorNotifier{api: api, botUserID: botUserID}
+// NewCreatorNotifier creates a CreatorNotifier. The cooldown store is
+// responsible for all KV interactions; the notifier itself only handles
+// DM delivery and message formatting.
+func NewCreatorNotifier(api plugin.API, cooldown CooldownStore, botUserID string) *CreatorNotifier {
+	return &CreatorNotifier{api: api, cooldown: cooldown, botUserID: botUserID}
 }
 
 // NotifyFailure DMs the flow creator about a failed execution. If another
-// notification for the same flow has been sent within notificationCooldown
+// notification for the same flow has been sent within the cooldown window
 // (on this node or any other cluster node), this call is a no-op.
 //
 // All errors are logged but not returned: notification failures must never
 // affect the worker's failure-handling path.
 func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
-	if n == nil || n.api == nil {
+	if n == nil || n.api == nil || n.cooldown == nil {
 		return
 	}
 	if d.CreatedBy == "" || n.botUserID == "" {
 		return
 	}
 
-	if !n.claimCooldown(d.FlowID) {
+	claimed, err := n.cooldown.Claim(d.FlowID)
+	if err != nil {
+		// On store error, suppress the notification rather than risk spamming.
+		n.api.LogError("Failed to claim flow failure notification cooldown",
+			"flow_id", d.FlowID,
+			"err", err.Error(),
+		)
+		return
+	}
+	if !claimed {
 		return
 	}
 
@@ -79,7 +88,7 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
 		)
-		n.releaseCooldown(d.FlowID)
+		n.releaseAfterFailure(d.FlowID)
 		return
 	}
 
@@ -94,44 +103,19 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
 		)
-		n.releaseCooldown(d.FlowID)
+		n.releaseAfterFailure(d.FlowID)
 		return
 	}
 }
 
-// claimCooldown attempts to atomically reserve the cooldown slot for flowID.
-// Returns true if this caller "won" and should send the DM, false if another
-// caller (or a recent prior call on any node) already holds the slot.
-//
-// The KV TTL handles expiry, so the slot becomes claimable again automatically
-// after notificationCooldown elapses.
-func (n *CreatorNotifier) claimCooldown(flowID string) bool {
-	key := kvKeyPrefix + flowID
-	ok, appErr := n.api.KVSetWithOptions(key, []byte{1}, mmmodel.PluginKVSetOptions{
-		Atomic:          true,
-		OldValue:        nil,
-		ExpireInSeconds: int64(notificationCooldown / time.Second),
-	})
-	if appErr != nil {
-		// On KV error, suppress the notification rather than risk spamming.
-		n.api.LogError("Failed to claim flow failure notification cooldown",
-			"flow_id", flowID,
-			"err", appErr.Error(),
-		)
-		return false
-	}
-	return ok
-}
-
-// releaseCooldown removes the cooldown entry so another notification attempt
-// can be made. Called when the notification fails after claiming the cooldown.
-func (n *CreatorNotifier) releaseCooldown(flowID string) {
-	key := kvKeyPrefix + flowID
-	appErr := n.api.KVDelete(key)
-	if appErr != nil {
+// releaseAfterFailure releases a previously-claimed cooldown so the next
+// failure for the same flow can attempt a notification again. Errors are
+// logged but never propagated.
+func (n *CreatorNotifier) releaseAfterFailure(flowID string) {
+	if err := n.cooldown.Release(flowID); err != nil {
 		n.api.LogError("Failed to release flow failure notification cooldown",
 			"flow_id", flowID,
-			"err", appErr.Error(),
+			"err", err.Error(),
 		)
 	}
 }
