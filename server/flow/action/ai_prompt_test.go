@@ -421,7 +421,7 @@ func TestBuildTriggerContext(t *testing.T) {
 		meta, userContent := buildTriggerContext(model.TriggerData{}, fixedTime)
 		assert.Contains(t, meta, "<trigger_context>")
 		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
-		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp: %d", fixedTime.Unix()))
+		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp (ms): %d", model.TimeToTimestamp(fixedTime)))
 		assert.Empty(t, userContent)
 	})
 
@@ -430,7 +430,7 @@ func TestBuildTriggerContext(t *testing.T) {
 		nyTime := time.Date(2026, time.April, 22, 10, 30, 45, 0, loc) // 14:30:45 UTC
 		meta, _ := buildTriggerContext(model.TriggerData{}, nyTime)
 		assert.Contains(t, meta, "Current Date: 2026-04-22T14:30:45Z (Wednesday)")
-		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp: %d", nyTime.Unix()))
+		assert.Contains(t, meta, fmt.Sprintf("Current Unix Timestamp (ms): %d", model.TimeToTimestamp(nyTime)))
 	})
 
 	t.Run("post trigger separates metadata from user content", func(t *testing.T) {

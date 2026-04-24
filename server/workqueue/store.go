@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
 
@@ -52,7 +51,7 @@ func (s *Store) Get(id string) (*model.WorkItem, error) {
 // Enqueue saves a work item and appends it to the pending index.
 func (s *Store) Enqueue(item *model.WorkItem) error {
 	item.Status = model.WorkItemStatusPending
-	item.CreatedAt = time.Now().UnixMilli()
+	item.CreatedAt = model.NowTimestamp()
 
 	data, err := json.Marshal(item)
 	if err != nil {
@@ -107,7 +106,7 @@ func (s *Store) ClaimNext() (*model.WorkItem, error) {
 		}
 
 		item.Status = model.WorkItemStatusRunning
-		item.StartedAt = time.Now().UnixMilli()
+		item.StartedAt = model.NowTimestamp()
 
 		data, err := json.Marshal(item)
 		if err != nil {

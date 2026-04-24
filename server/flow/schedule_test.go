@@ -40,7 +40,7 @@ func TestMakeScheduleWaitInterval_StartAtInFuture(t *testing.T) {
 	interval := 10 * time.Minute
 	now := time.Now()
 	startAt := now.Add(5 * time.Minute)
-	fn := makeScheduleWaitInterval(interval, startAt.UnixMilli())
+	fn := makeScheduleWaitInterval(interval, model.TimeToTimestamp(startAt))
 
 	t.Run("first run defers to startAt", func(t *testing.T) {
 		d := fn(now, cluster.JobMetadata{})
@@ -71,7 +71,7 @@ func TestMakeScheduleWaitInterval_StartAtInPast(t *testing.T) {
 	interval := 10 * time.Minute
 	now := time.Now()
 	startAt := now.Add(-2 * time.Minute)
-	fn := makeScheduleWaitInterval(interval, startAt.UnixMilli())
+	fn := makeScheduleWaitInterval(interval, model.TimeToTimestamp(startAt))
 
 	t.Run("first run executes immediately", func(t *testing.T) {
 		d := fn(now, cluster.JobMetadata{})

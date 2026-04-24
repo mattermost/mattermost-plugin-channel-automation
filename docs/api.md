@@ -527,11 +527,11 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 In addition to the configured `system_prompt` and `prompt`, the action automatically
 injects a trusted trigger-context system message that includes the current date as
 an RFC 3339 timestamp (UTC) annotated with the weekday, plus the equivalent Unix
-timestamp (seconds since epoch):
+timestamp in milliseconds (matching the format used for timestamps stored by the plugin):
 
 ```text
 Current Date: 2026-04-22T14:30:45Z (Wednesday)
-Current Unix Timestamp: 1776868245
+Current Unix Timestamp (ms): 1776868245000
 ```
 
 These are sourced from the plugin server clock at execution time (not template-accessible).

@@ -135,7 +135,7 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 
 	utcNow := now.UTC()
 	meta.WriteString("Current Date: " + utcNow.Format(time.RFC3339) + " (" + utcNow.Weekday().String() + ")\n")
-	meta.WriteString(fmt.Sprintf("Current Unix Timestamp: %d\n", utcNow.Unix()))
+	meta.WriteString(fmt.Sprintf("Current Unix Timestamp (ms): %d\n", model.TimeToTimestamp(utcNow)))
 
 	if trigger.Post != nil {
 		p := trigger.Post

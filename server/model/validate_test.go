@@ -28,7 +28,7 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("valid with start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: time.Now().Add(1 * time.Hour).UnixMilli()}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: TimeToTimestamp(time.Now().Add(1 * time.Hour))}}, nil)
 		require.NoError(t, err)
 	})
 
@@ -57,13 +57,13 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("start_at in the past", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}, nil)
+		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-1 * time.Hour))}}, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
 	})
 
 	t.Run("update with unchanged past start_at is valid", func(t *testing.T) {
-		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
+		pastStartAt := TimeToTimestamp(time.Now().Add(-1 * time.Hour))
 		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
 		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
 		err := ValidateTrigger(updated, existing)
@@ -74,8 +74,8 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 		// The webapp truncates to minute precision via datetime-local input;
 		// a round-tripped value may differ by up to 59s but should still be
 		// treated as unchanged.
-		pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
-		truncated := time.UnixMilli(pastStartAt).Truncate(time.Minute).UnixMilli()
+		pastStartAt := TimeToTimestamp(time.Now().Add(-1 * time.Hour))
+		truncated := TimeToTimestamp(TimestampToTime(pastStartAt).Truncate(time.Minute))
 		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
 		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: truncated}}
 		err := ValidateTrigger(updated, existing)
@@ -83,8 +83,8 @@ func TestValidateTrigger_Schedule(t *testing.T) {
 	})
 
 	t.Run("update with new past start_at is rejected", func(t *testing.T) {
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-2 * time.Hour).UnixMilli()}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: time.Now().Add(-1 * time.Hour).UnixMilli()}}
+		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-2 * time.Hour))}}
+		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-1 * time.Hour))}}
 		err := ValidateTrigger(updated, existing)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "start_at")
