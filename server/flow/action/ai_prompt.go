@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
+	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
@@ -96,7 +96,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 
 	if len(cfg.AllowedTools) > 0 {
-		req.AllowedTools = []bridgeclient.AllowedToolRef(cfg.AllowedTools)
+		req.AllowedTools = cfg.AllowedTools
 	}
 	var response string
 	switch cfg.ProviderType {

@@ -9,7 +9,7 @@ import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
 import 'triggers/user_joined_team';
-import type {AIBotInfo, AIToolInfo, Action, AllowedToolRef} from 'types';
+import type {AIBotInfo, AIToolInfo, Action} from 'types';
 import {getTriggerType} from 'types';
 
 interface ActionForm {
@@ -22,7 +22,7 @@ interface ActionForm {
     system_prompt: string;
     prompt: string;
     provider_id: string;
-    allowed_tool_refs: AllowedToolRef[];
+    allowed_tool_refs: string[];
 }
 
 const styles = {
@@ -170,26 +170,28 @@ const styles = {
 const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
-function toolRefKey(r: {server_origin?: string; name: string}): string {
-    return JSON.stringify({server_origin: r.server_origin ?? '', name: r.name});
-}
-
-// Accept (string | AllowedToolRef)[] at runtime for backward compatibility with
-// legacy JSON payloads where allowed_tools was a plain string array.
-function normalizeAllowedToolsFromFlow(raw: unknown): AllowedToolRef[] {
+// Accept string[] or legacy { name }[] from stored flows.
+function normalizeAllowedToolsFromFlow(raw: unknown): string[] {
     if (!raw || !Array.isArray(raw)) {
         return [];
     }
-    const out: AllowedToolRef[] = [];
-    for (const item of raw as Array<string | AllowedToolRef>) {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of raw as Array<string | {name?: string}>) {
         if (typeof item === 'string') {
-            if (item.trim() !== '') {
-                out.push({server_origin: '', name: item.trim()});
+            const n = item.trim();
+            if (n !== '' && !seen.has(n)) {
+                seen.add(n);
+                out.push(n);
             }
             continue;
         }
-        if (item && typeof item === 'object' && typeof item.name === 'string' && item.name !== '') {
-            out.push({server_origin: item.server_origin ?? '', name: item.name});
+        if (item && typeof item === 'object' && typeof item.name === 'string') {
+            const n = item.name.trim();
+            if (n !== '' && !seen.has(n)) {
+                seen.add(n);
+                out.push(n);
+            }
         }
     }
     return out;
@@ -250,24 +252,21 @@ const ToolSelector: React.FC<ToolSelectorProps> = ({action, index, tools, onTogg
     if (tools.length === 0) {
         return <p style={hintStyle}>{'No tools available for this agent.'}</p>;
     }
-    const selected = new Set(action.allowed_tool_refs.map((r) => toolRefKey(r)));
+    const selected = new Set(action.allowed_tool_refs);
     return (
         <div style={styles.toolList}>
             {tools.map((tool) => (
                 <label
-                    key={toolRefKey(tool)}
+                    key={tool.name}
                     style={styles.toolItem}
                 >
                     <input
                         type='checkbox'
-                        checked={selected.has(toolRefKey(tool))}
+                        checked={selected.has(tool.name)}
                         onChange={(e) => onToggle(index, tool, e.target.checked)}
                     />
                     <span>
                         <strong>{tool.name}</strong>
-                        {tool.server_origin ? (
-                            <span style={styles.toolDescription}>{` \u2014 ${tool.server_origin}`}</span>
-                        ) : null}
                         {tool.description ? (
                             <span style={styles.toolDescription}>{` \u2014 ${tool.description}`}</span>
                         ) : null}
@@ -433,11 +432,9 @@ const FlowEditorView: React.FC = () => {
             if (i !== index) {
                 return a;
             }
-            const k = toolRefKey(tool);
-            const ref: AllowedToolRef = {server_origin: tool.server_origin ?? '', name: tool.name};
-            const next = a.allowed_tool_refs.filter((r) => toolRefKey(r) !== k);
+            const next = a.allowed_tool_refs.filter((name) => name !== tool.name);
             if (checked) {
-                return {...a, allowed_tool_refs: [...next, ref]};
+                return {...a, allowed_tool_refs: [...next, tool.name]};
             }
             return {...a, allowed_tool_refs: next};
         }));
