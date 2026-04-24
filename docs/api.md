@@ -413,9 +413,10 @@ Exactly one key should be set, indicating the trigger type:
 
 #### MessagePostedConfig
 
-| Field        | Type   | Description                 |
-| ------------ | ------ | --------------------------- |
-| `channel_id` | string | Channel to watch (required) |
+| Field                     | Type    | Description                                                                                                  |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `channel_id`              | string  | Channel to watch (required)                                                                                  |
+| `include_thread_replies`  | boolean | _(optional)_ When `true`, posts that are thread replies (have a `root_id`) also fire the trigger. Defaults to `false` — thread replies are ignored. |
 
 #### ScheduleConfig
 
@@ -488,7 +489,7 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ### `message_posted`
 
-Fires when a new message is posted in the specified channel.
+Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
 ### `schedule`
 
