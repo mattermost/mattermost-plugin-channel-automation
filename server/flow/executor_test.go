@@ -142,7 +142,7 @@ func TestFlowExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 		ChannelId: "ch1",
 		Message:   "AI said: hello from AI",
 	}, nil)
-	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 	// Mock bridge client for AI action
