@@ -2,6 +2,7 @@ package flow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,6 +11,7 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
@@ -24,11 +26,13 @@ type APIHandler struct {
 	api             plugin.API
 	scheduleManager *ScheduleManager
 	config          model.Configuration
+	bridge          hooks.AgentToolsLister
 }
 
-// NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config}
+// NewAPIHandler creates a new flow API handler. bridge may be nil in tests
+// that do not exercise allowed_tools validation.
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config, bridge: bridge}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -156,7 +160,22 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
+		return
+	}
+
 	if err := permissions.CheckFlowPermissions(h.api, f.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, f.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
@@ -269,6 +288,15 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
+		return
+	}
+
 	userID := r.Header.Get("Mattermost-User-ID")
 	if userID == "" {
 		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
@@ -284,6 +312,12 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	// Check permissions on new flow configuration (must have permission on new channels).
 	if err := permissions.CheckFlowPermissions(h.api, userID, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, userID, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

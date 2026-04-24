@@ -30,6 +30,10 @@ func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.Completi
 	return m.agentResponse, nil
 }
 
+func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeToolInfo, error) {
+	return nil, nil
+}
+
 func TestFlowExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)
@@ -58,8 +62,10 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	ctx, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
+	require.NotNil(t, ctx)
+	assert.Equal(t, "flow1", ctx.FlowID)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
 

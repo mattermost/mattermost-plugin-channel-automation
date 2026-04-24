@@ -9,7 +9,17 @@ import (
 // channelAutomationInstructionsBase documents trigger types, actions, templates, and workflow
 // for create_automation and update_automation (returned by GET /automation-instructions).
 const channelAutomationInstructionsBase = `Channel automations are trigger-action workflows that fire when events occur.
-Requires channel admin (or system admin) permission for the trigger channel. For the channel_created trigger, team admin permission on the trigger's team_id is required instead.
+
+PERMISSION PREFLIGHT — VERIFY BEFORE DOING ANYTHING ELSE:
+The user must have permission to create an automation for the trigger they are asking about, otherwise create_automation will fail. Verify up-front so you don't waste the user's time gathering details for an automation they cannot create. The user is permitted when ANY of the following is true:
+- They are a system administrator. The agent context surfaces this as "System role: System Administrator" — if you see that line, permission is granted; skip the rest of this preflight.
+- The trigger fires in a direct message (DM) or group message (GM) channel. DMs/GMs have no admins, so any participant may create an automation for that channel.
+- They are a channel admin of the trigger channel (for message_posted, schedule, membership_changed triggers).
+- They are a team admin of the trigger team (for the channel_created and user_joined_team triggers, which are scoped by team_id rather than channel_id).
+
+How to check the channel role: call get_channel_info with the trigger channel_id. The response includes the requesting user's role in that channel as one of "admin", "member", "guest", or "not_member". Only "admin" satisfies the channel-admin requirement. Channel type "D" (DM) or "G" (GM) on the returned channel also satisfies the requirement regardless of role. For team-scoped triggers (channel_created, user_joined_team) you cannot verify team admin from get_channel_info; tell the user that team admin permission on the target team is required and proceed only if they confirm they have it (or are a system admin).
+
+If the user does NOT have permission, stop and explain which role they need (system admin, channel admin of <channel>, team admin of <team>, or that the trigger must be in a DM/GM).
 
 AGENT DISCOVERY: For an ai_prompt action with provider_type "agent", use the list_agents tool to discover bots.
 Each agent's ID is a 26-character Mattermost user ID — use that value as provider_id in the ai_prompt config.
@@ -18,20 +28,83 @@ IMPORTANT WORKFLOW — ALWAYS CONFIRM BEFORE CREATING:
 Before calling create_automation (or update_automation), you MUST present a plain-language summary to the user and get their
 explicit confirmation. Even if the user provided all details, always present the full summary.
 
-The summary must include:
+The summary MUST use exactly four numbered items in this order (do not merge or skip any;
+users rely on this structure to understand risk before they confirm):
 1. TRIGGER: What event fires this automation and its scope.
 2. AI TOOLS: Which tools the AI agent will have access to and what each one can do.
    - Without tools, the agent can only generate text from its built-in knowledge — it cannot
      read any Mattermost data or take any actions.
    - With tools, the agent inherits YOUR permissions — it can access anything you can access.
-   Explain what each granted tool does so the user understands the access they are giving.
-3. OUTPUT: Where the automation will post results — name the specific channel(s).
+     Explain what each granted tool does so the user understands the access they are giving.
+3. GUARDRAILS: Dedicated step — do not fold this into item 2. Reference the "MATTERMOST MCP CHANNEL
+   GUARDRAILS" list below. For each ai_prompt step that uses allowed_tools AND includes at least
+   one guardrail-constrained Mattermost tool name (channel- or team-scoped), state the exact
+   guardrails.channel_ids you will set (list each 26-char channel ID or say you will use the
+   trigger channel / template such as {{.Trigger.Channel.Id}}). If no ai_prompt step uses
+   allowed_tools, write "Not applicable — no MCP tools in this automation." If allowed_tools uses
+   only external MCP tools and/or unconstrained Mattermost tools (none of the constrained names
+   below), write "Not applicable — no guardrail-constrained Mattermost MCP tools in this
+   automation." If guardrail-constrained Mattermost tools are used where outcomes may be visible
+   to others (public or private channel with members) and the user chose no guardrails, state
+   that explicitly and require them to acknowledge cross-channel leakage risk. Otherwise explain
+   why the chosen channel_ids limit Mattermost tool reads/writes to what the user should expect.
+4. OUTPUT: Where the automation will post results — name the specific channel(s).
 
-Format as a numbered list, then ask the user to confirm. Only call create_automation after
+Format as that four-part numbered list (1–4), then ask the user to confirm. Only call create_automation after
 the user says yes.
 
 If the user's request is missing details (trigger channel, output channel, which tools),
 ask clarifying questions BEFORE presenting the summary.
+
+MATTERMOST MCP CHANNEL GUARDRAILS — WHICH TOOL NAMES ARE CONSTRAINED:
+Channel guardrails (guardrails.channel_ids on an ai_prompt) constrain a fixed set of built-in
+Mattermost MCP tools. The exact tool names below are matched against tool discovery output;
+any other tool name (including external MCP tools) passes through unchanged when guardrails are set.
+
+Channel-scoped — restricted to guardrails.channel_ids. Tools differ in how they're
+constrained:
+
+Tools that REQUIRE a channel_id argument matching guardrails.channel_ids:
+- search_posts
+- read_channel
+- get_channel_members
+- add_user_to_channel
+
+Tools that accept channel_id (or resolve a channel via channel_name + team_id) and
+must resolve to one of guardrails.channel_ids:
+- get_channel_info
+
+Tools that take no channel_id argument; their returned posts/channels are filtered
+to guardrails.channel_ids:
+- read_post (the resolved post's channel must be in the allow-list)
+- get_user_channels (returned channels are filtered)
+
+Team-scoped — the tool's team_id argument must be the team that owns one of the allowed
+channels (channel→team is resolved automatically from guardrails.channel_ids), or the
+trigger team for channel_created/user_joined_team automations:
+- get_team_info
+- get_team_members
+- create_channel (the new channel must be created in an allowed team)
+
+Other built-in Mattermost MCP tools (search_users, list_agents) may be used in allowed_tools
+but are NOT constrained by channel guardrails — they execute with the automation owner's full
+permissions regardless of guardrails.channel_ids. Mention this explicitly in summary item 2
+when granting them.
+
+Mutating tools that act on the user's behalf (create_post, dm, group_message) are rejected
+from allowed_tools entirely — guardrails do not unlock them. Use a send_message or send_dm
+action instead of granting these tools.
+
+External MCP tools (anything not in the lists above) are unaffected by channel guardrails and
+pass through unchanged. You may freely mix external tools with Mattermost tools in a single
+ai_prompt step's allowed_tools — there is no need to split into multiple ai_prompt steps just
+to combine them. Hook URLs are only registered for the constrained Mattermost tool names above,
+so unknown names do not cause runtime failures.
+
+If every tool in allowed_tools across all ai_prompt steps is external-only or in the
+unconstrained Mattermost set (none of the constrained names above), omit guardrails — use
+summary item 3 to say "Not applicable — no guardrail-constrained Mattermost MCP tools in
+this automation."
 
 ACTION SELECTION: For each step in the automation, choose the right action type:
 - send_message / send_dm: for posting text to channels or users.
@@ -64,11 +137,20 @@ Action types:
    {"id": "post", "send_message": {"channel_id": "<ch>", "body": "Hello!", "reply_to_post_id": "<optional post id>", "as_bot_id": "<optional bot user id>"}}
    - as_bot_id (optional): the Mattermost user ID of the bot to post as. Must be a bot account. If omitted, the message is posted as the default automation bot. Use list_agents to find bot IDs. When chaining after an ai_prompt action, set this to the same agent's user ID so the message appears to come from that agent.
 2. "ai_prompt": Runs an AI agent with a prompt and optional tools. With tools, the agent can perform actions (e.g. modify channels, manage members, search) — not just generate text. Does NOT post a message — chain a send_message or send_dm action after to post the response.
-   {"id": "ask", "ai_prompt": {"prompt": "...", "provider_type": "agent", "provider_id": "<agent-user-id>", "system_prompt": "...", "allowed_tools": ["<tool name from discovery>", "..."]}}
+   {"id": "ask", "ai_prompt": {"prompt": "...", "provider_type": "agent", "provider_id": "<agent-user-id>", "system_prompt": "...", "allowed_tools": ["<tool name from discovery>", "..."], "guardrails": {"channel_ids": ["<26-char channel id>", "..."]}}}
    - provider_type: "agent" (a bot) or "service" (a raw LLM service)
    - provider_id: the agent's Mattermost user ID (26-char ID). Call list_agents to discover available agents and their IDs.
    - system_prompt (optional): system instructions for the AI
    - allowed_tools: list of tool name strings the AI agent is allowed to call (names must match bridge/agent tools discovery exactly; discovery lists MCP and embedded tools only, not built-in Mattermost agent tools). WITHOUT this, the agent has NO tool access and can only generate text from its built-in knowledge — it cannot read any Mattermost data or take any actions. With tools, the agent inherits the creating user's permissions and can access anything they can access. IMPORTANT: Only include tools the user has explicitly agreed to. Always explain what each tool does in your summary. Prefer the minimum set of tools needed.
+   - guardrails (optional): {"channel_ids": ["<26-char channel id>", "..."]}. When channel_ids is
+     non-empty AND allowed_tools is set, hooks constrain the built-in Mattermost MCP tools listed
+     in the "MATTERMOST MCP CHANNEL GUARDRAILS" section below (channel-scoped tools like
+     search_posts/read_channel/get_channel_info/etc., plus the team-scoped get_team_info and
+     get_team_members which derive their allowed teams from the channels' teams). Omit guardrails
+     when allowed_tools for that step contains no constrained Mattermost names. External tools and
+     unconstrained Mattermost tools (search_users, list_agents) may be mixed in
+     the same step alongside constrained tools — they pass through unchanged. Prefer the trigger
+     channel ID or a small explicit channel_ids set the user agrees to when guardrails apply.
    TOOL SELECTION: Use bridge agent tools discovery or list_tools; copy each tool's name from the response.
    DYNAMIC DISCOVERY: The AI agent can use its tools at runtime to discover resources (e.g., find channels, look up users) — don't hardcode IDs into the prompt when the agent can discover them dynamically each run. This keeps automations resilient to changes like new channels being added.
    NOTE: "web_search" is NOT a valid tool name in allowed_tools. Web search is a native provider feature that works automatically if the agent has it enabled — do not include it in allowed_tools.

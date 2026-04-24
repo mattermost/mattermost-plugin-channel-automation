@@ -21,6 +21,7 @@ func NewFlowExecutor(registry *Registry) *FlowExecutor {
 // failure or if an action type is unknown.
 func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) (*model.FlowContext, error) {
 	ctx := &model.FlowContext{
+		FlowID:    f.ID,
 		CreatedBy: f.CreatedBy,
 		Trigger:   triggerData,
 		Steps:     make(map[string]model.StepOutput),

@@ -54,6 +54,19 @@ type Trigger struct {
 	UserJoinedTeam    *UserJoinedTeamConfig    `json:"user_joined_team,omitempty"`
 }
 
+// GuardrailsForAction returns the guardrails configured on the AI prompt
+// action with the given ID, or nil if the action does not exist, is not an
+// AI prompt action, or has no guardrails configured.
+func (f *Flow) GuardrailsForAction(actionID string) *Guardrails {
+	for i := range f.Actions {
+		a := &f.Actions[i]
+		if a.ID == actionID && a.AIPrompt != nil && a.AIPrompt.Guardrails != nil {
+			return a.AIPrompt.Guardrails
+		}
+	}
+	return nil
+}
+
 // TriggerChannelID returns the channel ID from the flow's trigger config,
 // regardless of trigger type. Returns empty string if no trigger is set.
 func (f *Flow) TriggerChannelID() string {
@@ -99,11 +112,12 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt string      `json:"system_prompt,omitempty"`
+	Prompt       string      `json:"prompt"`
+	ProviderType string      `json:"provider_type"`
+	ProviderID   string      `json:"provider_id"`
+	AllowedTools []string    `json:"allowed_tools,omitempty"`
+	Guardrails   *Guardrails `json:"guardrails,omitempty"`
 }
 
 // Action defines a single step in a flow. Exactly one config pointer should be set.

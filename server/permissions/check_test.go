@@ -178,6 +178,138 @@ func TestCheckFlowPermissions_ChannelCreated_GetChannelNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found or not accessible")
 }
 
+func TestCheckGuardrailChannelPermissions_SystemAdminPassesPerChannelCheck(t *testing.T) {
+	// Sysadmins are not short-circuited; they are expected to satisfy
+	// PermissionReadChannel on every guardrail channel via the normal check.
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1"}, nil)
+	api.On("HasPermissionToChannel", "admin1", "ch1", mmmodel.PermissionReadChannel).Return(true)
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch1"}}},
+			}},
+		},
+	}
+	require.NoError(t, CheckGuardrailChannelPermissions(api, "admin1", f))
+}
+
+func TestCheckGuardrailChannelPermissions_NoAIPromptOrGuardrails(t *testing.T) {
+	api := &plugintest.API{}
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}},
+			{ID: "a2", AIPrompt: &model.AIPromptActionConfig{Prompt: "p", ProviderType: "agent", ProviderID: "bot"}},
+		},
+	}
+	require.NoError(t, CheckGuardrailChannelPermissions(api, "user1", f))
+}
+
+func TestCheckGuardrailChannelPermissions_AllAccessible(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1"}, nil)
+	api.On("GetChannel", "ch2").Return(&mmmodel.Channel{Id: "ch2"}, nil)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionReadChannel).Return(true)
+	api.On("HasPermissionToChannel", "user1", "ch2", mmmodel.PermissionReadChannel).Return(true)
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{
+					{ChannelID: "ch1"}, {ChannelID: "ch2"},
+				}},
+			}},
+		},
+	}
+	require.NoError(t, CheckGuardrailChannelPermissions(api, "user1", f))
+}
+
+func TestCheckGuardrailChannelPermissions_MissingReadPermissionDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch-secret").Return(&mmmodel.Channel{Id: "ch-secret"}, nil)
+	api.On("HasPermissionToChannel", "user1", "ch-secret", mmmodel.PermissionReadChannel).Return(false)
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch-secret"}}},
+			}},
+		},
+	}
+	err := CheckGuardrailChannelPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "do not have permission to read")
+}
+
+func TestCheckGuardrailChannelPermissions_GetChannelServerError(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch1").Return(nil, &mmmodel.AppError{
+		Message:    "database error",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch1"}}},
+			}},
+		},
+	}
+	err := CheckGuardrailChannelPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify guardrail channel")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+}
+
+func TestCheckGuardrailChannelPermissions_GetChannelNotFoundDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch-gone").Return(nil, &mmmodel.AppError{
+		Message:    "channel not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch-gone"}}},
+			}},
+		},
+	}
+	err := CheckGuardrailChannelPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "do not have permission to read")
+}
+
+func TestCheckGuardrailChannelPermissions_DuplicateChannelsDeduped(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1"}, nil).Once()
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionReadChannel).Return(true).Once()
+
+	f := &model.Flow{
+		Actions: []model.Action{
+			{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch1"}}},
+			}},
+			{ID: "a2", AIPrompt: &model.AIPromptActionConfig{
+				Prompt: "p2", ProviderType: "agent", ProviderID: "bot",
+				Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{ChannelID: "ch1"}}},
+			}},
+		},
+	}
+	require.NoError(t, CheckGuardrailChannelPermissions(api, "user1", f))
+	api.AssertExpectations(t)
+}
+
 func TestCheckFlowPermissions_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
