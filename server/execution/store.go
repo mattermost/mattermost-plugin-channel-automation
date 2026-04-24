@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/mattermost/mattermost/server/public/plugin"
 
@@ -282,8 +281,3 @@ func truncateSteps(record *model.ExecutionRecord) {
 
 // Ensure Store implements model.ExecutionStore at compile time.
 var _ model.ExecutionStore = (*Store)(nil)
-
-// NowMillis returns the current time in milliseconds. Exposed for testing.
-var NowMillis = func() int64 {
-	return time.Now().UnixMilli()
-}
