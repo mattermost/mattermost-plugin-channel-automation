@@ -264,7 +264,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
-	r.Header.Set("Mattermost-User-ID", "other-user")
+	r.Header.Set("Mattermost-User-ID", "original-user")
 
 	router.ServeHTTP(w, r)
 
@@ -367,8 +367,9 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -392,8 +393,9 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 
 	pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},
+		ID:        "f1",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},
 	}))
 
 	body := fmt.Sprintf(`{
@@ -414,7 +416,7 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 func TestAPI_DeleteFlow(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Flow{ID: "f1", CreatedBy: "user1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)
@@ -496,6 +498,9 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -521,6 +526,9 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
 
 	router, _ := setupAPIWithCustomMock(t, api)
@@ -579,13 +587,17 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
+	api.On("GetChannel", "ch-new").Return(
+		&mmmodel.Channel{Id: "ch-new", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -602,6 +614,37 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
+}
+
+func TestAPI_UpdateFlow_NonCreatorRejected(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user2", mmmodel.PermissionManageSystem).Return(false)
+
+	router, store := setupAPIWithCustomMock(t, api)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user2")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "automation creator or a system admin")
+	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
 func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
@@ -634,13 +677,17 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+	// The flow's creator is also a sysadmin so the creator-anchored config
+	// validity check skips channel admin lookups too.
+	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "creator1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -940,9 +987,10 @@ func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 
 	// ch1 has one flow — at the limit.
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	// Updating the same flow on the same channel should succeed (self-exclusion).
@@ -966,12 +1014,14 @@ func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
 
 	// ch1 has a flow, ch2 has a flow.
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f2",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+		ID:        "f2",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
 	}))
 
 	// Moving f1 to ch2 should be blocked (ch2 already at limit).
@@ -1089,9 +1139,10 @@ func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -1114,9 +1165,10 @@ func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	longName := strings.Repeat("a", 101)

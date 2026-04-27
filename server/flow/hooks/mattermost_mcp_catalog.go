@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"encoding/json"
 	"maps"
 )
 
@@ -13,9 +12,6 @@ const EmbeddedMattermostMCPOrigin = "embedded://mattermost"
 // BeforeFunc validates tool arguments before the resolver runs.
 type BeforeFunc func(ctx HookCtx, args map[string]any) error
 
-// AfterFunc filters or validates the tool output JSON after the resolver runs.
-type AfterFunc func(ctx HookCtx, output json.RawMessage) (json.RawMessage, error)
-
 // MattermostMCPTool describes a known tool exposed by the Mattermost embedded
 // MCP server.
 //
@@ -25,16 +21,13 @@ type AfterFunc func(ctx HookCtx, output json.RawMessage) (json.RawMessage, error
 // this catalog stays the single source of truth for what's known and what's
 // permitted.
 //
-// Before/After are optional per-direction guardrail hooks. The ai_prompt
-// action only registers the callback URL with the bridge for directions
-// where a hook is set, so a tool with only Before (or only After) declared
-// here is fine: the bridge simply doesn't invoke the missing direction.
-// The HTTP handler still fails closed if it's called for a direction that
-// has no implementation, as defense in depth.
+// Before is an optional pre-call guardrail hook. The ai_prompt action only
+// registers a callback URL with the bridge for tools that have a Before
+// implementation. The HTTP handler still fails closed if it's called for a
+// tool without a Before implementation, as defense in depth.
 type MattermostMCPTool struct {
 	Allowed bool
 	Before  BeforeFunc
-	After   AfterFunc
 }
 
 // mattermostMCPServerTools is the exhaustive set of tools registered by the
@@ -64,29 +57,29 @@ type MattermostMCPTool struct {
 //	create_automation, update_automation, delete_automation
 //
 // Keep this map in sync when the agents plugin adds or removes MCP tools.
-// Unit tests assert Before/After handlers are registered only for tools that
+// Unit tests assert Before handlers are registered only for tools that
 // also appear here with Allowed=true.
 var mattermostMCPServerTools = map[string]MattermostMCPTool{
 	// Posts (mcpserver/tools/posts.go — getPostTools)
-	"read_post":     {Allowed: true, After: afterReadPost},
+	"read_post":     {Allowed: true, Before: beforeReadPost},
 	"create_post":   {Allowed: false},
 	"dm":            {Allowed: false},
 	"group_message": {Allowed: false},
 
 	// Channels (mcpserver/tools/channels.go — getChannelTools)
-	"read_channel":        {Allowed: true, Before: beforeReadChannel, After: afterReadChannel},
+	"read_channel":        {Allowed: true, Before: beforeReadChannel},
 	"create_channel":      {Allowed: true, Before: beforeCreateChannel},
-	"get_channel_info":    {Allowed: true, Before: beforeGetChannelInfo, After: afterGetChannelInfo},
-	"get_channel_members": {Allowed: true, Before: beforeGetChannelMembers, After: afterGetChannelMembers},
+	"get_channel_info":    {Allowed: true, Before: beforeGetChannelInfo},
+	"get_channel_members": {Allowed: true, Before: beforeGetChannelMembers},
 	"add_user_to_channel": {Allowed: true, Before: beforeAddUserToChannel},
-	"get_user_channels":   {Allowed: true, Before: beforeGetUserChannels, After: afterGetUserChannels},
+	"get_user_channels":   {Allowed: true, Before: beforeGetUserChannels},
 
 	// Teams (mcpserver/tools/teams.go — getTeamTools)
-	"get_team_info":    {Allowed: true, Before: beforeGetTeamInfo, After: afterGetTeamInfo},
-	"get_team_members": {Allowed: true, Before: beforeGetTeamMembers, After: afterGetTeamMembers},
+	"get_team_info":    {Allowed: true, Before: beforeGetTeamInfo},
+	"get_team_members": {Allowed: true, Before: beforeGetTeamMembers},
 
 	// Search (mcpserver/tools/search.go — getSearchTools)
-	"search_posts": {Allowed: true, Before: beforeSearchPosts, After: afterSearchPosts},
+	"search_posts": {Allowed: true, Before: beforeSearchPosts},
 	"search_users": {Allowed: true},
 
 	// Agents (mcpserver/tools/agents.go — getAgentTools)

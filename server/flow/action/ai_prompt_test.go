@@ -281,9 +281,9 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	bc := &mockBridgeClient{
 		agentResponse: "ok",
 		agentTools: []bridgeclient.BridgeToolInfo{
-			mmTool("search_posts"),        // Before + After
-			mmTool("add_user_to_channel"), // Before only
-			{Name: "external_search"},     // non-MM tool, no hooks
+			mmTool("search_posts"),
+			mmTool("add_user_to_channel"),
+			{Name: "external_search"}, // non-MM tool, no hooks
 		},
 	}
 	a := NewAIPromptAction(api, bc)
@@ -317,11 +317,11 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 
 	sp := bc.lastReq.ToolHooks["search_posts"]
 	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", sp.BeforeCallback)
-	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/after", sp.AfterCallback)
+	assert.Empty(t, sp.AfterCallback)
 
 	auc := bc.lastReq.ToolHooks["add_user_to_channel"]
 	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", auc.BeforeCallback)
-	assert.Empty(t, auc.AfterCallback, "add_user_to_channel has no After hook in the catalog")
+	assert.Empty(t, auc.AfterCallback)
 
 	_, hasExternal := bc.lastReq.ToolHooks["external_search"]
 	assert.False(t, hasExternal, "non-Mattermost MCP tools must not get hook callbacks")

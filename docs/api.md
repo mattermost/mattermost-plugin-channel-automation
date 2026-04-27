@@ -17,7 +17,7 @@ The list endpoint filters results to only flows the user has permission to view 
 
 ### MCP tool hook endpoints
 
-The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{flow_id}/{action_id}/before` and `POST /hooks/tools/{flow_id}/{action_id}/after`. These endpoints are invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the flow's `created_by` and returns `403 Forbidden` on mismatch (or when the flow has no recorded creator). System admin status does not bypass this check.
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{flow_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the flow's `created_by` and returns `403 Forbidden` on mismatch (or when the flow has no recorded creator). System admin status does not bypass this check.
 
 ## Endpoints
 
@@ -127,7 +127,7 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`.
+For `ai_prompt` actions with `allowed_tools`, every entry must be a tool the action's agent actually exposes. Embedded Mattermost MCP tools are additionally validated against an explicit catalog: any embedded tool not in the catalog is rejected, and catalog entries marked not permitted (currently `create_post`, `dm`, `group_message`, and the automation-management tools `list_automations` / `get_automation_instructions` / `create_automation` / `update_automation` / `delete_automation`) are rejected. External (non-embedded) MCP tools are not subject to the catalog check.
 
 When `guardrails` is set on an `ai_prompt` action, `allowed_tools` must be non-empty, and each `guardrails.channel_ids` entry must be a distinct 26-character Mattermost ID.
 
@@ -526,7 +526,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
@@ -535,17 +535,15 @@ Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 | Field          | Type     | Description                                                                                                                                 |
 | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `channel_ids`  | string[] | Mattermost channel IDs (26 characters each). When non-empty (and `allowed_tools` is set), the automation registers per-tool before/after hooks so only these channels are exposed to the agent via supported tools. Duplicate or empty entries are rejected. |
+| `channel_ids`  | string[] | Mattermost channel IDs (26 characters each). When non-empty (and `allowed_tools` is set), the automation registers per-tool before hooks so only these channels are exposed to the agent via supported tools. Duplicate or empty entries are rejected. |
 
-Hook handlers maintain an explicit catalog of **production** Mattermost built-in MCP tool names from the agents plugin (dev-only tools such as `create_user` / `create_post_as_user` / `create_team` / `add_user_to_team` are excluded). The bridge is told about a tool's `before` or `after` callback only when the catalog declares that direction, so a tool may carry just a `before` hook (for example, `add_user_to_channel`) and the `after` callback is simply not registered. Tools not in the catalog get no callbacks at all and ride the agent's normal allowed_tools path. As defense in depth, the hook HTTP handler still rejects any callback that arrives for a direction the catalog does not implement.
+Hook handlers maintain an explicit catalog of **production** Mattermost built-in MCP tool names from the agents plugin (dev-only tools such as `create_user` / `create_post_as_user` / `create_team` / `add_user_to_team` are excluded). The bridge is told about a tool's `before` callback only when the catalog declares one. Tools not in the catalog get no callbacks at all and ride the agent's normal allowed_tools path. As defense in depth, the hook HTTP handler still rejects any callback that arrives for a tool that is not in the catalog.
 
-`allowed_tools` is also re-validated at execution time (not just on flow create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save.
+`allowed_tools` is also re-validated at execution time (not just on flow create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save. The validator additionally rejects `get_user_channels` whenever guardrails are configured for the same `ai_prompt` action.
 
 When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
 
-For `get_team_info` and `get_team_members`, guardrails restrict `team_id` to the **allowed-team set**: the union of (a) the automation’s trigger team (the `channel_created` trigger’s `team_id`, or the team of the trigger channel for other trigger types) and (b) the team of every channel listed in `channel_ids`. This means a guardrail set may span multiple teams and team tools work for all of them. Direct- and group-message channels in `channel_ids` contribute nothing to the allowed-team set (they have no team) but still work for channel-scoped tools. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup).
-
-Channel-tool outputs are also pruned to never reference a removed channel: `get_user_channels` strips `team_info_by_id` entries that no surviving channel belongs to, `get_channel_info` strips `team_by_id` / `member_count_by_channel_id` / `channel_role_by_id` entries the same way, and `read_post` rejects responses whose `posts` span more than one channel.
+For `get_team_info` and `get_team_members`, guardrails restrict `team_id` to the **allowed-team set**: the union of (a) the automation's trigger team (the `channel_created` or `user_joined_team` trigger's `team_id`, or the team of the trigger channel for channel-scoped trigger types) and (b) the team of every channel listed in `channel_ids`. This means a guardrail set may span multiple teams and team tools work for all of them. Direct- and group-message channels in `channel_ids` contribute nothing to the allowed-team set (they have no team) but still work for channel-scoped tools. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup). For `get_channel_info`, only an explicit `channel_id` is allowed under guardrails (the `channel_name` + `team_id` resolution path is rejected).
 
 Channel → team lookups for the allowed-team set are memoized per-channel inside the hook handler (channel → team is immutable in Mattermost), so each unique guardrail channel triggers at most one `GetChannel` call per plugin run.
 

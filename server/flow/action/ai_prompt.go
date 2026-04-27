@@ -110,20 +110,12 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
 		for _, t := range cfg.AllowedTools {
 			entry, ok := hooks.LookupMattermostMCPTool(t)
-			if !ok {
+			if !ok || entry.Before == nil {
 				continue
 			}
-			hookCfg := bridgeclient.ToolHookConfig{}
-			if entry.Before != nil {
-				hookCfg.BeforeCallback = hooks.HookURL(ctx.FlowID, action.ID, "before")
+			toolHooks[t] = bridgeclient.ToolHookConfig{
+				BeforeCallback: hooks.HookURL(ctx.FlowID, action.ID),
 			}
-			if entry.After != nil {
-				hookCfg.AfterCallback = hooks.HookURL(ctx.FlowID, action.ID, "after")
-			}
-			if hookCfg.BeforeCallback == "" && hookCfg.AfterCallback == "" {
-				continue
-			}
-			toolHooks[t] = hookCfg
 		}
 		if len(toolHooks) > 0 {
 			req.ToolHooks = toolHooks

@@ -13,8 +13,8 @@ const channelAutomationInstructionsBase = `Channel automations are trigger-actio
 PERMISSION PREFLIGHT — VERIFY BEFORE DOING ANYTHING ELSE:
 The user must have permission to create an automation for the trigger they are asking about, otherwise create_automation will fail. Verify up-front so you don't waste the user's time gathering details for an automation they cannot create. The user is permitted when ANY of the following is true:
 - They are a system administrator. The agent context surfaces this as "System role: System Administrator" — if you see that line, permission is granted; skip the rest of this preflight.
-- The trigger fires in a direct message (DM) or group message (GM) channel. DMs/GMs have no admins, so any participant may create an automation for that channel.
-- They are a channel admin of the trigger channel (for message_posted, schedule, membership_changed triggers).
+- The trigger fires in a direct message (DM) or group message (GM) channel and the user is a participant. DMs/GMs have no channel-admin role, so any participant may create an automation for that channel.
+- They are a channel admin of the trigger channel (for message_posted, schedule, membership_changed triggers in regular public/private channels).
 - They are a team admin of the trigger team (for the channel_created and user_joined_team triggers, which are scoped by team_id rather than channel_id).
 
 How to check the channel role: call get_channel_info with the trigger channel_id. The response includes the requesting user's role in that channel as one of "admin", "member", "guest", or "not_member". Only "admin" satisfies the channel-admin requirement. Channel type "D" (DM) or "G" (GM) on the returned channel also satisfies the requirement regardless of role. For team-scoped triggers (channel_created, user_joined_team) you cannot verify team admin from get_channel_info; tell the user that team admin permission on the target team is required and proceed only if they confirm they have it (or are a system admin).
@@ -69,15 +69,14 @@ Tools that REQUIRE a channel_id argument matching guardrails.channel_ids:
 - read_channel
 - get_channel_members
 - add_user_to_channel
-
-Tools that accept channel_id (or resolve a channel via channel_name + team_id) and
-must resolve to one of guardrails.channel_ids:
 - get_channel_info
 
-Tools that take no channel_id argument; their returned posts/channels are filtered
-to guardrails.channel_ids:
-- read_post (the resolved post's channel must be in the allow-list)
-- get_user_channels (returned channels are filtered)
+Tools that take a post_id; the post's resolved channel_id must be in guardrails.channel_ids:
+- read_post
+
+Tools that are NOT permitted when channel guardrails are configured (the
+automation save/run will reject them):
+- get_user_channels
 
 Team-scoped — the tool's team_id argument must be the team that owns one of the allowed
 channels (channel→team is resolved automatically from guardrails.channel_ids), or the
@@ -91,9 +90,11 @@ but are NOT constrained by channel guardrails — they execute with the automati
 permissions regardless of guardrails.channel_ids. Mention this explicitly in summary item 2
 when granting them.
 
-Mutating tools that act on the user's behalf (create_post, dm, group_message) are rejected
-from allowed_tools entirely — guardrails do not unlock them. Use a send_message or send_dm
-action instead of granting these tools.
+Mutating tools that act on the user's behalf (create_post, dm, group_message) and the
+automation-management tools (list_automations, get_automation_instructions, create_automation,
+update_automation, delete_automation) are rejected from allowed_tools entirely — guardrails
+do not unlock them. Use a send_message or send_dm action instead of granting the posting
+tools; never include the automation-management tools.
 
 External MCP tools (anything not in the lists above) are unaffected by channel guardrails and
 pass through unchanged. You may freely mix external tools with Mattermost tools in a single
