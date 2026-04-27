@@ -543,6 +543,7 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	api.On("HasPermissionTo", "demoted-user", mock.Anything).Return(false)
 	// User is no longer a channel admin.
 	api.On("GetChannelMember", "ch1", "demoted-user").Return(&mmmodel.ChannelMember{SchemeAdmin: false}, nil)
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil)
 
 	registry := flow.NewRegistry()
 	registry.RegisterAction(act)

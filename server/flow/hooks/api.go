@@ -153,9 +153,10 @@ func (h *APIHandler) loadGuardrailFlow(flowID, actionID string) (*model.Flow, *m
 	return f, gr, true
 }
 
-// flowAnchorTeamID returns the Mattermost team ID the flow is anchored to: the
-// channel_created trigger's team_id, or the team of the trigger channel. It is
-// best-effort: benign "no anchor team" cases (no trigger channel, channel_created
+// flowAnchorTeamID returns the Mattermost team ID the flow is anchored to:
+// the team_id of a channel_created or user_joined_team trigger, or the team
+// of the trigger channel for channel-scoped triggers. It is best-effort:
+// benign "no anchor team" cases (no trigger channel, channel_created/user_joined_team
 // without team_id, DM/GM trigger channel) return ("", nil). Only unexpected
 // failures (nil flow, GetChannel error) are returned as errors so callers can
 // log them.
@@ -165,6 +166,9 @@ func flowAnchorTeamID(api plugin.API, f *model.Flow) (string, error) {
 	}
 	if f.Trigger.ChannelCreated != nil {
 		return f.Trigger.ChannelCreated.TeamID, nil
+	}
+	if f.Trigger.UserJoinedTeam != nil {
+		return f.Trigger.UserJoinedTeam.TeamID, nil
 	}
 	chID := f.TriggerChannelID()
 	if chID == "" {

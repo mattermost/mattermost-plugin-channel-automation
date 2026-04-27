@@ -392,6 +392,59 @@ func TestCheckFlowPermissions_UserJoinedTeam_NoTeamIDs_RequiresSysAdmin(t *testi
 	assert.Contains(t, err.Error(), "system admin")
 }
 
+func TestCheckFlowPermissions_DMParticipantAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "dm1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "dm1").Return(
+		&mmmodel.Channel{Id: "dm1", Type: mmmodel.ChannelTypeDirect}, nil,
+	)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "dm1"}},
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "dm1", Body: "hi"}},
+		},
+	}
+	require.NoError(t, CheckFlowPermissions(api, "user1", f))
+}
+
+func TestCheckFlowPermissions_GMParticipantAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "gm1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "gm1").Return(
+		&mmmodel.Channel{Id: "gm1", Type: mmmodel.ChannelTypeGroup}, nil,
+	)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "gm1"}},
+	}
+	require.NoError(t, CheckFlowPermissions(api, "user1", f))
+}
+
+func TestCheckFlowPermissions_RegularChannelNonAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	err := CheckFlowPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "channel admin permissions")
+}
+
 func TestCanEditFlow_CreatorAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(false)

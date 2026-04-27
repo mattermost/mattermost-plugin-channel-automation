@@ -86,7 +86,21 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 			}
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
-		if !member.SchemeAdmin {
+		if member.SchemeAdmin {
+			continue
+		}
+		// DM and GM channels have no channel-admin role: any participant may
+		// create an automation on a channel they belong to. The participant
+		// could already read or post to it manually, so this grants no new
+		// access.
+		ch, chErr := api.GetChannel(chID)
+		if chErr != nil {
+			if chErr.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("failed to verify channel permissions: %w", chErr)
+			}
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
+		}
+		if ch == nil || (ch.Type != mmmodel.ChannelTypeDirect && ch.Type != mmmodel.ChannelTypeGroup) {
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
 		}
 	}

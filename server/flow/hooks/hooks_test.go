@@ -561,6 +561,45 @@ func flowChannelCreatedTeam(teamID string) *model.Flow {
 	}
 }
 
+// flowUserJoinedTeam returns a guardrail flow whose trigger is user_joined_team
+// on teamID. Used to verify the anchor-team resolution path includes the
+// user_joined_team trigger.
+func flowUserJoinedTeam(teamID string) *model.Flow {
+	return &model.Flow{
+		ID:        "flow1",
+		CreatedBy: creatorUserID,
+		Trigger: model.Trigger{
+			UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: teamID},
+		},
+		Actions: []model.Action{
+			{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					AllowedTools: []string{"get_team_info"},
+					Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{
+						{ChannelID: chAllow, TeamID: teamID},
+					}},
+				},
+			},
+		},
+	}
+}
+
+func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
+	team1 := mmmodel.NewId()
+	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": flowUserJoinedTeam(team1)}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
 func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
 	store := &mockFlowStore{flows: map[string]*model.Flow{"flow1": flowChannelCreatedTeam(team1)}}

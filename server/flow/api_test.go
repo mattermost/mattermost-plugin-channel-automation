@@ -497,6 +497,9 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -522,6 +525,9 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
 
 	router, _ := setupAPIWithCustomMock(t, api)
@@ -579,6 +585,9 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	// Deny new flow's channel.
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch-new").Return(
+		&mmmodel.Channel{Id: "ch-new", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
 
 	router, store := setupAPIWithCustomMock(t, api)

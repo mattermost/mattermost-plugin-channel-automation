@@ -127,7 +127,7 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`.
+For `ai_prompt` actions with `allowed_tools`, every entry must be a tool the action's agent actually exposes. Embedded Mattermost MCP tools are additionally validated against an explicit catalog: any embedded tool not in the catalog is rejected, and catalog entries marked not permitted (currently `create_post`, `dm`, `group_message`, and the automation-management tools `list_automations` / `get_automation_instructions` / `create_automation` / `update_automation` / `delete_automation`) are rejected. External (non-embedded) MCP tools are not subject to the catalog check.
 
 When `guardrails` is set on an `ai_prompt` action, `allowed_tools` must be non-empty, and each `guardrails.channel_ids` entry must be a distinct 26-character Mattermost ID.
 
@@ -526,7 +526,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
