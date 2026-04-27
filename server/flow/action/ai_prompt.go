@@ -111,20 +111,19 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 		for _, t := range cfg.AllowedTools {
 			entry, ok := hooks.LookupMattermostMCPTool(t)
 			if !ok {
-				// Not a Mattermost MCP tool; no guardrail hooks apply.
 				continue
 			}
-			cfg := bridgeclient.ToolHookConfig{}
+			hookCfg := bridgeclient.ToolHookConfig{}
 			if entry.Before != nil {
-				cfg.BeforeCallback = hooks.HookURL(ctx.FlowID, action.ID, "before")
+				hookCfg.BeforeCallback = hooks.HookURL(ctx.FlowID, action.ID, "before")
 			}
 			if entry.After != nil {
-				cfg.AfterCallback = hooks.HookURL(ctx.FlowID, action.ID, "after")
+				hookCfg.AfterCallback = hooks.HookURL(ctx.FlowID, action.ID, "after")
 			}
-			if cfg.BeforeCallback == "" && cfg.AfterCallback == "" {
+			if hookCfg.BeforeCallback == "" && hookCfg.AfterCallback == "" {
 				continue
 			}
-			toolHooks[t] = cfg
+			toolHooks[t] = hookCfg
 		}
 		if len(toolHooks) > 0 {
 			req.ToolHooks = toolHooks
@@ -199,6 +198,22 @@ func buildTriggerContext(trigger model.TriggerData) (metadata string, userConten
 		}
 		if u.Username != "" {
 			user.WriteString("Triggering Username: " + u.Username + "\n")
+		}
+	}
+
+	if trigger.Team != nil {
+		t := trigger.Team
+		if t.Id != "" {
+			meta.WriteString("Team ID: " + t.Id + "\n")
+		}
+		if t.Name != "" {
+			meta.WriteString("Team Name: " + t.Name + "\n")
+		}
+		if t.DisplayName != "" {
+			user.WriteString("Team Display Name: " + t.DisplayName + "\n")
+		}
+		if t.DefaultChannelId != "" {
+			meta.WriteString("Default Channel ID: " + t.DefaultChannelId + "\n")
 		}
 	}
 

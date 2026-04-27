@@ -310,6 +310,88 @@ func TestCheckGuardrailChannelPermissions_DuplicateChannelsDeduped(t *testing.T)
 	api.AssertExpectations(t)
 }
 
+func TestCheckFlowPermissions_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(true)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "welcome"}},
+		},
+	}
+
+	err := CheckFlowPermissions(api, "user1", f)
+	require.NoError(t, err)
+}
+
+func TestCheckFlowPermissions_UserJoinedTeam_NonTeamAdminDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+	}
+
+	err := CheckFlowPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "team admin")
+}
+
+func TestCheckFlowPermissions_UserJoinedTeam_GetTeamServerError(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(nil, &mmmodel.AppError{
+		Message:    "database connection lost",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := &model.Flow{
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
+	}
+
+	err := CheckFlowPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify team")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+}
+
+func TestCheckFlowPermissions_UserJoinedTeam_GetTeamNotFound(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "bad-team").Return(nil, &mmmodel.AppError{
+		Message:    "team not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	f := &model.Flow{
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "bad-team"}},
+	}
+
+	err := CheckFlowPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found or not accessible")
+}
+
+func TestCheckFlowPermissions_UserJoinedTeam_NoTeamIDs_RequiresSysAdmin(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+
+	f := &model.Flow{
+		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: ""}},
+	}
+
+	err := CheckFlowPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "system admin")
+}
+
 func TestCheckFlowPermissions_NonChannelCreated_ChannelAdminRequired(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)

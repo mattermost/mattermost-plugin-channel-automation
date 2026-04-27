@@ -186,6 +186,11 @@ func afterGetTeamMembers(ctx HookCtx, output json.RawMessage) (json.RawMessage, 
 	if len(ctx.AllowedTeams) == 0 {
 		return nil, fmt.Errorf("no team is permitted by guardrails for this automation")
 	}
+	// Note: TeamMembersOutput intentionally has no team identifier — only
+	// per-row user + scheme flags. The team_id is enforced on the request
+	// side by beforeGetTeamMembers, which is the security boundary for this
+	// tool. There is nothing in the response to cross-check against
+	// ctx.AllowedTeams, so we only validate that the body is well-formed.
 	var out mcptool.TeamMembersOutput
 	if err := json.Unmarshal(output, &out); err != nil {
 		return nil, fmt.Errorf("invalid get_team_members output: %w", err)

@@ -1,5 +1,6 @@
 export interface MessagePostedTriggerParams {
     channel_id: string;
+    include_thread_replies?: boolean; // when omitted/false, thread replies are excluded from the message_posted trigger
 }
 
 export interface ScheduleTriggerParams {
@@ -17,11 +18,17 @@ export interface ChannelCreatedTriggerParams {
     [key: string]: never;
 }
 
+export interface UserJoinedTeamTriggerParams {
+    team_id: string;
+    user_type?: string; // "user", "guest", or undefined (both)
+}
+
 export interface Trigger {
     message_posted?: MessagePostedTriggerParams;
     schedule?: ScheduleTriggerParams;
     membership_changed?: MembershipChangedTriggerParams;
     channel_created?: ChannelCreatedTriggerParams;
+    user_joined_team?: UserJoinedTeamTriggerParams;
 }
 
 export function getTriggerType(trigger: Trigger): string {
@@ -36,6 +43,9 @@ export function getTriggerType(trigger: Trigger): string {
     }
     if (trigger.channel_created) {
         return 'channel_created';
+    }
+    if (trigger.user_joined_team) {
+        return 'user_joined_team';
     }
     return '';
 }

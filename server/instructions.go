@@ -61,15 +61,23 @@ Channel guardrails (guardrails.channel_ids on an ai_prompt) constrain a fixed se
 Mattermost MCP tools. The exact tool names below are matched against tool discovery output;
 any other tool name (including external MCP tools) passes through unchanged when guardrails are set.
 
-Channel-scoped — the tool's channel_id argument must be one of guardrails.channel_ids, and
-returned posts/channels are filtered to that allow-list:
+Channel-scoped — restricted to guardrails.channel_ids. Tools differ in how they're
+constrained:
+
+Tools that REQUIRE a channel_id argument matching guardrails.channel_ids:
 - search_posts
-- read_post
 - read_channel
-- get_channel_info
 - get_channel_members
-- get_user_channels
 - add_user_to_channel
+
+Tools that accept channel_id (or resolve a channel via channel_name + team_id) and
+must resolve to one of guardrails.channel_ids:
+- get_channel_info
+
+Tools that take no channel_id argument; their returned posts/channels are filtered
+to guardrails.channel_ids:
+- read_post (the resolved post's channel must be in the allow-list)
+- get_user_channels (returned channels are filtered)
 
 Team-scoped — the tool's team_id argument must be the team that owns one of the allowed
 channels (channel→team is resolved automatically from guardrails.channel_ids), or the

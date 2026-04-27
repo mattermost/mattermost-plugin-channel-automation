@@ -2,6 +2,7 @@ package flow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -160,7 +161,11 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
 		return
 	}
 
@@ -284,7 +289,11 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
 		return
 	}
 

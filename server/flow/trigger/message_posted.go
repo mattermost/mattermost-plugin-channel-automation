@@ -7,7 +7,7 @@ import (
 // MessagePostedTrigger matches when a message is posted in the configured channel.
 type MessagePostedTrigger struct{}
 
-func (t *MessagePostedTrigger) Type() string { return "message_posted" }
+func (t *MessagePostedTrigger) Type() string { return model.TriggerTypeMessagePosted }
 
 func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Event) bool {
 	if event.Post == nil {
@@ -16,5 +16,11 @@ func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Even
 	if trigger.MessagePosted == nil {
 		return false
 	}
-	return trigger.MessagePosted.ChannelID == event.Post.ChannelId
+	if trigger.MessagePosted.ChannelID != event.Post.ChannelId {
+		return false
+	}
+	if event.Post.RootId != "" && !trigger.MessagePosted.IncludeThreadReplies {
+		return false
+	}
+	return true
 }
