@@ -650,7 +650,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	triggerService := flow.NewTriggerService(flowStore, registry)
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
 	executor := flow.NewFlowExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, nil, api, 1)
 
 	p := &Plugin{
 		botUserID:      "bot-id",
