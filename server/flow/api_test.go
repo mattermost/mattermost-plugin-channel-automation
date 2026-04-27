@@ -367,8 +367,9 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -1138,9 +1139,10 @@ func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	body := `{
@@ -1163,9 +1165,10 @@ func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Flow{
-		ID:      "f1",
-		Name:    "Original",
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	longName := strings.Repeat("a", 101)

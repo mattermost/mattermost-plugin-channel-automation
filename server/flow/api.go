@@ -264,6 +264,22 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.CreatedBy = existing.CreatedBy
 	f.UpdatedAt = time.Now().UnixMilli()
 
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
+	// Only the creator (or a sysadmin acting on their behalf) may edit a flow.
+	// This is the security boundary that lets the downstream creator-anchored
+	// checks below validate against existing.CreatedBy without enabling
+	// privilege escalation by a non-creator editor.
+	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
 	if f.Name == "" {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
@@ -294,22 +310,6 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 			code = http.StatusBadGateway
 		}
 		httputil.WriteErrorJSON(w, code, err.Error(), "")
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
-
-	// Only the creator (or a sysadmin acting on their behalf) may edit a flow.
-	// This is the security boundary that lets the downstream creator-anchored
-	// checks below validate against existing.CreatedBy without enabling
-	// privilege escalation by a non-creator editor.
-	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
-		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
