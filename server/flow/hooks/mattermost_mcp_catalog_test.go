@@ -30,26 +30,24 @@ func TestMattermostMCPCatalog_DisallowedToolsPresentAndDisallowed(t *testing.T) 
 
 func TestMattermostMCPCatalog_HookImplsRequireAllowed(t *testing.T) {
 	for name, entry := range mattermostMCPServerTools {
-		if entry.Before != nil || entry.After != nil {
-			assert.True(t, entry.Allowed, "tool %q has Before/After hooks but is not Allowed", name)
+		if entry.Before != nil {
+			assert.True(t, entry.Allowed, "tool %q has a Before hook but is not Allowed", name)
 		}
 	}
 }
 
-func TestMattermostMCPCatalog_AddUserToChannel_BeforeOnly(t *testing.T) {
+func TestMattermostMCPCatalog_AddUserToChannel_HasBeforeHook(t *testing.T) {
 	entry, ok := LookupMattermostMCPTool("add_user_to_channel")
 	require.True(t, ok)
 	assert.True(t, entry.Allowed)
 	assert.NotNil(t, entry.Before, "add_user_to_channel must have a Before hook to enforce channel guardrails")
-	assert.Nil(t, entry.After, "add_user_to_channel intentionally has no After hook")
 }
 
-func TestMattermostMCPCatalog_CreateChannel_BeforeOnly(t *testing.T) {
+func TestMattermostMCPCatalog_CreateChannel_HasBeforeHook(t *testing.T) {
 	entry, ok := LookupMattermostMCPTool("create_channel")
 	require.True(t, ok)
 	assert.True(t, entry.Allowed)
 	assert.NotNil(t, entry.Before, "create_channel must have a Before hook to enforce team guardrails")
-	assert.Nil(t, entry.After, "create_channel intentionally has no After hook")
 }
 
 func TestIsAllowedMattermostMCPTool_UnknownTool(t *testing.T) {

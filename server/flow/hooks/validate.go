@@ -66,6 +66,7 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 			cache[agentID] = available
 		}
 
+		hasGuardrails := a.AIPrompt.Guardrails != nil && len(a.AIPrompt.Guardrails.Channels) > 0
 		for _, name := range a.AIPrompt.AllowedTools {
 			info, ok := available[name]
 			if !ok {
@@ -80,6 +81,9 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 			}
 			if !allowed {
 				return fmt.Errorf("action %d: Mattermost MCP tool %q is not permitted in automations", i, name)
+			}
+			if hasGuardrails && name == "get_user_channels" {
+				return fmt.Errorf("action %d: get_user_channels is not permitted when channel guardrails are configured", i)
 			}
 		}
 	}

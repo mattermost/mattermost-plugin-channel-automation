@@ -69,15 +69,14 @@ Tools that REQUIRE a channel_id argument matching guardrails.channel_ids:
 - read_channel
 - get_channel_members
 - add_user_to_channel
-
-Tools that accept channel_id (or resolve a channel via channel_name + team_id) and
-must resolve to one of guardrails.channel_ids:
 - get_channel_info
 
-Tools that take no channel_id argument; their returned posts/channels are filtered
-to guardrails.channel_ids:
-- read_post (the resolved post's channel must be in the allow-list)
-- get_user_channels (returned channels are filtered)
+Tools that take a post_id; the post's resolved channel_id must be in guardrails.channel_ids:
+- read_post
+
+Tools that are NOT permitted when channel guardrails are configured (the
+automation save/run will reject them):
+- get_user_channels
 
 Team-scoped — the tool's team_id argument must be the team that owns one of the allowed
 channels (channel→team is resolved automatically from guardrails.channel_ids), or the

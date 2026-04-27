@@ -1,4 +1,4 @@
-// Package hooks implements HTTP callbacks for MCP tool before/after hooks when
+// Package hooks implements HTTP callbacks for MCP tool before hooks when
 // ai_prompt actions use channel guardrails.
 package hooks
 
@@ -52,17 +52,16 @@ func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
 	return &APIHandler{store: store, api: api}
 }
 
-// HookURL returns the plugin-relative callback URL for a tool hook phase
-// ("before" or "after") on the given flow/action. Centralized so the route
-// registration and the URL emitted to the bridge cannot drift apart.
-func HookURL(flowID, actionID, phase string) string {
-	return fmt.Sprintf("/api/v1/hooks/tools/%s/%s/%s", flowID, actionID, phase)
+// HookURL returns the plugin-relative before-callback URL for a tool hook on
+// the given flow/action. Centralized so the route registration and the URL
+// emitted to the bridge cannot drift apart.
+func HookURL(flowID, actionID string) string {
+	return fmt.Sprintf("/api/v1/hooks/tools/%s/%s/before", flowID, actionID)
 }
 
-// RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before|after.
+// RegisterRoutes registers POST /hooks/tools/{flow_id}/{action_id}/before.
 func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/before", h.handleBefore).Methods(http.MethodPost)
-	r.HandleFunc("/hooks/tools/{flow_id}/{action_id}/after", h.handleAfter).Methods(http.MethodPost)
 }
 
 // resolveChannelTeam returns the team ID for the given channel, consulting
@@ -268,74 +267,6 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{})
-}
-
-func (h *APIHandler) handleAfter(w http.ResponseWriter, r *http.Request) {
-	var req mcptool.AfterHookRequest
-	if err := readJSONBody(r, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, mcptool.AfterHookResponse{Error: "invalid request body"})
-		return
-	}
-	vars := mux.Vars(r)
-	flowID := vars["flow_id"]
-	actionID := vars["action_id"]
-
-	f, gr, ok := h.loadGuardrailFlow(flowID, actionID)
-	if !ok {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: "guardrails not found"})
-		return
-	}
-
-	if !h.authorizeFlowCreator(w, r, f, mcptool.AfterHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
-		return
-	}
-
-	if req.Error != "" {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{})
-		return
-	}
-
-	if req.ToolName == "" {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: "tool_name is required"})
-		return
-	}
-	entry, catOK := LookupMattermostMCPTool(req.ToolName)
-	if !catOK {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{
-			Error: fmt.Sprintf("tool %q is not a known Mattermost MCP server tool; channel guardrails reject unrecognized tools",
-				req.ToolName),
-		})
-		return
-	}
-	if entry.After == nil {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{
-			Error: fmt.Sprintf("tool %q is not supported with channel guardrails (Mattermost MCP tools must be explicitly allowlisted for guardrails)",
-				req.ToolName),
-		})
-		return
-	}
-
-	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, flowID, actionID)
-	if expTeam, err := flowAnchorTeamID(h.api, f); err != nil {
-		h.api.LogDebug("hooks: failed to resolve flow anchor team",
-			"flow_id", flowID, "action_id", actionID, "error", err.Error())
-	} else if expTeam != "" {
-		allowedTeams[expTeam] = struct{}{}
-	}
-
-	ctx := HookCtx{
-		Guardrails:   gr,
-		AllowedCh:    allowedCh,
-		AllowedTeams: allowedTeams,
-		API:          h.api,
-		UserID:       req.UserID,
-	}
-	out, err := entry.After(ctx, req.Output)
-	if err != nil {
-		writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Error: err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, mcptool.AfterHookResponse{Output: out})
 }
 
 func stringArg(args map[string]any, key string) string {
