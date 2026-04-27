@@ -59,8 +59,8 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 			return fmt.Errorf("schedule trigger interval must be at least %dh", int(minScheduleInterval.Hours()))
 		}
 		startAtChanged := existing == nil || existing.Schedule == nil ||
-			time.UnixMilli(existing.Schedule.StartAt).Truncate(time.Minute) != time.UnixMilli(t.Schedule.StartAt).Truncate(time.Minute)
-		if startAtChanged && t.Schedule.StartAt != 0 && time.UnixMilli(t.Schedule.StartAt).Before(time.Now().UTC()) {
+			TimestampToTime(existing.Schedule.StartAt).Truncate(time.Minute) != TimestampToTime(t.Schedule.StartAt).Truncate(time.Minute)
+		if startAtChanged && t.Schedule.StartAt != 0 && TimestampToTime(t.Schedule.StartAt).Before(time.Now().UTC()) {
 			return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
 		}
 	case t.MembershipChanged != nil:
