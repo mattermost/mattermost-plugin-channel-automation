@@ -194,6 +194,7 @@ func TestCheckGuardrailChannelPermissions_SystemAdminPassesPerChannelCheck(t *te
 		},
 	}
 	require.NoError(t, CheckGuardrailChannelPermissions(api, "admin1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_NoAIPromptOrGuardrails(t *testing.T) {
@@ -206,6 +207,7 @@ func TestCheckGuardrailChannelPermissions_NoAIPromptOrGuardrails(t *testing.T) {
 		},
 	}
 	require.NoError(t, CheckGuardrailChannelPermissions(api, "user1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_AllAccessible(t *testing.T) {
@@ -226,6 +228,7 @@ func TestCheckGuardrailChannelPermissions_AllAccessible(t *testing.T) {
 		},
 	}
 	require.NoError(t, CheckGuardrailChannelPermissions(api, "user1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_MissingReadPermissionDenied(t *testing.T) {
@@ -244,6 +247,7 @@ func TestCheckGuardrailChannelPermissions_MissingReadPermissionDenied(t *testing
 	err := CheckGuardrailChannelPermissions(api, "user1", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "do not have permission to read")
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_GetChannelServerError(t *testing.T) {
@@ -267,6 +271,7 @@ func TestCheckGuardrailChannelPermissions_GetChannelServerError(t *testing.T) {
 
 	var appErr *mmmodel.AppError
 	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_GetChannelNotFoundDenied(t *testing.T) {
@@ -287,6 +292,7 @@ func TestCheckGuardrailChannelPermissions_GetChannelNotFoundDenied(t *testing.T)
 	err := CheckGuardrailChannelPermissions(api, "user1", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "do not have permission to read")
+	api.AssertExpectations(t)
 }
 
 func TestCheckGuardrailChannelPermissions_DuplicateChannelsDeduped(t *testing.T) {
@@ -409,6 +415,7 @@ func TestCheckFlowPermissions_DMParticipantAllowed(t *testing.T) {
 		},
 	}
 	require.NoError(t, CheckFlowPermissions(api, "user1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCheckFlowPermissions_GMParticipantAllowed(t *testing.T) {
@@ -425,6 +432,7 @@ func TestCheckFlowPermissions_GMParticipantAllowed(t *testing.T) {
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "gm1"}},
 	}
 	require.NoError(t, CheckFlowPermissions(api, "user1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCheckFlowPermissions_RegularChannelNonAdminDenied(t *testing.T) {
@@ -443,6 +451,7 @@ func TestCheckFlowPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	err := CheckFlowPermissions(api, "user1", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "channel admin permissions")
+	api.AssertExpectations(t)
 }
 
 func TestCanEditFlow_CreatorAllowed(t *testing.T) {
@@ -451,6 +460,7 @@ func TestCanEditFlow_CreatorAllowed(t *testing.T) {
 
 	f := &model.Flow{CreatedBy: "creator1"}
 	require.NoError(t, CanEditFlow(api, "creator1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCanEditFlow_SystemAdminAllowed(t *testing.T) {
@@ -459,6 +469,7 @@ func TestCanEditFlow_SystemAdminAllowed(t *testing.T) {
 
 	f := &model.Flow{CreatedBy: "creator1"}
 	require.NoError(t, CanEditFlow(api, "admin1", f))
+	api.AssertExpectations(t)
 }
 
 func TestCanEditFlow_NonCreatorDenied(t *testing.T) {
@@ -469,6 +480,7 @@ func TestCanEditFlow_NonCreatorDenied(t *testing.T) {
 	err := CanEditFlow(api, "user2", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
+	api.AssertExpectations(t)
 }
 
 func TestCanEditFlow_MissingCreatedByDenied(t *testing.T) {
@@ -479,6 +491,7 @@ func TestCanEditFlow_MissingCreatedByDenied(t *testing.T) {
 	err := CanEditFlow(api, "user1", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
+	api.AssertExpectations(t)
 }
 
 func TestCanEditFlow_NilFlowDenied(t *testing.T) {
@@ -488,6 +501,7 @@ func TestCanEditFlow_NilFlowDenied(t *testing.T) {
 	err := CanEditFlow(api, "user1", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
+	api.AssertExpectations(t)
 }
 
 func TestCheckFlowPermissions_NonChannelCreated_ChannelAdminRequired(t *testing.T) {

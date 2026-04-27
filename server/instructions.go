@@ -90,9 +90,11 @@ but are NOT constrained by channel guardrails — they execute with the automati
 permissions regardless of guardrails.channel_ids. Mention this explicitly in summary item 2
 when granting them.
 
-Mutating tools that act on the user's behalf (create_post, dm, group_message) are rejected
-from allowed_tools entirely — guardrails do not unlock them. Use a send_message or send_dm
-action instead of granting these tools.
+Mutating tools that act on the user's behalf (create_post, dm, group_message) and the
+automation-management tools (list_automations, get_automation_instructions, create_automation,
+update_automation, delete_automation) are rejected from allowed_tools entirely — guardrails
+do not unlock them. Use a send_message or send_dm action instead of granting the posting
+tools; never include the automation-management tools.
 
 External MCP tools (anything not in the lists above) are unaffected by channel guardrails and
 pass through unchanged. You may freely mix external tools with Mattermost tools in a single
