@@ -390,7 +390,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	pastStartAt := time.Now().Add(-1 * time.Hour).UnixMilli()
+	pastStartAt := model.TimeToTimestamp(time.Now().Add(-1 * time.Hour))
 	require.NoError(t, store.Save(&model.Flow{
 		ID:      "f1",
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},

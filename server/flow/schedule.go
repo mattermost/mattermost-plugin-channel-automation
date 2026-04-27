@@ -183,7 +183,7 @@ func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval, channelID st
 		TriggerData: model.TriggerData{
 			Channel: &model.SafeChannel{Id: channelID},
 			Schedule: &model.ScheduleInfo{
-				FiredAt:  time.Now().UnixMilli(),
+				FiredAt:  model.NowTimestamp(),
 				Interval: interval,
 			},
 		},
@@ -218,7 +218,7 @@ func makeScheduleWaitInterval(interval time.Duration, startAtMs int64) cluster.N
 		// then — even if stale LastFinished metadata exists from a
 		// previous cluster job (e.g. after a flow update).
 		if startAtMs > 0 {
-			startAt := time.UnixMilli(startAtMs)
+			startAt := model.TimestampToTime(startAtMs)
 			if now.Before(startAt) {
 				return startAt.Sub(now)
 			}

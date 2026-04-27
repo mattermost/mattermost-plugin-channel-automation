@@ -193,7 +193,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 				"err", storeErr.Error(),
 			)
 		}
-		wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
+		wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), model.NowTimestamp())
 		return
 	}
 	if creator.DeleteAt != 0 {
@@ -222,7 +222,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 					"err", storeErr.Error(),
 				)
 			}
-			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify flow creator permissions: %s", permErr.Error()), time.Now().UnixMilli())
+			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify flow creator permissions: %s", permErr.Error()), model.NowTimestamp())
 			return
 		}
 
@@ -232,7 +232,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 
 	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
-	completedAt := time.Now().UnixMilli()
+	completedAt := model.NowTimestamp()
 
 	if execErr != nil {
 		wp.api.LogError("Flow execution failed",
@@ -288,7 +288,7 @@ func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason st
 			"err", storeErr.Error(),
 		)
 	}
-	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), time.Now().UnixMilli())
+	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), model.NowTimestamp())
 }
 
 func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.FlowContext, execErr error, completedAt int64) {

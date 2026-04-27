@@ -74,8 +74,8 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 **Query parameters:**
 
-| Parameter    | Type   | Description                                                                                                                               |
-| ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Parameter    | Type   | Description                                                      |
+| ------------ | ------ | ---------------------------------------------------------------- |
 | `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. |
 
 **Response:** `200 OK`
@@ -305,8 +305,8 @@ Returns execution history records for a specific flow, ordered by most recent fi
 
 **Query parameters:**
 
-| Parameter | Type    | Description                                                  |
-| --------- | ------- | ------------------------------------------------------------ |
+| Parameter | Type    | Description                                                           |
+| --------- | ------- | --------------------------------------------------------------------- |
 | `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
 
 **Response:** `200 OK`
@@ -335,12 +335,12 @@ Returns execution history records for a specific flow, ordered by most recent fi
 
 **Errors:**
 
-| Status | Body                       |
-| ------ | -------------------------- |
-| 403    | `forbidden`                |
-| 404    | `flow not found`           |
-| 500    | `failed to get flow`       |
-| 500    | `failed to list executions`|
+| Status | Body                        |
+| ------ | --------------------------- |
+| 403    | `forbidden`                 |
+| 404    | `flow not found`            |
+| 500    | `failed to get flow`        |
+| 500    | `failed to list executions` |
 
 ---
 
@@ -358,12 +358,12 @@ An [ExecutionRecord](#executionrecord) object.
 
 **Errors:**
 
-| Status | Body                        |
-| ------ | --------------------------- |
-| 403    | `forbidden`                 |
-| 404    | `execution not found`       |
-| 500    | `failed to get execution`   |
-| 500    | `failed to get flow`        |
+| Status | Body                      |
+| ------ | ------------------------- |
+| 403    | `forbidden`               |
+| 404    | `execution not found`     |
+| 500    | `failed to get execution` |
+| 500    | `failed to get flow`      |
 
 ---
 
@@ -378,8 +378,8 @@ Returns recent execution records across all flows. **System admin only.**
 
 **Query parameters:**
 
-| Parameter | Type    | Description                                                  |
-| --------- | ------- | ------------------------------------------------------------ |
+| Parameter | Type    | Description                                                           |
+| --------- | ------- | --------------------------------------------------------------------- |
 | `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
 
 **Response:** `200 OK`
@@ -412,27 +412,27 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ### ExecutionRecord
 
-| Field          | Type                            | Description                                                    |
-| -------------- | ------------------------------- | -------------------------------------------------------------- |
-| `id`           | string                          | Unique execution ID (server-assigned)                          |
-| `flow_id`      | string                          | ID of the flow that was executed                               |
-| `flow_name`    | string                          | Name of the flow at execution time                             |
-| `status`       | string                          | `"success"` or `"error"`                                       |
-| `error`        | string                          | _(optional)_ Error message if status is `"error"`              |
+| Field          | Type                                 | Description                                               |
+| -------------- | ------------------------------------ | --------------------------------------------------------- |
+| `id`           | string                               | Unique execution ID (server-assigned)                     |
+| `flow_id`      | string                               | ID of the flow that was executed                          |
+| `flow_name`    | string                               | Name of the flow at execution time                        |
+| `status`       | string                               | `"success"` or `"failed"`                                 |
+| `error`        | string                               | _(optional)_ Error message if status is `"failed"`        |
 | `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
-| `trigger_data` | [TriggerData](#trigger-data-fields) | Snapshot of the trigger event data                         |
-| `created_at`   | integer                         | Time the execution was queued (ms since epoch)                 |
-| `started_at`   | integer                         | Time execution started (ms since epoch)                        |
-| `completed_at` | integer                         | Time execution completed (ms since epoch)                      |
+| `trigger_data` | [TriggerData](#trigger-data-fields)  | Snapshot of the trigger event data                        |
+| `created_at`   | integer                              | Time the execution was queued (ms since epoch)            |
+| `started_at`   | integer                              | Time execution started (ms since epoch)                   |
+| `completed_at` | integer                              | Time execution completed (ms since epoch)                 |
 
 ### StepOutput
 
-| Field        | Type    | Description                                         |
-| ------------ | ------- | --------------------------------------------------- |
-| `post_id`    | string  | Post ID created by the action (if applicable)       |
-| `channel_id` | string  | Channel ID where the action operated                |
-| `message`    | string  | Output message from the action                      |
-| `truncated`  | boolean | _(optional)_ Whether the message was truncated      |
+| Field        | Type    | Description                                    |
+| ------------ | ------- | ---------------------------------------------- |
+| `post_id`    | string  | Post ID created by the action (if applicable)  |
+| `channel_id` | string  | Channel ID where the action operated           |
+| `message`    | string  | Output message from the action                 |
+| `truncated`  | boolean | _(optional)_ Whether the message was truncated |
 
 ### Trigger
 
@@ -455,17 +455,17 @@ Exactly one key should be set, indicating the trigger type:
 
 #### ScheduleConfig
 
-| Field        | Type    | Description                                                                          |
-| ------------ | ------- | ------------------------------------------------------------------------------------ |
-| `channel_id` | string  | Channel associated with the schedule (required)                                      |
-| `interval`   | string  | Go duration string, e.g. `"1h"`, `"24h"` (required, minimum 1h)                     |
+| Field        | Type    | Description                                                                                                                  |
+| ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `channel_id` | string  | Channel associated with the schedule (required)                                                                              |
+| `interval`   | string  | Go duration string, e.g. `"1h"`, `"24h"` (required, minimum 1h)                                                              |
 | `start_at`   | integer | _(optional)_ Future UTC timestamp in milliseconds since epoch. Must be in the future; omit or set to 0 to start immediately. |
 
 #### MembershipChangedConfig
 
-| Field        | Type   | Description                                                                    |
-| ------------ | ------ | ------------------------------------------------------------------------------ |
-| `channel_id` | string | Channel to watch (required)                                                    |
+| Field        | Type   | Description                                                                      |
+| ------------ | ------ | -------------------------------------------------------------------------------- |
+| `channel_id` | string | Channel to watch (required)                                                      |
 | `action`     | string | _(optional)_ `"joined"`, `"left"`, or empty string to match both (default: `""`) |
 
 #### ChannelCreatedConfig
@@ -480,10 +480,10 @@ Exactly one key should be set, indicating the trigger type:
 
 #### UserJoinedTeamConfig
 
-| Field       | Type   | Description                                                                          |
-| ----------- | ------ | ------------------------------------------------------------------------------------ |
-| `team_id`   | string | Team to watch (required)                                                             |
-| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`)      |
+| Field       | Type   | Description                                                                     |
+| ----------- | ------ | ------------------------------------------------------------------------------- |
+| `team_id`   | string | Team to watch (required)                                                        |
+| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`) |
 
 ```json
 { "user_joined_team": { "team_id": "team-id-1", "user_type": "user" } }
@@ -493,20 +493,20 @@ Exactly one key should be set, indicating the trigger type:
 
 Exactly one type-specific config key should be set alongside `id`:
 
-| Field          | Type                                                | Description                                                                                                                        |
-| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow.   |
-| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                       |
-| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                       |
+| Field          | Type                                                | Description                                                                                                                     |
+| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow. |
+| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                    |
+| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                    |
 
 #### SendMessageActionConfig
 
-| Field              | Type   | Description                                                                      |
-| ------------------ | ------ | -------------------------------------------------------------------------------- |
-| `channel_id`       | string | Target channel ID. Supports Go templates.                                        |
-| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates.      |
+| Field              | Type   | Description                                                                       |
+| ------------------ | ------ | --------------------------------------------------------------------------------- |
+| `channel_id`       | string | Target channel ID. Supports Go templates.                                         |
+| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates.       |
 | `as_bot_id`        | string | _(optional)_ Bot user ID to post as. Defaults to the plugin bot if not specified. |
-| `body`             | string | Message body as a Go `text/template` string                                      |
+| `body`             | string | Message body as a Go `text/template` string                                       |
 
 #### AIPromptActionConfig
 
@@ -564,6 +564,18 @@ The completion request is attributed to the user who triggered the automation (`
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
+In addition to the configured `system_prompt` and `prompt`, the action automatically
+injects a trusted trigger-context system message that includes the current date as
+an RFC 3339 timestamp (UTC) annotated with the weekday, plus the equivalent Unix
+timestamp in milliseconds (matching the format used for timestamps stored by the plugin):
+
+```text
+Current Date: 2026-04-22T14:30:45Z (Wednesday)
+Current Unix Timestamp (ms): 1776868245000
+```
+
+These are sourced from the plugin server clock at execution time (not template-accessible).
+
 ---
 
 ## Template context
@@ -615,9 +627,9 @@ Action templates receive a `FlowContext` object with the following structure:
 
 **Membership** _(membership_changed trigger only):_
 
-| Field  | Access                            |
-| ------ | --------------------------------- |
-| Action | `{{.Trigger.Membership.Action}}`  |
+| Field  | Access                           |
+| ------ | -------------------------------- |
+| Action | `{{.Trigger.Membership.Action}}` |
 
 **Team** _(user_joined_team trigger only):_
 
@@ -641,9 +653,9 @@ Previous action outputs are available via `{{.Steps.<action_id>}}`.
 
 > **Note:** Trigger data fields use `.Id` (e.g. `{{.Trigger.Post.Id}}`) following Mattermost model conventions, while step output fields use `.PostID` / `.ChannelID` following Go naming conventions. This difference reflects the underlying Go struct definitions.
 
-| Field      | Access                              |
-| ---------- | ----------------------------------- |
-| Post ID    | `{{.Steps.<action_id>.PostID}}`     |
-| Channel ID | `{{.Steps.<action_id>.ChannelID}}`  |
-| Message    | `{{.Steps.<action_id>.Message}}`    |
-| Truncated  | `{{.Steps.<action_id>.Truncated}}`  |
+| Field      | Access                             |
+| ---------- | ---------------------------------- |
+| Post ID    | `{{.Steps.<action_id>.PostID}}`    |
+| Channel ID | `{{.Steps.<action_id>.ChannelID}}` |
+| Message    | `{{.Steps.<action_id>.Message}}`   |
+| Truncated  | `{{.Steps.<action_id>.Truncated}}` |
