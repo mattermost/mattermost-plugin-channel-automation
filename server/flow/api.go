@@ -303,22 +303,26 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check permissions on existing flow (must have permission to modify it).
-	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
+	// Only the creator (or a sysadmin acting on their behalf) may edit a flow.
+	// This is the security boundary that lets the downstream creator-anchored
+	// checks below validate against existing.CreatedBy without enabling
+	// privilege escalation by a non-creator editor.
+	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
-	// Check permissions on new flow configuration (must have permission on new channels).
-	if err := permissions.CheckFlowPermissions(h.api, userID, &f); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+	// New flow configuration must remain admissible for the creator (covers
+	// the sysadmin-edit case: catches references the creator cannot manage).
+	if err := permissions.CheckFlowPermissions(h.api, existing.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
-	if err := permissions.CheckGuardrailChannelPermissions(h.api, userID, &f); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, existing.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -366,7 +370,7 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
+	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

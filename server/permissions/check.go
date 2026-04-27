@@ -93,11 +93,31 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 	return nil
 }
 
-// CheckGuardrailChannelPermissions verifies that userID can read every
-// channel referenced by ai_prompt guardrails on the flow. Guardrails grant
-// the AI agent (which runs with broad bot credentials) the right to read
-// from those channels via MCP tools, so the author must themselves be able
-// to read each one. There is no sysadmin shortcut: sysadmins implicitly
+// CanEditFlow returns nil when userID is permitted to modify or delete the
+// given flow. Editors are restricted to the flow's creator or a system admin.
+//
+// Limiting edits to creator-or-sysadmin is the security boundary that lets
+// downstream checks (CheckGuardrailChannelPermissions, ValidateAllowedTools)
+// safely validate against the creator's permissions rather than the editor's:
+// non-creator editors are sysadmins (already maximally privileged), and the
+// agent always runs with the creator's identity at execute time, so there is
+// no privilege-escalation path through editor-supplied configuration.
+func CanEditFlow(api plugin.API, userID string, f *model.Flow) error {
+	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
+		return nil
+	}
+	if f != nil && f.CreatedBy != "" && userID == f.CreatedBy {
+		return nil
+	}
+	return fmt.Errorf("only the automation creator or a system admin may modify this flow")
+}
+
+// CheckGuardrailChannelPermissions verifies that userID can read every channel
+// referenced by ai_prompt guardrails on the flow. Callers should pass the
+// flow's creator (CreatedBy): the AI agent runs with the creator's identity at
+// execute time, so a guardrail channel the creator cannot read would silently
+// break the automation. Authorization to edit the flow is enforced separately
+// by CanEditFlow. There is no sysadmin shortcut here: sysadmins implicitly
 // satisfy PermissionReadChannel on every channel, so the same uniform
 // per-channel check is correct for everyone.
 func CheckGuardrailChannelPermissions(api plugin.API, userID string, f *model.Flow) error {

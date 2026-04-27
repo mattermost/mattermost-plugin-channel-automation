@@ -173,7 +173,8 @@ const styles = {
 const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
-// Accept string[] or legacy { name }[] from stored flows.
+// Reads guardrails.channel_ids from a stored flow as a deduped, trimmed
+// string[]. Non-string entries and empty strings are skipped.
 function normalizeGuardrailChannelIDsFromFlow(g: unknown): string[] {
     if (!g || typeof g !== 'object') {
         return [];
@@ -469,7 +470,9 @@ const FlowEditorView: React.FC = () => {
     }, []);
 
     const handleGuardrailChannelsInput = useCallback((index: number, raw: string) => {
-        const parts = raw.split(/[\n,]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+        const parts = Array.from(new Set(
+            raw.split(/[\n,]+/).map((s) => s.trim()).filter((s) => s.length > 0),
+        ));
         setActions((prev) => prev.map((a, i) => (i === index ? {...a, guardrail_channel_ids: parts} : a)));
     }, []);
 
