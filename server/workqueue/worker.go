@@ -301,6 +301,12 @@ func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason st
 // notifier or nil flow.
 func (wp *WorkerPool) notifyFailure(f *model.Flow, item *model.WorkItem, execErr error) {
 	if wp.notifier == nil || f == nil || execErr == nil {
+		wp.api.LogWarn("Skipping failure notification due to missing inputs",
+			"work_item_id", item.ID,
+			"notifier_nil", wp.notifier == nil,
+			"flow_nil", f == nil,
+			"err_nil", execErr == nil,
+		)
 		return
 	}
 
