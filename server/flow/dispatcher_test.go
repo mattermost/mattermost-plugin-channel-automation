@@ -49,15 +49,8 @@ func setupDispatcher(t *testing.T) (*Dispatcher, model.Store, *fakeEnqueuer, *fa
 	store, _ := setupStore(t)
 	registry := newTestRegistry()
 	api := &plugintest.API{}
-	for _, name := range []string{"LogError", "LogDebug", "LogWarn", "LogInfo"} {
-		for args := 1; args <= 11; args += 2 {
-			anys := make([]any, args)
-			for i := range anys {
-				anys[i] = mock.Anything
-			}
-			api.On(name, anys...).Maybe()
-		}
-	}
+
+	t.Cleanup(func() { api.AssertExpectations(t) })
 
 	triggerSvc := NewTriggerService(store, registry)
 	enqueuer := &fakeEnqueuer{}
@@ -68,7 +61,8 @@ func setupDispatcher(t *testing.T) (*Dispatcher, model.Store, *fakeEnqueuer, *fa
 }
 
 func TestDispatcher_NilEvent_IsSafe(t *testing.T) {
-	d, _, enqueuer, notifier, _ := setupDispatcher(t)
+	d, _, enqueuer, notifier, api := setupDispatcher(t)
+	api.On("LogError", "Dispatch called with nil event").Return().Once()
 
 	assert.NotPanics(t, func() {
 		d.Dispatch(nil)
@@ -108,6 +102,12 @@ func TestDispatcher_EnqueuesOnePerMatchingFlow(t *testing.T) {
 
 	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Name: "n"}, (*mmmodel.AppError)(nil))
 	api.On("GetUser", "u1").Return(&mmmodel.User{Id: "u1", Username: "alice"}, (*mmmodel.AppError)(nil))
+	api.On("LogDebug", "Work item enqueued",
+		"work_item_id", mock.Anything,
+		"flow_id", mock.Anything,
+		"flow_name", mock.Anything,
+		"type", model.TriggerTypeMessagePosted,
+	).Return().Times(2)
 
 	d.Dispatch(&model.Event{
 		Type: model.TriggerTypeMessagePosted,
@@ -143,6 +143,10 @@ func TestDispatcher_BuildTriggerDataErrorAborts(t *testing.T) {
 	}))
 
 	api.On("GetChannel", "ch1").Return((*mmmodel.Channel)(nil), mmmodel.NewAppError("", "", nil, "boom", 500))
+	api.On("LogError", "Failed to build trigger data",
+		"type", model.TriggerTypeMessagePosted,
+		"err", mock.Anything,
+	).Return().Once()
 
 	d.Dispatch(&model.Event{
 		Type: model.TriggerTypeMessagePosted,
@@ -165,6 +169,17 @@ func TestDispatcher_EnqueueFailureSkipsItemButNotifies(t *testing.T) {
 
 	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1"}, (*mmmodel.AppError)(nil))
 	api.On("GetUser", "u1").Return(&mmmodel.User{Id: "u1"}, (*mmmodel.AppError)(nil))
+	api.On("LogError", "Failed to enqueue work item",
+		"flow_id", mock.Anything,
+		"flow_name", mock.Anything,
+		"type", model.TriggerTypeMessagePosted,
+		"err", mock.Anything,
+	).Return().Once()
+	api.On("LogError", "Some work items failed to enqueue",
+		"type", model.TriggerTypeMessagePosted,
+		"total", mock.Anything,
+		"failed", mock.Anything,
+	).Return().Once()
 
 	enqueuer := &fakeEnqueuer{err: errors.New("queue full")}
 	notifier := &fakeNotifier{}
@@ -198,6 +213,23 @@ func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 
 	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1"}, (*mmmodel.AppError)(nil))
 	api.On("GetUser", "u1").Return(&mmmodel.User{Id: "u1"}, (*mmmodel.AppError)(nil))
+	api.On("LogDebug", "Work item enqueued",
+		"work_item_id", mock.Anything,
+		"flow_id", mock.Anything,
+		"flow_name", mock.Anything,
+		"type", model.TriggerTypeMessagePosted,
+	).Return().Times(2)
+	api.On("LogError", "Failed to enqueue work item",
+		"flow_id", mock.Anything,
+		"flow_name", mock.Anything,
+		"type", model.TriggerTypeMessagePosted,
+		"err", mock.Anything,
+	).Return().Once()
+	api.On("LogError", "Some work items failed to enqueue",
+		"type", model.TriggerTypeMessagePosted,
+		"total", mock.Anything,
+		"failed", mock.Anything,
+	).Return().Once()
 
 	enqueuer := &fakeEnqueuer{
 		failOn: func(item *model.WorkItem) error {
