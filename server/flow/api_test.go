@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
@@ -485,6 +486,39 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 	).Maybe()
 
 	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: limit}, nil)
+	router := mux.NewRouter()
+	handler.RegisterRoutes(router)
+
+	return router, store
+}
+
+// stubAgentToolsLister implements hooks.AgentToolsLister for API tests. It
+// returns a fixed tools/err pair and records every (agent, user) pair the
+// validator queried so tests can assert dedup and "skipped entirely" cases.
+type stubAgentToolsLister struct {
+	tools []bridgeclient.BridgeToolInfo
+	err   error
+	calls []stubBridgeCall
+}
+
+type stubBridgeCall struct {
+	agentID string
+	userID  string
+}
+
+func (s *stubAgentToolsLister) GetAgentTools(agentID, userID string) ([]bridgeclient.BridgeToolInfo, error) {
+	s.calls = append(s.calls, stubBridgeCall{agentID: agentID, userID: userID})
+	return s.tools, s.err
+}
+
+// setupAPIWithBridge creates an API handler with a custom plugintest.API and
+// a stub bridge so tests can exercise save-time agent access verification.
+func setupAPIWithBridge(t *testing.T, api *plugintest.API, bridge *stubAgentToolsLister) (*mux.Router, model.Store) {
+	t.Helper()
+
+	store, _ := setupStore(t)
+
+	handler := NewAPIHandler(store, nil, api, nil, nil, bridge)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -1298,4 +1332,180 @@ func TestAPI_CreateFlow_UserJoinedTeam_GetTeam500(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// adminAPIWithBridge wires a sysadmin actor (so channel/team checks are
+// skipped) plus a stub bridge, so the only relevant assertion in the test
+// body is the bridge's own behavior.
+func adminAPIWithBridge(t *testing.T, userID string, bridge *stubAgentToolsLister) (*mux.Router, model.Store, *plugintest.API) {
+	t.Helper()
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", userID, mmmodel.PermissionManageSystem).Return(true)
+	router, store := setupAPIWithBridge(t, api, bridge)
+	return router, store, api
+}
+
+const aiAgentFlowBody = `{
+	"name": "AI Flow",
+	"enabled": true,
+	"trigger": {"channel_created": {"team_id": "team1"}},
+	"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "agent", "provider_id": "bot1"}}]
+}`
+
+// TestAPI_CreateFlow_AIPromptAgent_NoAllowedTools_ChecksBridge is the core
+// regression guard: a flow with provider_type "agent" and empty allowed_tools
+// must trigger a bridge call to verify the creator has access to the agent.
+func TestAPI_CreateFlow_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testing.T) {
+	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{}}
+	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(aiAgentFlowBody))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Len(t, bridge.calls, 1)
+	assert.Equal(t, "bot1", bridge.calls[0].agentID)
+	assert.Equal(t, "admin1", bridge.calls[0].userID)
+}
+
+// TestAPI_CreateFlow_AIPromptAgent_AccessDenied surfaces a bridge denial as
+// 502 (ErrToolDiscovery -> http.StatusBadGateway in the handler).
+func TestAPI_CreateFlow_AIPromptAgent_AccessDenied(t *testing.T) {
+	bridge := &stubAgentToolsLister{err: fmt.Errorf("request failed with status 403: permission denied")}
+	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(aiAgentFlowBody))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Contains(t, w.Body.String(), `failed to list tools for agent \"bot1\"`)
+	assert.Contains(t, w.Body.String(), "status 403")
+}
+
+// TestAPI_CreateFlow_AIPromptAgent_BridgeUnavailable rejects when the bridge
+// is nil and the flow has an ai_prompt agent action.
+func TestAPI_CreateFlow_AIPromptAgent_BridgeUnavailable(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api) // bridge is nil
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(aiAgentFlowBody))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Contains(t, w.Body.String(), "bridge client unavailable")
+}
+
+// TestAPI_CreateFlow_AIPromptService_SkipsBridge confirms service providers
+// do not trigger any bridge call (out of scope for the agent ACL).
+func TestAPI_CreateFlow_AIPromptService_SkipsBridge(t *testing.T) {
+	bridge := &stubAgentToolsLister{}
+	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
+
+	body := `{
+		"name": "Service Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {"team_id": "team1"}},
+		"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "service", "provider_id": "openai"}}]
+	}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.Empty(t, bridge.calls)
+}
+
+// TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls is the property
+// that prevents a "two requests" regression: two ai_prompt actions sharing
+// one agent ID must result in exactly one bridge call.
+func TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.T) {
+	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{
+		{Name: "search", ServerOrigin: "external-mcp"},
+	}}
+	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
+
+	body := `{
+		"name": "AI Flow",
+		"enabled": true,
+		"trigger": {"channel_created": {"team_id": "team1"}},
+		"actions": [
+			{"id": "with-tools", "ai_prompt": {"prompt": "p", "provider_type": "agent", "provider_id": "bot1", "allowed_tools": ["search"]}},
+			{"id": "without-tools", "ai_prompt": {"prompt": "p", "provider_type": "agent", "provider_id": "bot1"}}
+		]
+	}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Len(t, bridge.calls, 1, "bridge must be called exactly once for repeated agent ID")
+	assert.Equal(t, "bot1", bridge.calls[0].agentID)
+}
+
+// TestAPI_CreateFlow_AIPromptAgent_PermissionFailureSkipsBridge verifies the
+// permission check still short-circuits before the bridge round-trip.
+func TestAPI_CreateFlow_AIPromptAgent_PermissionFailureSkipsBridge(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
+
+	bridge := &stubAgentToolsLister{}
+	router, _ := setupAPIWithBridge(t, api, bridge)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(aiAgentFlowBody))
+	r.Header.Set("Mattermost-User-ID", "user1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "team admin")
+	assert.Empty(t, bridge.calls, "bridge must not be called when the user cannot manage the flow")
+}
+
+// TestAPI_UpdateFlow_AIPromptAgent_AccessDenied mirrors the create path for
+// the PUT handler. The check uses the existing flow's CreatedBy (matching
+// the runtime model where the bridge ACL is checked against created_by).
+func TestAPI_UpdateFlow_AIPromptAgent_AccessDenied(t *testing.T) {
+	bridge := &stubAgentToolsLister{err: fmt.Errorf("request failed with status 403: permission denied")}
+
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(true)
+
+	router, store := setupAPIWithBridge(t, api, bridge)
+
+	require.NoError(t, store.Save(&model.Flow{
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "creator1",
+		Trigger:   model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
+		Actions: []model.Action{{
+			ID:       "ai-task",
+			AIPrompt: &model.AIPromptActionConfig{Prompt: "p", ProviderType: "agent", ProviderID: "bot1"},
+		}},
+	}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(aiAgentFlowBody))
+	r.Header.Set("Mattermost-User-ID", "creator1")
+	router.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Contains(t, w.Body.String(), `failed to list tools for agent \"bot1\"`)
+	require.Len(t, bridge.calls, 1)
+	assert.Equal(t, "creator1", bridge.calls[0].userID, "PUT must use existing.CreatedBy for the bridge check")
 }
