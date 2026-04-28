@@ -31,6 +31,11 @@ func NewDispatcher(api plugin.API, triggerService *TriggerService, enqueuer Work
 // registered handler, and enqueues a work item per matched flow. Logs and
 // returns silently on errors. Avoids blocking the Mattermost server.
 func (d *Dispatcher) Dispatch(event *model.Event) {
+	if event == nil {
+		d.api.LogError("Dispatch called with nil event")
+		return
+	}
+
 	handler, flows, err := d.triggerService.FindMatchingFlows(event)
 	if err != nil {
 		d.api.LogError("Failed to find matching flows", "type", event.Type, "err", err.Error())

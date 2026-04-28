@@ -67,6 +67,17 @@ func setupDispatcher(t *testing.T) (*Dispatcher, model.Store, *fakeEnqueuer, *fa
 	return d, store, enqueuer, notifier, api
 }
 
+func TestDispatcher_NilEvent_IsSafe(t *testing.T) {
+	d, _, enqueuer, notifier, _ := setupDispatcher(t)
+
+	assert.NotPanics(t, func() {
+		d.Dispatch(nil)
+	})
+
+	assert.Empty(t, enqueuer.items)
+	assert.Zero(t, notifier.called)
+}
+
 func TestDispatcher_NoMatchingFlows_IsSilent(t *testing.T) {
 	d, _, enqueuer, notifier, _ := setupDispatcher(t)
 
