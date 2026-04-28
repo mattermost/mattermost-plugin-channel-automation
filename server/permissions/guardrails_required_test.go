@@ -209,3 +209,61 @@ func TestCheckGuardrailsRequired_GetChannelServerErrorWraps(t *testing.T) {
 	var appErr *mmmodel.AppError
 	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
 }
+
+func TestCheckGuardrailsRequired_GetChannelStatsServerErrorWraps(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch-priv").Return(&mmmodel.Channel{Id: "ch-priv", Type: mmmodel.ChannelTypePrivate}, nil)
+	api.On("GetChannelStats", "ch-priv").Return(nil, &mmmodel.AppError{
+		Message:    "stats unavailable",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := aiPromptFlow("ch-priv", []string{"some_tool"}, nil)
+
+	err := CheckGuardrailsRequired(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify trigger channel members")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+}
+
+func TestCheckGuardrailsRequired_GetChannelMembersServerErrorWraps(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch-dm").Return(&mmmodel.Channel{Id: "ch-dm", Type: mmmodel.ChannelTypeDirect}, nil)
+	api.On("GetChannelMembers", "ch-dm", 0, 2).Return(mmmodel.ChannelMembers(nil), &mmmodel.AppError{
+		Message:    "members lookup failed",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+
+	err := CheckGuardrailsRequired(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify DM members")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+}
+
+func TestCheckGuardrailsRequired_GetUserServerErrorWraps(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("GetChannel", "ch-dm").Return(&mmmodel.Channel{Id: "ch-dm", Type: mmmodel.ChannelTypeDirect}, nil)
+	api.On("GetChannelMembers", "ch-dm", 0, 2).Return(mmmodel.ChannelMembers{
+		{ChannelId: "ch-dm", UserId: "creator1"},
+		{ChannelId: "ch-dm", UserId: "otheruser"},
+	}, nil)
+	api.On("GetUser", "otheruser").Return(nil, &mmmodel.AppError{
+		Message:    "user lookup failed",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+
+	err := CheckGuardrailsRequired(api, f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify DM participant")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
+}
