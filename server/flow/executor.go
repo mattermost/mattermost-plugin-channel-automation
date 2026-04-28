@@ -6,6 +6,21 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
+// ActionError is returned by FlowExecutor.Execute when a specific action
+// fails. It carries the failing action's ID and type so callers can surface
+// targeted error notifications without parsing the wrapped error string.
+type ActionError struct {
+	ActionID   string
+	ActionType string
+	Err        error
+}
+
+func (e *ActionError) Error() string {
+	return fmt.Sprintf("action %q failed: %s", e.ActionID, e.Err)
+}
+
+func (e *ActionError) Unwrap() error { return e.Err }
+
 // FlowExecutor dispatches flow actions using the registry.
 type FlowExecutor struct {
 	registry *Registry
@@ -35,7 +50,11 @@ func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) (*m
 
 		output, err := handler.Execute(&action, ctx)
 		if err != nil {
-			return ctx, fmt.Errorf("action %q failed: %w", action.ID, err)
+			return ctx, &ActionError{
+				ActionID:   action.ID,
+				ActionType: action.Type(),
+				Err:        err,
+			}
 		}
 
 		if output != nil {
