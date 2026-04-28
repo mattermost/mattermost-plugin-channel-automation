@@ -17,17 +17,17 @@ type fakeEnqueuer struct {
 	items []*model.WorkItem
 	// err, if set, fails every Enqueue.
 	err error
-	// failOn, if non-nil, returns the error to use on the Nth call (0-indexed)
-	// or nil to succeed. Takes precedence over err.
-	failOn func(callIdx int) error
+	// failOn, if non-nil, returns the error to use for a specific work item
+	// or nil to succeed. Keying on the item (not call index) keeps tests
+	// independent of store ordering. Takes precedence over err.
+	failOn func(item *model.WorkItem) error
 	calls  int
 }
 
 func (e *fakeEnqueuer) Enqueue(item *model.WorkItem) error {
-	idx := e.calls
 	e.calls++
 	if e.failOn != nil {
-		if err := e.failOn(idx); err != nil {
+		if err := e.failOn(item); err != nil {
 			return err
 		}
 	} else if e.err != nil {
@@ -104,14 +104,21 @@ func TestDispatcher_EnqueuesOnePerMatchingFlow(t *testing.T) {
 	})
 
 	require.Len(t, enqueuer.items, 2)
-	assert.Equal(t, "f1", enqueuer.items[0].FlowID)
-	assert.Equal(t, "f2", enqueuer.items[1].FlowID)
+	assert.ElementsMatch(t, []string{"f1", "f2"}, flowIDs(enqueuer.items))
 	for _, item := range enqueuer.items {
 		require.NotNil(t, item.TriggerData.Post)
 		require.NotNil(t, item.TriggerData.Channel)
 		require.NotNil(t, item.TriggerData.User)
 	}
 	assert.Equal(t, 1, notifier.called)
+}
+
+func flowIDs(items []*model.WorkItem) []string {
+	ids := make([]string, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.FlowID)
+	}
+	return ids
 }
 
 func TestDispatcher_BuildTriggerDataErrorAborts(t *testing.T) {
@@ -182,8 +189,8 @@ func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 	api.On("GetUser", "u1").Return(&mmmodel.User{Id: "u1"}, (*mmmodel.AppError)(nil))
 
 	enqueuer := &fakeEnqueuer{
-		failOn: func(idx int) error {
-			if idx == 1 {
+		failOn: func(item *model.WorkItem) error {
+			if item.FlowID == "f2" {
 				return errors.New("queue full")
 			}
 			return nil
@@ -197,9 +204,8 @@ func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 		Post: &mmmodel.Post{Id: "p1", ChannelId: "ch1", UserId: "u1"},
 	})
 
-	require.Len(t, enqueuer.items, 2, "first and third flow should still enqueue despite middle failure")
-	assert.Equal(t, "f1", enqueuer.items[0].FlowID)
-	assert.Equal(t, "f3", enqueuer.items[1].FlowID)
+	require.Len(t, enqueuer.items, 2, "f1 and f3 should still enqueue despite f2 failure")
+	assert.ElementsMatch(t, []string{"f1", "f3"}, flowIDs(enqueuer.items))
 	assert.Equal(t, 3, enqueuer.calls)
 	assert.Equal(t, 1, notifier.called)
 }
