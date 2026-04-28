@@ -1,5 +1,6 @@
 export interface MessagePostedTriggerParams {
     channel_id: string;
+    include_thread_replies?: boolean; // when omitted/false, thread replies are excluded from the message_posted trigger
 }
 
 export interface ScheduleTriggerParams {
@@ -56,18 +57,12 @@ export interface SendMessageActionParams {
     body: string;
 }
 
-/** Matches AI bridge allowed_tools entries (server_origin + name from agent tools discovery). */
-export interface AllowedToolRef {
-    server_origin: string;
-    name: string;
-}
-
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
-    allowed_tools?: AllowedToolRef[];
+    allowed_tools?: string[];
 }
 
 export interface Action {
@@ -85,7 +80,6 @@ export interface AIBotInfo {
 export interface AIToolInfo {
     name: string;
     description: string;
-    server_origin?: string;
 }
 
 export interface Flow {

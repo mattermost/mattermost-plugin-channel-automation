@@ -45,8 +45,8 @@ func (t *ScheduleTrigger) Validate(trigger *model.Trigger, existing *model.Trigg
 	// StartAt is only validated when it changed from the existing value, so
 	// that a stored past timestamp can be carried through an unrelated update.
 	startAtChanged := existing == nil || existing.Schedule == nil ||
-		time.UnixMilli(existing.Schedule.StartAt).Truncate(time.Minute) != time.UnixMilli(trigger.Schedule.StartAt).Truncate(time.Minute)
-	if startAtChanged && trigger.Schedule.StartAt != 0 && time.UnixMilli(trigger.Schedule.StartAt).Before(time.Now().UTC()) {
+		model.TimestampToTime(existing.Schedule.StartAt).Truncate(time.Minute) != model.TimestampToTime(trigger.Schedule.StartAt).Truncate(time.Minute)
+	if startAtChanged && trigger.Schedule.StartAt != 0 && model.TimestampToTime(trigger.Schedule.StartAt).Before(time.Now().UTC()) {
 		return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
 	}
 	return nil

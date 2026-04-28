@@ -18,7 +18,13 @@ func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Even
 	if trigger.MessagePosted == nil {
 		return false
 	}
-	return trigger.MessagePosted.ChannelID == event.Post.ChannelId
+	if trigger.MessagePosted.ChannelID != event.Post.ChannelId {
+		return false
+	}
+	if event.Post.RootId != "" && !trigger.MessagePosted.IncludeThreadReplies {
+		return false
+	}
+	return true
 }
 
 func (t *MessagePostedTrigger) Validate(trigger *model.Trigger, _ *model.Trigger) error {

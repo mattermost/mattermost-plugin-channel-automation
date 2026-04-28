@@ -38,6 +38,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	execAPI.RegisterRoutes(apiRouter)
 
 	apiRouter.HandleFunc("/config", p.handleGetClientConfig).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/automation-instructions", p.handleGetAutomationInstructions).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
 
 	return router

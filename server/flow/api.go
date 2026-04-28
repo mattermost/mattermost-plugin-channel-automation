@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
@@ -125,7 +124,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f.ID = mmmodel.NewId()
-	f.CreatedAt = time.Now().UnixMilli()
+	f.CreatedAt = model.NowTimestamp()
 	f.UpdatedAt = f.CreatedAt
 	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
 	if f.CreatedBy == "" {
@@ -244,7 +243,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.ID = id
 	f.CreatedAt = existing.CreatedAt
 	f.CreatedBy = existing.CreatedBy
-	f.UpdatedAt = time.Now().UnixMilli()
+	f.UpdatedAt = model.NowTimestamp()
 
 	if f.Name == "" {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")

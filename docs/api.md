@@ -6,7 +6,14 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions: **System Admins** (`manage_system`) are always allowed. Otherwise the user must be a **channel admin** (`SchemeAdmin`) on every channel referenced in the flow (trigger and action channel IDs). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"` if neither condition is met. The list endpoint filters results to only flows the user has permission to view.
+All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the flow's trigger type:
+
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) on every literal channel referenced in the flow (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"`.
+- **Team-scoped triggers** (`channel_created`): the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the flow must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
+
+In practice, validation (`ValidateSendMessageChannel`) already requires `send_message.channel_id` to be either the literal trigger channel ID or the template `{{.Trigger.Channel.Id}}`, so for channel-scoped triggers the set of literal channels checked collapses to the trigger channel, and for `channel_created` any literal `send_message.channel_id` must belong to `team_id`.
+
+The list endpoint filters results to only flows the user has permission to view under the rules above.
 
 ## Endpoints
 
@@ -32,6 +39,30 @@ Returns the client-relevant plugin configuration. Any authenticated user may cal
 
 ---
 
+### Get automation instructions (for agents / MCP)
+
+```http
+GET /automation-instructions
+```
+
+Returns documentation for agents/MCP: a single **`instructions`** string (the body returned by the `get_automation_instructions` tool), including an optional closing paragraph with a plain documentation URL when **Automation instructions URL** is set in plugin settings.
+
+Any authenticated user may call this endpoint — no channel-admin check is performed (same as `GET /config`).
+
+**Response:** `200 OK`
+
+```json
+{
+  "instructions": "Channel automations are trigger-action workflows..."
+}
+```
+
+| Field          | Type   | Description                                                                                                                                                                                                 |
+| -------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions` | string | Detailed documentation for triggers, actions, templates, `allowed_tools`, and the required user-confirmation workflow. If the plugin setting **Automation instructions URL** is set, a closing paragraph is appended with that URL so the model can mention it to users. |
+
+---
+
 ### List flows
 
 ```
@@ -43,8 +74,8 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 **Query parameters:**
 
-| Parameter    | Type   | Description                                                                                                                               |
-| ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Parameter    | Type   | Description                                                      |
+| ------------ | ------ | ---------------------------------------------------------------- |
 | `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. |
 
 **Response:** `200 OK`
@@ -92,6 +123,8 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
+For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`. Comparison is case-insensitive and ignores surrounding whitespace.
+
 **Request body** (max 1 MB):
 
 ```json
@@ -128,6 +161,7 @@ The created flow object with all server-assigned fields populated.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
 | 500    | `failed to create flow`                                                                                     |
@@ -162,7 +196,7 @@ The flow object.
 PUT /flows/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format).
+Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create flow](#create-flow).
 
 **Request body** (max 1 MB):
 
@@ -200,6 +234,7 @@ The updated flow object.
 | 400    | `name must be 100 characters or fewer`                                                                      |
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
+| 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 404    | `flow not found`                                                                                            |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
@@ -270,8 +305,8 @@ Returns execution history records for a specific flow, ordered by most recent fi
 
 **Query parameters:**
 
-| Parameter | Type    | Description                                                  |
-| --------- | ------- | ------------------------------------------------------------ |
+| Parameter | Type    | Description                                                           |
+| --------- | ------- | --------------------------------------------------------------------- |
 | `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
 
 **Response:** `200 OK`
@@ -300,12 +335,12 @@ Returns execution history records for a specific flow, ordered by most recent fi
 
 **Errors:**
 
-| Status | Body                       |
-| ------ | -------------------------- |
-| 403    | `forbidden`                |
-| 404    | `flow not found`           |
-| 500    | `failed to get flow`       |
-| 500    | `failed to list executions`|
+| Status | Body                        |
+| ------ | --------------------------- |
+| 403    | `forbidden`                 |
+| 404    | `flow not found`            |
+| 500    | `failed to get flow`        |
+| 500    | `failed to list executions` |
 
 ---
 
@@ -323,12 +358,12 @@ An [ExecutionRecord](#executionrecord) object.
 
 **Errors:**
 
-| Status | Body                        |
-| ------ | --------------------------- |
-| 403    | `forbidden`                 |
-| 404    | `execution not found`       |
-| 500    | `failed to get execution`   |
-| 500    | `failed to get flow`        |
+| Status | Body                      |
+| ------ | ------------------------- |
+| 403    | `forbidden`               |
+| 404    | `execution not found`     |
+| 500    | `failed to get execution` |
+| 500    | `failed to get flow`      |
 
 ---
 
@@ -343,8 +378,8 @@ Returns recent execution records across all flows. **System admin only.**
 
 **Query parameters:**
 
-| Parameter | Type    | Description                                                  |
-| --------- | ------- | ------------------------------------------------------------ |
+| Parameter | Type    | Description                                                           |
+| --------- | ------- | --------------------------------------------------------------------- |
 | `limit`   | integer | _(optional)_ Maximum number of records to return (1–100, default: 20) |
 
 **Response:** `200 OK`
@@ -377,27 +412,27 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ### ExecutionRecord
 
-| Field          | Type                            | Description                                                    |
-| -------------- | ------------------------------- | -------------------------------------------------------------- |
-| `id`           | string                          | Unique execution ID (server-assigned)                          |
-| `flow_id`      | string                          | ID of the flow that was executed                               |
-| `flow_name`    | string                          | Name of the flow at execution time                             |
-| `status`       | string                          | `"success"` or `"error"`                                       |
-| `error`        | string                          | _(optional)_ Error message if status is `"error"`              |
+| Field          | Type                                 | Description                                               |
+| -------------- | ------------------------------------ | --------------------------------------------------------- |
+| `id`           | string                               | Unique execution ID (server-assigned)                     |
+| `flow_id`      | string                               | ID of the flow that was executed                          |
+| `flow_name`    | string                               | Name of the flow at execution time                        |
+| `status`       | string                               | `"success"` or `"failed"`                                 |
+| `error`        | string                               | _(optional)_ Error message if status is `"failed"`        |
 | `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
-| `trigger_data` | [TriggerData](#trigger-data-fields) | Snapshot of the trigger event data                         |
-| `created_at`   | integer                         | Time the execution was queued (ms since epoch)                 |
-| `started_at`   | integer                         | Time execution started (ms since epoch)                        |
-| `completed_at` | integer                         | Time execution completed (ms since epoch)                      |
+| `trigger_data` | [TriggerData](#trigger-data-fields)  | Snapshot of the trigger event data                        |
+| `created_at`   | integer                              | Time the execution was queued (ms since epoch)            |
+| `started_at`   | integer                              | Time execution started (ms since epoch)                   |
+| `completed_at` | integer                              | Time execution completed (ms since epoch)                 |
 
 ### StepOutput
 
-| Field        | Type    | Description                                         |
-| ------------ | ------- | --------------------------------------------------- |
-| `post_id`    | string  | Post ID created by the action (if applicable)       |
-| `channel_id` | string  | Channel ID where the action operated                |
-| `message`    | string  | Output message from the action                      |
-| `truncated`  | boolean | _(optional)_ Whether the message was truncated      |
+| Field        | Type    | Description                                    |
+| ------------ | ------- | ---------------------------------------------- |
+| `post_id`    | string  | Post ID created by the action (if applicable)  |
+| `channel_id` | string  | Channel ID where the action operated           |
+| `message`    | string  | Output message from the action                 |
+| `truncated`  | boolean | _(optional)_ Whether the message was truncated |
 
 ### Trigger
 
@@ -408,44 +443,47 @@ Exactly one key should be set, indicating the trigger type:
 | `message_posted`     | [MessagePostedConfig](#messagepostedconfig)           | _(optional)_ Fires on new messages in a channel                   |
 | `schedule`           | [ScheduleConfig](#scheduleconfig)                     | _(optional)_ Fires on a recurring schedule                        |
 | `membership_changed` | [MembershipChangedConfig](#membershipchangedconfig)   | _(optional)_ Fires when a user joins or leaves a channel          |
-| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created           |
+| `channel_created`    | [ChannelCreatedConfig](#channelcreatedconfig)         | _(optional)_ Fires when a new public channel is created on a team |
 | `user_joined_team`   | [UserJoinedTeamConfig](#userjoinedteamconfig)         | Fires when a user joins the configured team (`team_id` required)  |
 
 #### MessagePostedConfig
 
-| Field        | Type   | Description                 |
-| ------------ | ------ | --------------------------- |
-| `channel_id` | string | Channel to watch (required) |
+| Field                     | Type    | Description                                                                                                  |
+| ------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `channel_id`              | string  | Channel to watch (required)                                                                                  |
+| `include_thread_replies`  | boolean | _(optional)_ When `true`, posts that are thread replies (have a `root_id`) also fire the trigger. Defaults to `false` — thread replies are ignored. |
 
 #### ScheduleConfig
 
-| Field        | Type    | Description                                                                          |
-| ------------ | ------- | ------------------------------------------------------------------------------------ |
-| `channel_id` | string  | Channel associated with the schedule (required)                                      |
-| `interval`   | string  | Go duration string, e.g. `"1h"`, `"24h"` (required, minimum 1h)                     |
+| Field        | Type    | Description                                                                                                                  |
+| ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `channel_id` | string  | Channel associated with the schedule (required)                                                                              |
+| `interval`   | string  | Go duration string, e.g. `"1h"`, `"24h"` (required, minimum 1h)                                                              |
 | `start_at`   | integer | _(optional)_ Future UTC timestamp in milliseconds since epoch. Must be in the future; omit or set to 0 to start immediately. |
 
 #### MembershipChangedConfig
 
-| Field        | Type   | Description                                                                    |
-| ------------ | ------ | ------------------------------------------------------------------------------ |
-| `channel_id` | string | Channel to watch (required)                                                    |
+| Field        | Type   | Description                                                                      |
+| ------------ | ------ | -------------------------------------------------------------------------------- |
+| `channel_id` | string | Channel to watch (required)                                                      |
 | `action`     | string | _(optional)_ `"joined"`, `"left"`, or empty string to match both (default: `""`) |
 
 #### ChannelCreatedConfig
 
-Empty object — no fields required. The trigger fires on any new public channel creation.
+| Field     | Type   | Description                                                    |
+| --------- | ------ | -------------------------------------------------------------- |
+| `team_id` | string | Team to watch for new public channels (required)               |
 
 ```json
-{ "channel_created": {} }
+{ "channel_created": { "team_id": "team-id-1" } }
 ```
 
 #### UserJoinedTeamConfig
 
-| Field       | Type   | Description                                                                          |
-| ----------- | ------ | ------------------------------------------------------------------------------------ |
-| `team_id`   | string | Team to watch (required)                                                             |
-| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`)      |
+| Field       | Type   | Description                                                                     |
+| ----------- | ------ | ------------------------------------------------------------------------------- |
+| `team_id`   | string | Team to watch (required)                                                        |
+| `user_type` | string | _(optional)_ `"user"`, `"guest"`, or empty string to match both (default: `""`) |
 
 ```json
 { "user_joined_team": { "team_id": "team-id-1", "user_type": "user" } }
@@ -455,20 +493,20 @@ Empty object — no fields required. The trigger fires on any new public channel
 
 Exactly one type-specific config key should be set alongside `id`:
 
-| Field          | Type                                                | Description                                                                                                                        |
-| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow.   |
-| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                       |
-| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                       |
+| Field          | Type                                                | Description                                                                                                                     |
+| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow. |
+| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                    |
+| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                    |
 
 #### SendMessageActionConfig
 
-| Field              | Type   | Description                                                                      |
-| ------------------ | ------ | -------------------------------------------------------------------------------- |
-| `channel_id`       | string | Target channel ID. Supports Go templates.                                        |
-| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates.      |
+| Field              | Type   | Description                                                                       |
+| ------------------ | ------ | --------------------------------------------------------------------------------- |
+| `channel_id`       | string | Target channel ID. Supports Go templates.                                         |
+| `reply_to_post_id` | string | _(optional)_ Post ID to reply to, creating a thread. Supports Go templates.       |
 | `as_bot_id`        | string | _(optional)_ Bot user ID to post as. Defaults to the plugin bot if not specified. |
-| `body`             | string | Message body as a Go `text/template` string                                      |
+| `body`             | string | Message body as a Go `text/template` string                                       |
 
 #### AIPromptActionConfig
 
@@ -478,9 +516,9 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval                                                 |
+| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 ---
 
@@ -488,7 +526,7 @@ Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
 
 ### `message_posted`
 
-Fires when a new message is posted in the specified channel.
+Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
 ### `schedule`
 
@@ -502,7 +540,7 @@ Fires when a user joins or leaves the specified channel. Bot users are automatic
 
 ### `channel_created`
 
-Fires when a new public channel (type `"O"`) is created. DMs, group messages, and private channels are excluded. This is a global trigger — no channel ID configuration is needed.
+Fires when a new public channel (type `"O"`) is created on the specified `team_id`. DMs, group messages, and private channels are excluded. Authorization for this trigger is team-scoped: the creating user must be a team admin on `team_id` (or a system admin), and any literal action channel references must belong to the same team.
 
 ### `user_joined_team`
 
@@ -522,7 +560,19 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
-Requires the AI plugin (`mattermost-plugin-ai`) to be installed and active.
+Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
+
+In addition to the configured `system_prompt` and `prompt`, the action automatically
+injects a trusted trigger-context system message that includes the current date as
+an RFC 3339 timestamp (UTC) annotated with the weekday, plus the equivalent Unix
+timestamp in milliseconds (matching the format used for timestamps stored by the plugin):
+
+```text
+Current Date: 2026-04-22T14:30:45Z (Wednesday)
+Current Unix Timestamp (ms): 1776868245000
+```
+
+These are sourced from the plugin server clock at execution time (not template-accessible).
 
 ---
 
@@ -575,9 +625,9 @@ Action templates receive a `FlowContext` object with the following structure:
 
 **Membership** _(membership_changed trigger only):_
 
-| Field  | Access                            |
-| ------ | --------------------------------- |
-| Action | `{{.Trigger.Membership.Action}}`  |
+| Field  | Access                           |
+| ------ | -------------------------------- |
+| Action | `{{.Trigger.Membership.Action}}` |
 
 **Team** _(user_joined_team trigger only):_
 
@@ -601,9 +651,9 @@ Previous action outputs are available via `{{.Steps.<action_id>}}`.
 
 > **Note:** Trigger data fields use `.Id` (e.g. `{{.Trigger.Post.Id}}`) following Mattermost model conventions, while step output fields use `.PostID` / `.ChannelID` following Go naming conventions. This difference reflects the underlying Go struct definitions.
 
-| Field      | Access                              |
-| ---------- | ----------------------------------- |
-| Post ID    | `{{.Steps.<action_id>.PostID}}`     |
-| Channel ID | `{{.Steps.<action_id>.ChannelID}}`  |
-| Message    | `{{.Steps.<action_id>.Message}}`    |
-| Truncated  | `{{.Steps.<action_id>.Truncated}}`  |
+| Field      | Access                             |
+| ---------- | ---------------------------------- |
+| Post ID    | `{{.Steps.<action_id>.PostID}}`    |
+| Channel ID | `{{.Steps.<action_id>.ChannelID}}` |
+| Message    | `{{.Steps.<action_id>.Message}}`   |
+| Truncated  | `{{.Steps.<action_id>.Truncated}}` |

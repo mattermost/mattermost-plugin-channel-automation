@@ -1,7 +1,5 @@
 package pluginbridge
 
-import "github.com/mattermost/mattermost-plugin-ai/public/bridgeclient"
-
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`
@@ -41,7 +39,8 @@ type MembershipChangedConfig struct {
 
 // MessagePostedConfig holds trigger config for the message_posted trigger type.
 type MessagePostedConfig struct {
-	ChannelID string `json:"channel_id"`
+	ChannelID            string `json:"channel_id"`
+	IncludeThreadReplies bool   `json:"include_thread_replies,omitempty"` // when false (default), thread replies (posts with a non-empty RootId) do not fire this trigger
 }
 
 // ScheduleConfig holds trigger config for the schedule trigger type.
@@ -68,9 +67,9 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string                        `json:"system_prompt,omitempty"`
-	Prompt       string                        `json:"prompt"`
-	ProviderType string                        `json:"provider_type"`
-	ProviderID   string                        `json:"provider_id"`
-	AllowedTools bridgeclient.AllowedToolsList `json:"allowed_tools,omitempty"`
+	SystemPrompt string   `json:"system_prompt,omitempty"`
+	Prompt       string   `json:"prompt"`
+	ProviderType string   `json:"provider_type"`
+	ProviderID   string   `json:"provider_id"`
+	AllowedTools []string `json:"allowed_tools,omitempty"`
 }

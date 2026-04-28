@@ -104,10 +104,20 @@ func isTriggerChannelTemplate(s string) bool {
 	return false
 }
 
+// disallowedTools lists tool names that may not appear in allowed_tools
+// because they would let an automation post messages outside the flow's
+// controlled output path.
+var disallowedTools = map[string]struct{}{
+	"create_post":   {},
+	"dm":            {},
+	"group_message": {},
+}
+
 // ValidateActions validates a list of actions.
 // At least one action is required. Each action must have a unique, non-empty ID
 // matching the slug pattern (lowercase alphanumeric + hyphens) and exactly one
-// action config set.
+// action config set. For ai_prompt actions, allowed_tools entries are checked
+// against a blacklist of disallowed tool names.
 func ValidateActions(actions []Action) error {
 	if len(actions) == 0 {
 		return fmt.Errorf("at least one action is required")
@@ -136,6 +146,17 @@ func ValidateActions(actions []Action) error {
 		}
 		if configCount > 1 {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
+		}
+		if a.AIPrompt != nil {
+			for _, rawTool := range a.AIPrompt.AllowedTools {
+				tool := strings.ToLower(strings.TrimSpace(rawTool))
+				if tool == "" {
+					continue
+				}
+				if _, blocked := disallowedTools[tool]; blocked {
+					return fmt.Errorf("action %d: tool %q is not allowed in automations", i, tool)
+				}
+			}
 		}
 	}
 	return nil
