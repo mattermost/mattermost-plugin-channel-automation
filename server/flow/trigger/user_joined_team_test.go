@@ -157,7 +157,7 @@ func TestUserJoinedTeamTrigger_BuildTriggerData(t *testing.T) {
 		assert.Equal(t, "alice", td.User.Username)
 	})
 
-	t.Run("team fetch failure falls back to placeholder", func(t *testing.T) {
+	t.Run("team fetch failure preserves Id from event", func(t *testing.T) {
 		api := newFakeTriggerAPI()
 		api.teamErrors["team1"] = mmmodel.NewAppError("fake", "boom", nil, "boom", http.StatusInternalServerError)
 		api.channelByName["team1/"+mmmodel.DefaultChannelName] = &mmmodel.Channel{Id: "town-square-id", Name: mmmodel.DefaultChannelName}
@@ -171,7 +171,9 @@ func TestUserJoinedTeamTrigger_BuildTriggerData(t *testing.T) {
 		td, err := tr.BuildTriggerData(api, event)
 		require.NoError(t, err)
 		require.NotNil(t, td.Team)
-		assert.Equal(t, "[unknown team]", td.Team.Name)
+		assert.Equal(t, "team1", td.Team.Id, "Id must propagate from event when GetTeam fails")
+		assert.Empty(t, td.Team.Name)
+		assert.Empty(t, td.Team.DisplayName)
 		assert.Equal(t, "town-square-id", td.Team.DefaultChannelId)
 		assert.NotEmpty(t, api.warnCalls)
 	})

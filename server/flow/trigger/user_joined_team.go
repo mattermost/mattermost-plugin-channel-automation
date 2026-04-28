@@ -65,13 +65,14 @@ func (t *UserJoinedTeamTrigger) BuildTriggerData(api model.TriggerAPI, event *mo
 		return model.TriggerData{}, fmt.Errorf("user_joined_team event has no user")
 	}
 
-	// Team lookup is best-effort — NewSafeTeam returns a placeholder on nil.
+	// Team lookup is best-effort. On failure we still preserve the team ID
+	// from the event so templates referencing .Trigger.Team.Id keep working.
 	team, appErr := api.GetTeam(event.Team.Id)
 	if appErr != nil {
 		api.LogWarn("Failed to get team for team join trigger, continuing with partial data",
 			"team_id", event.Team.Id, "err", appErr.Error())
+		team = &mmmodel.Team{Id: event.Team.Id}
 	}
-
 	safeTeam := model.NewSafeTeam(team)
 
 	// Default channel lookup is best-effort — templates referencing it will
