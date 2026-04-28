@@ -44,10 +44,15 @@ users rely on this structure to understand risk before they confirm):
    allowed_tools, write "Not applicable — no MCP tools in this automation." If allowed_tools uses
    only external MCP tools and/or unconstrained Mattermost tools (none of the constrained names
    below), write "Not applicable — no guardrail-constrained Mattermost MCP tools in this
-   automation." If guardrail-constrained Mattermost tools are used where outcomes may be visible
-   to others (public or private channel with members) and the user chose no guardrails, state
-   that explicitly and require them to acknowledge cross-channel leakage risk. Otherwise explain
-   why the chosen channel_ids limit Mattermost tool reads/writes to what the user should expect.
+   automation." Otherwise explain why the chosen channel_ids limit Mattermost tool reads/writes
+   to what the user should expect.
+   GUARDRAILS ARE REQUIRED (server-enforced) for any ai_prompt step with non-empty allowed_tools
+   when the trigger context is "sensitive": public channels, private channels with more than one
+   member, group messages (GMs), DMs whose other participant is not a bot, or any team-scoped
+   trigger (channel_created, user_joined_team). In these cases the save will be rejected with 403
+   unless guardrails.channel_ids is non-empty — collect the channel_ids from the user up front.
+   Exempt contexts (guardrails optional): DM with the bot itself, single-member private channel,
+   or ai_prompt with no allowed_tools.
 4. OUTPUT: Where the automation will post results — name the specific channel(s).
 
 Format as that four-part numbered list (1–4), then ask the user to confirm. Only call create_automation after
@@ -152,6 +157,9 @@ Action types:
      unconstrained Mattermost tools (search_users, list_agents) may be mixed in
      the same step alongside constrained tools — they pass through unchanged. Prefer the trigger
      channel ID or a small explicit channel_ids set the user agrees to when guardrails apply.
+     REQUIRED (server-enforced 403 on save) whenever allowed_tools is non-empty AND the trigger
+     context is sensitive: public channels, private channels with >1 member, GMs, DMs with a
+     non-bot user, or team-scoped triggers (channel_created, user_joined_team).
    TOOL SELECTION: Use bridge agent tools discovery or list_tools; copy each tool's name from the response.
    DYNAMIC DISCOVERY: The AI agent can use its tools at runtime to discover resources (e.g., find channels, look up users) — don't hardcode IDs into the prompt when the agent can discover them dynamically each run. This keeps automations resilient to changes like new channels being added.
    NOTE: "web_search" is NOT a valid tool name in allowed_tools. Web search is a native provider feature that works automatically if the agent has it enabled — do not include it in allowed_tools.
