@@ -1,6 +1,10 @@
 package trigger
 
 import (
+	"fmt"
+
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
+
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -31,4 +35,57 @@ func (t *UserJoinedTeamTrigger) Matches(trigger *model.Trigger, event *model.Eve
 		}
 	}
 	return true
+}
+
+func (t *UserJoinedTeamTrigger) Validate(trigger *model.Trigger, _ *model.Trigger) error {
+	if trigger.UserJoinedTeam == nil {
+		return fmt.Errorf("user_joined_team trigger config is missing")
+	}
+	if trigger.UserJoinedTeam.TeamID == "" {
+		return fmt.Errorf("user_joined_team trigger requires team_id")
+	}
+	if ut := trigger.UserJoinedTeam.UserType; ut != "" && ut != "user" && ut != "guest" {
+		return fmt.Errorf("user_joined_team trigger user_type must be \"user\", \"guest\", or empty (both)")
+	}
+	return nil
+}
+
+func (t *UserJoinedTeamTrigger) CandidateFlowIDs(store model.Store, event *model.Event) ([]string, error) {
+	if event.Team == nil || event.Team.Id == "" {
+		return nil, nil
+	}
+	return store.GetFlowIDsForUserJoinedTeam(event.Team.Id)
+}
+
+func (t *UserJoinedTeamTrigger) BuildTriggerData(api model.TriggerAPI, event *model.Event) (model.TriggerData, error) {
+	if event.Team == nil || event.Team.Id == "" {
+		return model.TriggerData{}, fmt.Errorf("user_joined_team event has no team")
+	}
+	if event.User == nil {
+		return model.TriggerData{}, fmt.Errorf("user_joined_team event has no user")
+	}
+
+	// Team lookup is best-effort — NewSafeTeam returns a placeholder on nil.
+	team, appErr := api.GetTeam(event.Team.Id)
+	if appErr != nil {
+		api.LogWarn("Failed to get team for team join trigger, continuing with partial data",
+			"team_id", event.Team.Id, "err", appErr.Error())
+	}
+
+	safeTeam := model.NewSafeTeam(team)
+
+	// Default channel lookup is best-effort — templates referencing it will
+	// render empty when this fails, which surfaces the problem at execution.
+	defaultChannel, appErr := api.GetChannelByName(event.Team.Id, mmmodel.DefaultChannelName, false)
+	if appErr != nil {
+		api.LogWarn("Failed to get default channel for team join trigger",
+			"team_id", event.Team.Id, "err", appErr.Error())
+	} else {
+		safeTeam.DefaultChannelId = defaultChannel.Id
+	}
+
+	return model.TriggerData{
+		User: model.NewSafeUser(event.User),
+		Team: safeTeam,
+	}, nil
 }

@@ -479,6 +479,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		workerPool:     wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = flow.NewDispatcher(api, triggerService, wqStore, wp)
 
 	return p, wqStore
 }
@@ -661,6 +662,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 		workerPool:     wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = flow.NewDispatcher(api, triggerService, wqStore, wp)
 
 	f := &model.Flow{
 		ID:      "f1",
