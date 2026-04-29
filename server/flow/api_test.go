@@ -1433,17 +1433,23 @@ func TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.T) {
 	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{
 		{Name: "search", ServerOrigin: "external-mcp"},
 	}}
-	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
+	router, _, api := adminAPIWithBridge(t, "admin1", bridge)
 
-	body := `{
+	// Trigger is channel_created so allowed_tools requires guardrails: stub
+	// the channel-permission checks for the guardrail channel.
+	guardrailChannelID := mmmodel.NewId()
+	api.On("GetChannel", guardrailChannelID).Return(&mmmodel.Channel{Id: guardrailChannelID, TeamId: "team1"}, (*mmmodel.AppError)(nil))
+	api.On("HasPermissionToChannel", "admin1", guardrailChannelID, mmmodel.PermissionReadChannel).Return(true)
+
+	body := fmt.Sprintf(`{
 		"name": "AI Flow",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [
-			{"id": "with-tools", "ai_prompt": {"prompt": "p", "provider_type": "agent", "provider_id": "bot1", "allowed_tools": ["search"]}},
+			{"id": "with-tools", "ai_prompt": {"prompt": "p", "provider_type": "agent", "provider_id": "bot1", "allowed_tools": ["search"], "guardrails": {"channel_ids": [%q]}}},
 			{"id": "without-tools", "ai_prompt": {"prompt": "p", "provider_type": "agent", "provider_id": "bot1"}}
 		]
-	}`
+	}`, guardrailChannelID)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "admin1")
