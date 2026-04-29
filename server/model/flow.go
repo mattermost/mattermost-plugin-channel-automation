@@ -2,6 +2,14 @@ package model
 
 import "strings"
 
+// Valid AIPromptActionConfig.ProviderType values. Agents are bots that go
+// through the per-user bridge ACL and can use tools; services are raw LLM
+// completion endpoints that cannot.
+const (
+	AIProviderTypeAgent   = "agent"
+	AIProviderTypeService = "service"
+)
+
 // Flow represents a trigger-action workflow.
 type Flow struct {
 	ID        string   `json:"id"`

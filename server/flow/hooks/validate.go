@@ -22,11 +22,6 @@ type AgentToolsLister interface {
 	GetAgentTools(agentID, userID string) ([]bridgeclient.BridgeToolInfo, error)
 }
 
-// agentProviderType is the value of AIPromptActionConfig.ProviderType that
-// indicates the action targets an AI agent (as opposed to a raw service).
-// Only agent providers go through the per-user bridge ACL we verify here.
-const agentProviderType = "agent"
-
 // ValidateAllowedTools verifies, for every ai_prompt action targeting an
 // agent provider, that userID has bridge-level access to that agent. When
 // the action also specifies allowed_tools, each entry must be genuinely
@@ -47,7 +42,7 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 	cache := make(map[string]map[string]bridgeclient.BridgeToolInfo)
 
 	for i, a := range f.Actions {
-		if a.AIPrompt == nil || a.AIPrompt.ProviderType != agentProviderType {
+		if a.AIPrompt == nil || a.AIPrompt.ProviderType != model.AIProviderTypeAgent {
 			continue
 		}
 		if userID == "" {
@@ -55,7 +50,7 @@ func ValidateAllowedTools(f *model.Flow, userID string, bridge AgentToolsLister)
 		}
 		agentID := a.AIPrompt.ProviderID
 		if agentID == "" {
-			return fmt.Errorf("action %d: ai_prompt with provider_type %q requires provider_id", i, agentProviderType)
+			return fmt.Errorf("action %d: ai_prompt with provider_type %q requires provider_id", i, model.AIProviderTypeAgent)
 		}
 
 		available, ok := cache[agentID]

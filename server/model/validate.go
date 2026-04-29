@@ -193,17 +193,24 @@ func ValidateActions(actions []Action) error {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
 		}
 		if a.AIPrompt != nil {
+			// Reject unknown provider_type values up front so the
+			// agent-only / service-only branches below don't silently
+			// accept typos or future additions that haven't been wired
+			// through the rest of the stack yet.
+			if a.AIPrompt.ProviderType != AIProviderTypeAgent && a.AIPrompt.ProviderType != AIProviderTypeService {
+				return fmt.Errorf("action %d: ai_prompt provider_type must be %q or %q", i, AIProviderTypeAgent, AIProviderTypeService)
+			}
 			// Tool support is agent-only at the bridge layer (services reject
 			// allowed_tools with HTTP 400). Catch the misconfiguration at save
 			// time so the user sees a clear error instead of an opaque
 			// execute-time failure. Guardrails imply allowed_tools, so they
 			// are also agent-only.
-			if a.AIPrompt.ProviderType == "service" {
+			if a.AIPrompt.ProviderType == AIProviderTypeService {
 				if len(a.AIPrompt.AllowedTools) > 0 {
-					return fmt.Errorf("action %d: allowed_tools is only supported with provider_type \"agent\"", i)
+					return fmt.Errorf("action %d: allowed_tools is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}
 				if a.AIPrompt.Guardrails != nil {
-					return fmt.Errorf("action %d: guardrails is only supported with provider_type \"agent\"", i)
+					return fmt.Errorf("action %d: guardrails is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}
 			}
 			if a.AIPrompt.Guardrails != nil {

@@ -342,6 +342,24 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("unknown provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "bogus", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	t.Run("empty provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
 	// The bridge enforces that allowed_tools is rejected for service
 	// completion endpoints (HTTP 400 "allowed_tools is only supported for
 	// agent completion endpoints"). Mirror that rule at save time so users
