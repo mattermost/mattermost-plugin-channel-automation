@@ -1,4 +1,4 @@
-import {deleteFlow, getFlows, updateFlow} from 'client';
+import {deleteAutomation, getAutomations, updateAutomation} from 'client';
 import React, {useCallback, useEffect, useState} from 'react';
 import {useHistory, useRouteMatch} from 'react-router-dom';
 import {getTriggerConfig} from 'triggers';
@@ -8,7 +8,7 @@ import 'triggers/membership_changed';
 import 'triggers/message_posted';
 import 'triggers/schedule';
 import 'triggers/user_joined_team';
-import type {Flow} from 'types';
+import type {Automation} from 'types';
 import {getTriggerType} from 'types';
 
 const styles = {
@@ -59,83 +59,83 @@ const styles = {
     } as React.CSSProperties,
 };
 
-function formatTrigger(flow: Flow): string {
-    const tt = getTriggerType(flow.trigger);
+function formatTrigger(automation: Automation): string {
+    const tt = getTriggerType(automation.trigger);
     const config = getTriggerConfig(tt);
     if (config) {
-        return `${config.label} ${config.formatSummary(flow.trigger)}`;
+        return `${config.label} ${config.formatSummary(automation.trigger)}`;
     }
     return tt;
 }
 
-const FlowListView: React.FC = () => {
+const AutomationListView: React.FC = () => {
     const history = useHistory();
     const {url} = useRouteMatch();
-    const [flows, setFlows] = useState<Flow[]>([]);
+    const [automations, setAutomations] = useState<Automation[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchFlows = useCallback(async () => {
+    const fetchAutomations = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
-            const data = await getFlows();
-            setFlows(data);
+            const data = await getAutomations();
+            setAutomations(data);
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to load flows');
+            setError(err instanceof Error ? err.message : 'Failed to load automations');
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        fetchFlows();
-    }, [fetchFlows]);
+        fetchAutomations();
+    }, [fetchAutomations]);
 
-    const handleToggleEnabled = useCallback(async (e: React.MouseEvent, flow: Flow) => {
+    const handleToggleEnabled = useCallback(async (e: React.MouseEvent, automation: Automation) => {
         e.stopPropagation();
-        const updated = {...flow, enabled: !flow.enabled};
-        setFlows((prev) => prev.map((f) => (f.id === flow.id ? updated : f)));
+        const updated = {...automation, enabled: !automation.enabled};
+        setAutomations((prev) => prev.map((f) => (f.id === automation.id ? updated : f)));
         try {
-            await updateFlow(flow.id, updated);
+            await updateAutomation(automation.id, updated);
         } catch (err: unknown) {
-            setFlows((prev) => prev.map((f) => (f.id === flow.id ? flow : f)));
-            setError(err instanceof Error ? err.message : 'Failed to update flow');
+            setAutomations((prev) => prev.map((f) => (f.id === automation.id ? automation : f)));
+            setError(err instanceof Error ? err.message : 'Failed to update automation');
         }
     }, []);
 
-    const handleDelete = useCallback(async (e: React.MouseEvent, flow: Flow) => {
+    const handleDelete = useCallback(async (e: React.MouseEvent, automation: Automation) => {
         e.stopPropagation();
         // eslint-disable-next-line no-alert
-        if (!window.confirm(`Delete flow "${flow.name}"?`)) {
+        if (!window.confirm(`Delete automation "${automation.name}"?`)) {
             return;
         }
         try {
-            await deleteFlow(flow.id);
-            setFlows((prev) => prev.filter((f) => f.id !== flow.id));
+            await deleteAutomation(automation.id);
+            setAutomations((prev) => prev.filter((f) => f.id !== automation.id));
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to delete flow');
+            setError(err instanceof Error ? err.message : 'Failed to delete automation');
         }
     }, []);
 
     if (loading) {
-        return <p>{'Loading flows...'}</p>;
+        return <p>{'Loading automations...'}</p>;
     }
 
     return (
         <div>
             <div style={styles.header}>
-                <h2>{'Flows'}</h2>
+                <h2>{'Automations'}</h2>
                 <button
                     style={styles.btnPrimary}
                     onClick={() => history.push(`${url}/add`)}
                 >
-                    {'Create Flow'}
+                    {'Create Automation'}
                 </button>
             </div>
             {error && <p style={styles.error}>{error}</p>}
-            {flows.length === 0 ? (
-                <p>{'No flows yet. Create one to get started.'}</p>
+            {automations.length === 0 ? (
+                <p>{'No automations yet. Create one to get started.'}</p>
             ) : (
                 <table style={styles.table}>
                     <thead>
@@ -148,27 +148,27 @@ const FlowListView: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {flows.map((flow) => (
+                        {automations.map((automation) => (
                             <tr
-                                key={flow.id}
+                                key={automation.id}
                                 style={styles.row}
-                                onClick={() => history.push(`${url}/${flow.id}/edit`)}
+                                onClick={() => history.push(`${url}/${automation.id}/edit`)}
                             >
-                                <td style={styles.td}>{flow.name}</td>
-                                <td style={styles.td}>{formatTrigger(flow)}</td>
+                                <td style={styles.td}>{automation.name}</td>
+                                <td style={styles.td}>{formatTrigger(automation)}</td>
                                 <td style={styles.td}>
                                     <input
                                         type='checkbox'
-                                        checked={flow.enabled}
-                                        onClick={(e) => handleToggleEnabled(e, flow)}
+                                        checked={automation.enabled}
+                                        onClick={(e) => handleToggleEnabled(e, automation)}
                                         readOnly={true}
                                     />
                                 </td>
-                                <td style={styles.td}>{(flow.actions ?? []).length}</td>
+                                <td style={styles.td}>{(automation.actions ?? []).length}</td>
                                 <td style={styles.td}>
                                     <button
                                         style={styles.btnDanger}
-                                        onClick={(e) => handleDelete(e, flow)}
+                                        onClick={(e) => handleDelete(e, automation)}
                                     >
                                         {'Delete'}
                                     </button>
@@ -182,4 +182,4 @@ const FlowListView: React.FC = () => {
     );
 };
 
-export default FlowListView;
+export default AutomationListView;

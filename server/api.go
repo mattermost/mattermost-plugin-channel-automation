@@ -7,20 +7,20 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 )
 
 // configProvider adapts the plugin's unexported configuration to the
-// flow.Configuration interface. It calls getConfig on each access so
+// automation.Configuration interface. It calls getConfig on each access so
 // it always reflects the current configuration.
 type configProvider struct {
 	getConfig func() *configuration
 }
 
-func (c *configProvider) MaxFlowsPerChannel() int {
-	return c.getConfig().MaxFlowsPerChannelLimit
+func (c *configProvider) MaxAutomationsPerChannel() int {
+	return c.getConfig().MaxAutomationsPerChannelLimit
 }
 
 // initRouter initializes the HTTP router for the plugin.
@@ -31,10 +31,10 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
-	flowAPI.RegisterRoutes(apiRouter)
+	automationAPI := automation.NewAPIHandler(p.automationStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
+	automationAPI.RegisterRoutes(apiRouter)
 
-	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)
+	execAPI := execution.NewAPIHandler(p.historyStore, p.automationStore, p.API)
 	execAPI.RegisterRoutes(apiRouter)
 
 	apiRouter.HandleFunc("/config", p.handleGetClientConfig).Methods(http.MethodGet)

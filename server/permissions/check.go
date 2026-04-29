@@ -11,24 +11,24 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// CheckFlowPermissions verifies that userID has permission to manage the flow.
-// System admins are always allowed. For channel_created flows the user must be
+// CheckAutomationPermissions verifies that userID has permission to manage the automation.
+// System admins are always allowed. For channel_created automations the user must be
 // a team admin on the trigger's team, and all literal channel references must
-// belong to that team. For other flows the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the flow.
+// belong to that team. For other automations the user must be a channel admin
+// (SchemeAdmin) on every literal channel referenced in the automation.
 //
 // When no concrete channels can be verified (e.g. only templated or AI-only
 // actions on a non-channel_created trigger), we require system admin permission.
-func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
+func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automation) error {
 	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		return nil
 	}
 
-	// channel_created and user_joined_team flows use team-level authorization.
+	// channel_created and user_joined_team automations use team-level authorization.
 	// We call GetTeam first because HasPermissionToTeam is boolean-only and
 	// cannot distinguish infrastructure failures from genuine permission denials.
-	if f.Trigger.ChannelCreated != nil {
-		teamID := f.Trigger.ChannelCreated.TeamID
+	if a.Trigger.ChannelCreated != nil {
+		teamID := a.Trigger.ChannelCreated.TeamID
 		if _, appErr := api.GetTeam(teamID); appErr != nil {
 			if appErr.StatusCode >= http.StatusInternalServerError {
 				return fmt.Errorf("failed to verify team: %w", appErr)
@@ -38,7 +38,7 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 		if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
 			return fmt.Errorf("you must be a team admin on the team specified in the channel_created trigger")
 		}
-		for _, chID := range model.CollectChannelIDs(f) {
+		for _, chID := range model.CollectChannelIDs(a) {
 			ch, appErr := api.GetChannel(chID)
 			if appErr != nil {
 				if appErr.StatusCode >= http.StatusInternalServerError {
@@ -53,10 +53,10 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 		return nil
 	}
 
-	if f.Trigger.UserJoinedTeam != nil {
-		teamIDs := model.CollectTeamIDs(f)
+	if a.Trigger.UserJoinedTeam != nil {
+		teamIDs := model.CollectTeamIDs(a)
 		if len(teamIDs) == 0 {
-			return fmt.Errorf("system admin permission is required for flows without explicit team references")
+			return fmt.Errorf("system admin permission is required for automations without explicit team references")
 		}
 		for _, teamID := range teamIDs {
 			if _, appErr := api.GetTeam(teamID); appErr != nil {
@@ -66,15 +66,15 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 				return fmt.Errorf("team %s not found or not accessible", teamID)
 			}
 			if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
-				return fmt.Errorf("you must be a team admin on all teams referenced by this flow")
+				return fmt.Errorf("you must be a team admin on all teams referenced by this automation")
 			}
 		}
 		return nil
 	}
 
-	channelIDs := model.CollectChannelIDs(f)
+	channelIDs := model.CollectChannelIDs(a)
 	if len(channelIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
+		return fmt.Errorf("system admin permission is required for automations without explicit channel references")
 	}
 	for _, chID := range channelIDs {
 		member, appErr := api.GetChannelMember(chID, userID)
@@ -84,10 +84,10 @@ func CheckFlowPermissions(api plugin.API, userID string, f *model.Flow) error {
 			if appErr.StatusCode >= http.StatusInternalServerError {
 				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
 			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
 		}
 		if !member.SchemeAdmin {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this flow")
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
 		}
 	}
 	return nil

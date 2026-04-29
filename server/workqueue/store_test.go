@@ -60,11 +60,11 @@ func setupStore(t *testing.T) (*Store, *inMemoryKV) {
 	return NewStore(api, &sync.Mutex{}), kv
 }
 
-func makeItem(id, flowID, flowName string) *model.WorkItem {
+func makeItem(id, automationID, automationName string) *model.WorkItem {
 	return &model.WorkItem{
-		ID:       id,
-		FlowID:   flowID,
-		FlowName: flowName,
+		ID:             id,
+		AutomationID:   automationID,
+		AutomationName: automationName,
 		TriggerData: model.TriggerData{
 			Post: &model.SafePost{Id: "post1", ChannelId: "ch1", Message: "hello"},
 		},
@@ -81,8 +81,8 @@ func TestStore_EnqueueAndClaimNext(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, claimed)
 	assert.Equal(t, "w1", claimed.ID)
-	assert.Equal(t, "f1", claimed.FlowID)
-	assert.Equal(t, "Flow 1", claimed.FlowName)
+	assert.Equal(t, "f1", claimed.AutomationID)
+	assert.Equal(t, "Flow 1", claimed.AutomationName)
 	assert.Equal(t, model.WorkItemStatusRunning, claimed.Status)
 	assert.NotZero(t, claimed.CreatedAt)
 	assert.NotZero(t, claimed.StartedAt)

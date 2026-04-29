@@ -29,7 +29,7 @@ export interface TriggerConfig {
     /** Serializes form state back into a Trigger for the API. */
     toTrigger(state: TriggerFormState): Trigger;
 
-    /** Short description for the flow list table, e.g. "on #channel". */
+    /** Short description for the automation list table, e.g. "on #channel". */
     formatSummary(trigger: Trigger): string;
 
     /** Template variables JSON string shown in the editor. */

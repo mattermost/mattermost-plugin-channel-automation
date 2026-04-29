@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
@@ -450,7 +450,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 	api.On("GetTeam", mock.Anything).Return(&mmmodel.Team{Id: "team1", Name: "testteam", DisplayName: "Test Team"}, nil).Maybe()
 	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(&mmmodel.Channel{Id: "town-square-id", Name: mmmodel.DefaultChannelName}, nil).Maybe()
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	switch triggerType {
 	case model.TriggerTypeMessagePosted:
 		registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
@@ -462,21 +462,21 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 	}
 
-	flowStore := flow.NewStore(api, &sync.Mutex{})
-	triggerService := flow.NewTriggerService(flowStore, registry)
+	automationStore := automation.NewStore(api, &sync.Mutex{})
+	triggerService := automation.NewTriggerService(automationStore, registry)
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
 
 	// Create a WorkerPool but don't start it — we just need Notify() to not block.
-	executor := flow.NewFlowExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+	executor := automation.NewAutomationExecutor(registry)
+	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, api, 1)
 
 	p := &Plugin{
-		botUserID:      "bot-id",
-		registry:       registry,
-		flowStore:      flowStore,
-		triggerService: triggerService,
-		workQueueStore: wqStore,
-		workerPool:     wp,
+		botUserID:       "bot-id",
+		registry:        registry,
+		automationStore: automationStore,
+		triggerService:  triggerService,
+		workQueueStore:  wqStore,
+		workerPool:      wp,
 	}
 	p.SetAPI(api)
 
@@ -486,15 +486,15 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
-	// Save a flow triggered by messages in ch1.
-	f := &model.Flow{
+	// Save a automation triggered by messages in ch1.
+	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Test Flow",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
 	}
-	require.NoError(t, p.flowStore.Save(f))
+	require.NoError(t, p.automationStore.Save(f))
 
 	post := &mmmodel.Post{Id: "post1", UserId: "user1", ChannelId: "ch1", Message: "hello"}
 	p.MessageHasBeenPosted(nil, post)
@@ -509,14 +509,14 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeChannelCreated)
 
-	f := &model.Flow{
+	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Test Flow",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
 	}
-	require.NoError(t, p.flowStore.Save(f))
+	require.NoError(t, p.automationStore.Save(f))
 
 	ch := &mmmodel.Channel{Id: "ch-new", Name: "new-channel", DisplayName: "New Channel", Type: mmmodel.ChannelTypeOpen, TeamId: "team1", CreatorId: "user1"}
 	p.ChannelHasBeenCreated(nil, ch)
@@ -530,14 +530,14 @@ func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMembershipChanged)
 
-	f := &model.Flow{
+	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Test Flow",
 		Enabled: true,
 		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
 	}
-	require.NoError(t, p.flowStore.Save(f))
+	require.NoError(t, p.automationStore.Save(f))
 
 	member := &mmmodel.ChannelMember{UserId: "user1", ChannelId: "ch1"}
 	p.handleMembershipChange(member, "joined")
@@ -576,14 +576,14 @@ func TestUserHasJoinedTeam_SkipsIsBotUser(t *testing.T) {
 func TestUserHasJoinedTeam_ProcessesNormalUser(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeUserJoinedTeam)
 
-	f := &model.Flow{
+	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Team Join Flow",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
 	}
-	require.NoError(t, p.flowStore.Save(f))
+	require.NoError(t, p.automationStore.Save(f))
 
 	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
 	p.UserHasJoinedTeam(nil, member, nil)
@@ -643,33 +643,33 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	api.On("GetTeam", mock.Anything).Return(nil, &mmmodel.AppError{Message: "team lookup failed"})
 	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(nil, &mmmodel.AppError{Message: "channel lookup failed"})
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 
-	flowStore := flow.NewStore(api, &sync.Mutex{})
-	triggerService := flow.NewTriggerService(flowStore, registry)
+	automationStore := automation.NewStore(api, &sync.Mutex{})
+	triggerService := automation.NewTriggerService(automationStore, registry)
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
-	executor := flow.NewFlowExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, flowStore, nil, api, 1)
+	executor := automation.NewAutomationExecutor(registry)
+	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, api, 1)
 
 	p := &Plugin{
-		botUserID:      "bot-id",
-		registry:       registry,
-		flowStore:      flowStore,
-		triggerService: triggerService,
-		workQueueStore: wqStore,
-		workerPool:     wp,
+		botUserID:       "bot-id",
+		registry:        registry,
+		automationStore: automationStore,
+		triggerService:  triggerService,
+		workQueueStore:  wqStore,
+		workerPool:      wp,
 	}
 	p.SetAPI(api)
 
-	f := &model.Flow{
+	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Team Join Flow",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "welcome"}}},
 	}
-	require.NoError(t, flowStore.Save(f))
+	require.NoError(t, automationStore.Save(f))
 
 	member := &mmmodel.TeamMember{UserId: "user1", TeamId: "team1"}
 	p.UserHasJoinedTeam(nil, member, nil)

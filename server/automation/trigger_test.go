@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -35,123 +35,123 @@ func newMembershipChangedEvent(channelID, action string) *model.Event {
 	}
 }
 
-func TestTriggerService_FindMatchingFlows_NoFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_NoAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch-empty"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch-empty"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_ReturnsEnabledFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ReturnsEnabledAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Enabled Flow",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Also Enabled",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 2)
-	assert.Equal(t, "f1", flows[0].ID)
-	assert.Equal(t, "f2", flows[1].ID)
+	require.Len(t, automations, 2)
+	assert.Equal(t, "f1", automations[0].ID)
+	assert.Equal(t, "f2", automations[1].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_FiltersDisabled(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_FiltersDisabled(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Enabled",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Disabled",
 		Enabled: false,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_AllDisabled(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_AllDisabled(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Disabled 1",
 		Enabled: false,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Disabled 2",
 		Enabled: false,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch1"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_DifferentChannels(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_DifferentChannels(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Channel 1 Flow",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Channel 2 Flow",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 
-	flows, err = svc.FindMatchingFlows(newMessagePostedEvent("ch2"))
+	automations, err = svc.FindMatchingAutomations(newMessagePostedEvent("ch2"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f2", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f2", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_DeletedFlowSkipped(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_DeletedAutomationSkipped(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Will Delete",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Stays",
 		Enabled: true,
@@ -160,68 +160,68 @@ func TestTriggerService_FindMatchingFlows_DeletedFlowSkipped(t *testing.T) {
 
 	require.NoError(t, store.Delete("f1"))
 
-	flows, err := svc.FindMatchingFlows(newMessagePostedEvent("ch1"))
+	automations, err := svc.FindMatchingAutomations(newMessagePostedEvent("ch1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f2", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f2", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_MembershipChanged(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_MembershipChanged(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Welcome",
 		Enabled: true,
 		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch1", "joined"))
+	automations, err := svc.FindMatchingAutomations(newMembershipChangedEvent("ch1", "joined"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_MembershipChanged_WrongChannel(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_MembershipChanged_WrongChannel(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Welcome",
 		Enabled: true,
 		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch2", "joined"))
+	automations, err := svc.FindMatchingAutomations(newMembershipChangedEvent("ch2", "joined"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_MembershipChanged_Disabled(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_MembershipChanged_Disabled(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Disabled",
 		Enabled: false,
 		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newMembershipChangedEvent("ch1", "joined"))
+	automations, err := svc.FindMatchingAutomations(newMembershipChangedEvent("ch1", "joined"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_MembershipChanged_NilChannel(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_MembershipChanged_NilChannel(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeMembershipChanged, Channel: nil})
+	automations, err := svc.FindMatchingAutomations(&model.Event{Type: model.TriggerTypeMembershipChanged, Channel: nil})
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
 func newChannelCreatedEvent(channelID, teamID string) *model.Event {
@@ -231,68 +231,68 @@ func newChannelCreatedEvent(channelID, teamID string) *model.Event {
 	}
 }
 
-func TestTriggerService_FindMatchingFlows_ChannelCreated(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ChannelCreated(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "On Channel Created",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
+	automations, err := svc.FindMatchingAutomations(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_ChannelCreated_Disabled(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ChannelCreated_Disabled(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Disabled",
 		Enabled: false,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
+	automations, err := svc.FindMatchingAutomations(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_ChannelCreated_NilChannel(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ChannelCreated_NilChannel(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeChannelCreated, Channel: nil})
+	automations, err := svc.FindMatchingAutomations(&model.Event{Type: model.TriggerTypeChannelCreated, Channel: nil})
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_ChannelCreated_MultipleFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ChannelCreated_MultipleAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Flow 1",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Flow 2",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newChannelCreatedEvent("any-channel", "team1"))
+	automations, err := svc.FindMatchingAutomations(newChannelCreatedEvent("any-channel", "team1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 2)
+	require.Len(t, automations, 2)
 }
 
 func newUserJoinedTeamEvent(teamID string) *model.Event {
@@ -302,82 +302,82 @@ func newUserJoinedTeamEvent(teamID string) *model.Event {
 	}
 }
 
-func TestTriggerService_FindMatchingFlows_UserJoinedTeam(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "On Team Join",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
+	automations, err := svc.FindMatchingAutomations(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
-func TestTriggerService_FindMatchingFlows_UserJoinedTeam_WrongTeam(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_WrongTeam(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "On Team Join",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team2"))
+	automations, err := svc.FindMatchingAutomations(newUserJoinedTeamEvent("team2"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_UserJoinedTeam_Disabled(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_Disabled(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Disabled",
 		Enabled: false,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
+	automations, err := svc.FindMatchingAutomations(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_UserJoinedTeam_NilTeam(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_NilTeam(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	flows, err := svc.FindMatchingFlows(&model.Event{Type: model.TriggerTypeUserJoinedTeam, Team: nil})
+	automations, err := svc.FindMatchingAutomations(&model.Event{Type: model.TriggerTypeUserJoinedTeam, Team: nil})
 	require.NoError(t, err)
-	assert.Nil(t, flows)
+	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingFlows_UserJoinedTeam_MultipleFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_MultipleAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Flow 1",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Flow 2",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 
-	flows, err := svc.FindMatchingFlows(newUserJoinedTeamEvent("team1"))
+	automations, err := svc.FindMatchingAutomations(newUserJoinedTeamEvent("team1"))
 	require.NoError(t, err)
-	require.Len(t, flows, 2)
+	require.Len(t, automations, 2)
 }

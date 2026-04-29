@@ -1,7 +1,7 @@
 package model
 
-// ActionHandler executes a single action step within a flow.
+// ActionHandler executes a single action step within an automation.
 type ActionHandler interface {
 	Type() string
-	Execute(action *Action, ctx *FlowContext) (*StepOutput, error)
+	Execute(action *Action, ctx *AutomationContext) (*StepOutput, error)
 }

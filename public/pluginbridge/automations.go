@@ -35,16 +35,16 @@ func checkResponse(resp *http.Response) error {
 	}
 }
 
-// ListFlowsOptions contains optional filters for ListFlows.
-type ListFlowsOptions struct {
-	// ChannelID filters flows to those triggered by the given channel.
+// ListAutomationsOptions contains optional filters for ListAutomations.
+type ListAutomationsOptions struct {
+	// ChannelID filters automations to those triggered by the given channel.
 	ChannelID string
 }
 
-// ListFlows returns all flows visible to the caller.
+// ListAutomations returns all automations visible to the caller.
 // Use the opts fields to filter the results (pass an empty struct for no filters).
-func (c *Client) ListFlows(opts ListFlowsOptions) ([]*Flow, error) {
-	path := "/flows"
+func (c *Client) ListAutomations(opts ListAutomationsOptions) ([]*Automation, error) {
+	path := "/automations"
 	if opts.ChannelID != "" {
 		path += "?channel_id=" + url.QueryEscape(opts.ChannelID)
 	}
@@ -64,19 +64,19 @@ func (c *Client) ListFlows(opts ListFlowsOptions) ([]*Flow, error) {
 		return nil, err
 	}
 
-	var flows []*Flow
-	if err := json.NewDecoder(resp.Body).Decode(&flows); err != nil {
+	var automations []*Automation
+	if err := json.NewDecoder(resp.Body).Decode(&automations); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
-	return flows, nil
+	return automations, nil
 }
 
-// GetFlow returns a single flow by ID.
-func (c *Client) GetFlow(flowID string) (*Flow, error) {
-	if flowID == "" {
-		return nil, fmt.Errorf("flow ID must not be empty")
+// GetAutomation returns a single automation by ID.
+func (c *Client) GetAutomation(automationID string) (*Automation, error) {
+	if automationID == "" {
+		return nil, fmt.Errorf("automation ID must not be empty")
 	}
-	req, err := c.newRequest(http.MethodGet, "/flows/"+url.PathEscape(flowID), nil)
+	req, err := c.newRequest(http.MethodGet, "/automations/"+url.PathEscape(automationID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -91,24 +91,24 @@ func (c *Client) GetFlow(flowID string) (*Flow, error) {
 		return nil, err
 	}
 
-	var flow Flow
-	if err := json.NewDecoder(resp.Body).Decode(&flow); err != nil {
+	var automation Automation
+	if err := json.NewDecoder(resp.Body).Decode(&automation); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
-	return &flow, nil
+	return &automation, nil
 }
 
-// CreateFlow creates a new flow and returns the created flow with server-assigned fields.
-func (c *Client) CreateFlow(flow *Flow) (*Flow, error) {
-	if flow == nil {
-		return nil, fmt.Errorf("flow must not be nil")
+// CreateAutomation creates a new automation and returns the created automation with server-assigned fields.
+func (c *Client) CreateAutomation(automation *Automation) (*Automation, error) {
+	if automation == nil {
+		return nil, fmt.Errorf("automation must not be nil")
 	}
-	body, err := json.Marshal(flow)
+	body, err := json.Marshal(automation)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.newRequest(http.MethodPost, "/flows", bytes.NewReader(body))
+	req, err := c.newRequest(http.MethodPost, "/automations", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -123,28 +123,28 @@ func (c *Client) CreateFlow(flow *Flow) (*Flow, error) {
 		return nil, err
 	}
 
-	var created Flow
+	var created Automation
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 	return &created, nil
 }
 
-// UpdateFlow updates an existing flow. The flow's ID field must be set.
-func (c *Client) UpdateFlow(flow *Flow) (*Flow, error) {
-	if flow == nil {
-		return nil, fmt.Errorf("flow must not be nil")
+// UpdateAutomation updates an existing automation. The automation's ID field must be set.
+func (c *Client) UpdateAutomation(automation *Automation) (*Automation, error) {
+	if automation == nil {
+		return nil, fmt.Errorf("automation must not be nil")
 	}
-	if flow.ID == "" {
-		return nil, fmt.Errorf("flow ID must be set for update")
+	if automation.ID == "" {
+		return nil, fmt.Errorf("automation ID must be set for update")
 	}
 
-	body, err := json.Marshal(flow)
+	body, err := json.Marshal(automation)
 	if err != nil {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := c.newRequest(http.MethodPut, "/flows/"+url.PathEscape(flow.ID), bytes.NewReader(body))
+	req, err := c.newRequest(http.MethodPut, "/automations/"+url.PathEscape(automation.ID), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -159,19 +159,19 @@ func (c *Client) UpdateFlow(flow *Flow) (*Flow, error) {
 		return nil, err
 	}
 
-	var updated Flow
+	var updated Automation
 	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 	return &updated, nil
 }
 
-// DeleteFlow deletes a flow by ID.
-func (c *Client) DeleteFlow(flowID string) error {
-	if flowID == "" {
-		return fmt.Errorf("flow ID must not be empty")
+// DeleteAutomation deletes an automation by ID.
+func (c *Client) DeleteAutomation(automationID string) error {
+	if automationID == "" {
+		return fmt.Errorf("automation ID must not be empty")
 	}
-	req, err := c.newRequest(http.MethodDelete, "/flows/"+url.PathEscape(flowID), nil)
+	req, err := c.newRequest(http.MethodDelete, "/automations/"+url.PathEscape(automationID), nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}

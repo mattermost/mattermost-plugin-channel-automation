@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"fmt"
@@ -6,27 +6,27 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// FlowExecutor dispatches flow actions using the registry.
-type FlowExecutor struct {
+// AutomationExecutor dispatches automation actions using the registry.
+type AutomationExecutor struct {
 	registry *Registry
 }
 
-// NewFlowExecutor creates a FlowExecutor with the given registry.
-func NewFlowExecutor(registry *Registry) *FlowExecutor {
-	return &FlowExecutor{registry: registry}
+// NewAutomationExecutor creates an AutomationExecutor with the given registry.
+func NewAutomationExecutor(registry *Registry) *AutomationExecutor {
+	return &AutomationExecutor{registry: registry}
 }
 
-// Execute runs all actions in the flow sequentially, building up the FlowContext.
+// Execute runs all actions in the automation sequentially, building up the AutomationContext.
 // Returns the context (with any partial step outputs) and an error on the first
 // failure or if an action type is unknown.
-func (e *FlowExecutor) Execute(f *model.Flow, triggerData model.TriggerData) (*model.FlowContext, error) {
-	ctx := &model.FlowContext{
-		CreatedBy: f.CreatedBy,
+func (e *AutomationExecutor) Execute(a *model.Automation, triggerData model.TriggerData) (*model.AutomationContext, error) {
+	ctx := &model.AutomationContext{
+		CreatedBy: a.CreatedBy,
 		Trigger:   triggerData,
 		Steps:     make(map[string]model.StepOutput),
 	}
 
-	for _, action := range f.Actions {
+	for _, action := range a.Actions {
 		handler, ok := e.registry.GetAction(action.Type())
 		if !ok {
 			return ctx, fmt.Errorf("unknown action type %q for action %q", action.Type(), action.ID)

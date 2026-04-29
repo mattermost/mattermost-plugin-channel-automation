@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -28,7 +28,7 @@ type testAction struct {
 
 func (a *testAction) Type() string { return "send_message" }
 
-func (a *testAction) Execute(_ *model.Action, _ *model.FlowContext) (*model.StepOutput, error) {
+func (a *testAction) Execute(_ *model.Action, _ *model.AutomationContext) (*model.StepOutput, error) {
 	cur := a.running.Add(1)
 	defer a.running.Add(-1)
 
@@ -62,42 +62,42 @@ func (a *testAction) getExecCount() int {
 
 // testFlowStore is a simple in-memory implementation of model.Store.
 type testFlowStore struct {
-	mu    sync.Mutex
-	flows map[string]*model.Flow
+	mu          sync.Mutex
+	automations map[string]*model.Automation
 }
 
 func newTestFlowStore() *testFlowStore {
-	return &testFlowStore{flows: make(map[string]*model.Flow)}
+	return &testFlowStore{automations: make(map[string]*model.Automation)}
 }
 
-func (s *testFlowStore) Get(id string) (*model.Flow, error) {
+func (s *testFlowStore) Get(id string) (*model.Automation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f := s.flows[id]
+	f := s.automations[id]
 	return f, nil
 }
 
-func (s *testFlowStore) List() ([]*model.Flow, error) {
+func (s *testFlowStore) List() ([]*model.Automation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]*model.Flow, 0, len(s.flows))
-	for _, f := range s.flows {
+	result := make([]*model.Automation, 0, len(s.automations))
+	for _, f := range s.automations {
 		result = append(result, f)
 	}
 	return result, nil
 }
 
-func (s *testFlowStore) Save(f *model.Flow) error {
+func (s *testFlowStore) Save(f *model.Automation) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.flows[f.ID] = f
+	s.automations[f.ID] = f
 	return nil
 }
 
 func (s *testFlowStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.flows, id)
+	delete(s.automations, id)
 	return nil
 }
 
@@ -105,27 +105,27 @@ func (s *testFlowStore) CountByTriggerChannel(_ string) (int, error) {
 	return 0, nil
 }
 
-func (s *testFlowStore) ListByTriggerChannel(_ string) ([]*model.Flow, error) {
+func (s *testFlowStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) ListScheduled() ([]*model.Flow, error) {
+func (s *testFlowStore) ListScheduled() ([]*model.Automation, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) GetFlowIDsForChannel(_ string) ([]string, error) {
+func (s *testFlowStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, error) {
+func (s *testFlowStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) GetChannelCreatedFlowIDs() ([]string, error) {
+func (s *testFlowStore) GetChannelCreatedAutomationIDs() ([]string, error) {
 	return nil, nil
 }
 
-func (s *testFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) {
+func (s *testFlowStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
 	return nil, nil
 }
 
@@ -141,29 +141,29 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 	api.On("GetUser", mock.Anything).Return(&mmmodel.User{DeleteAt: 0}, nil)
 	api.On("HasPermissionTo", mock.Anything, mock.Anything).Return(true)
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
+	executor := automation.NewAutomationExecutor(registry)
 
-	flowStore := newTestFlowStore()
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, maxWorkers)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, maxWorkers)
 	wp.pollInterval = 50 * time.Millisecond // speed up tests
 
-	return wp, store, flowStore
+	return wp, store, automationStore
 }
 
 func TestWorkerPool_ProcessesItems(t *testing.T) {
 	act := &testAction{}
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 3 {
 		item := &model.WorkItem{
-			ID:       fmt.Sprintf("w%d", i),
-			FlowID:   "f1",
-			FlowName: "Flow 1",
+			ID:             fmt.Sprintf("w%d", i),
+			AutomationID:   "f1",
+			AutomationName: "Flow 1",
 		}
 		require.NoError(t, store.Enqueue(item))
 	}
@@ -196,15 +196,15 @@ func TestWorkerPool_ConcurrencyLimit(t *testing.T) {
 		},
 	}
 
-	wp, store, flowStore := setupWorkerPool(t, 2, act)
+	wp, store, automationStore := setupWorkerPool(t, 2, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 5 {
 		item := &model.WorkItem{
-			ID:       fmt.Sprintf("w%d", i),
-			FlowID:   "f1",
-			FlowName: "Flow 1",
+			ID:             fmt.Sprintf("w%d", i),
+			AutomationID:   "f1",
+			AutomationName: "Flow 1",
 		}
 		require.NoError(t, store.Enqueue(item))
 	}
@@ -244,11 +244,11 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 		},
 	}
 
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -284,15 +284,15 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 
 func TestWorkerPool_NotifyWakesDispatcher(t *testing.T) {
 	act := &testAction{}
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 	wp.pollInterval = 10 * time.Minute // very long poll interval
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	wp.Start()
 	defer wp.Stop()
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	// Without Notify, the dispatcher won't process until the long poll interval.
@@ -310,11 +310,11 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 		},
 	}
 
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -332,13 +332,13 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestWorkerPool_DeletedFlow(t *testing.T) {
+func TestWorkerPool_DeletedAutomation(t *testing.T) {
 	act := &testAction{}
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	// Don't add flow to store — it's "deleted"
+	// Don't add automation to store — it's "deleted"
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -356,7 +356,7 @@ func TestWorkerPool_DeletedFlow(t *testing.T) {
 	assert.Equal(t, 0, act.getExecCount())
 
 	// Item should be completed (deleted from KV) — not marked as failed.
-	_ = flowStore
+	_ = automationStore
 }
 
 func TestWorkerPool_PanicRecovery(t *testing.T) {
@@ -371,12 +371,12 @@ func TestWorkerPool_PanicRecovery(t *testing.T) {
 		},
 	}
 
-	wp, store, flowStore := setupWorkerPool(t, 1, act)
+	wp, store, automationStore := setupWorkerPool(t, 1, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	// Enqueue an item that will panic.
-	item1 := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item1 := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item1))
 
 	wp.Start()
@@ -389,7 +389,7 @@ func TestWorkerPool_PanicRecovery(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Enqueue a second item that should succeed, proving the pool survived.
-	item2 := &model.WorkItem{ID: "w2", FlowID: "f1", FlowName: "Flow 1"}
+	item2 := &model.WorkItem{ID: "w2", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item2))
 	wp.Notify()
 
@@ -414,17 +414,17 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("GetUser", "some-user").Return(nil, mmmodel.NewAppError("GetUser", "app.user.get.app_error", nil, "", 500))
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
-	flowStore := newTestFlowStore()
+	executor := automation.NewAutomationExecutor(registry)
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -440,8 +440,8 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should remain enabled — this is a transient error.
-	f, _ := flowStore.Get("f1")
+	// Automation should remain enabled — this is a transient error.
+	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
 }
@@ -456,17 +456,17 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("GetUser", "deleted-user").Return(nil, mmmodel.NewAppError("GetUser", "app.user.missing.app_error", nil, "", 404))
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
-	flowStore := newTestFlowStore()
+	executor := automation.NewAutomationExecutor(registry)
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -482,8 +482,8 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled — creator is permanently gone.
-	f, _ := flowStore.Get("f1")
+	// Automation should be disabled — creator is permanently gone.
+	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
 }
@@ -498,17 +498,17 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("GetUser", "deactivated-user").Return(&mmmodel.User{DeleteAt: 1234567890}, nil)
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
-	flowStore := newTestFlowStore()
+	executor := automation.NewAutomationExecutor(registry)
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -524,8 +524,8 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled.
-	f, _ := flowStore.Get("f1")
+	// Automation should be disabled.
+	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
 }
@@ -544,21 +544,21 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	// User is no longer a channel admin.
 	api.On("GetChannelMember", "ch1", "demoted-user").Return(&mmmodel.ChannelMember{SchemeAdmin: false}, nil)
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
-	flowStore := newTestFlowStore()
+	executor := automation.NewAutomationExecutor(registry)
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = flowStore.Save(&model.Flow{
+	_ = automationStore.Save(&model.Automation{
 		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "demoted-user",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 	})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -574,8 +574,8 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled — creator lost permissions.
-	f, _ := flowStore.Get("f1")
+	// Automation should be disabled — creator lost permissions.
+	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
 }
@@ -594,21 +594,21 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	// GetChannelMember returns a 500 — transient infrastructure error.
 	api.On("GetChannelMember", "ch1", "some-user").Return(nil, mmmodel.NewAppError("GetChannelMember", "app.channel.get_member.app_error", nil, "", 500))
 
-	registry := flow.NewRegistry()
+	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := flow.NewFlowExecutor(registry)
-	flowStore := newTestFlowStore()
+	executor := automation.NewAutomationExecutor(registry)
+	automationStore := newTestFlowStore()
 
-	wp := NewWorkerPool(store, executor, flowStore, nil, api, 4)
+	wp := NewWorkerPool(store, executor, automationStore, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = flowStore.Save(&model.Flow{
+	_ = automationStore.Save(&model.Automation{
 		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 	})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -624,19 +624,19 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should remain enabled — this is a transient error.
-	f, _ := flowStore.Get("f1")
+	// Automation should remain enabled — this is a transient error.
+	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
 }
 
-func TestWorkerPool_DisabledFlow(t *testing.T) {
+func TestWorkerPool_DisabledAutomation(t *testing.T) {
 	act := &testAction{}
-	wp, store, flowStore := setupWorkerPool(t, 4, act)
+	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = flowStore.Save(&model.Flow{ID: "f1", Name: "Flow 1", Enabled: false, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: false, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", FlowID: "f1", FlowName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()

@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"bytes"
@@ -22,16 +22,16 @@ import (
 
 // testConfig is a simple Configuration implementation for tests.
 type testConfig struct {
-	maxFlowsPerChannel int
+	maxAutomationsPerChannel int
 }
 
-func (c *testConfig) MaxFlowsPerChannel() int {
-	return c.maxFlowsPerChannel
+func (c *testConfig) MaxAutomationsPerChannel() int {
+	return c.maxAutomationsPerChannel
 }
 
 // expectLogCalls registers permissive LogError and LogWarn expectations that
 // accept any number of arguments. This covers enriched log calls that include
-// user_id, flow_id, and other context fields.
+// user_id, automation_id, and other context fields.
 func expectLogCalls(api *plugintest.API) {
 	// LogError with 3, 5, 7, or 9 args (msg + 1-4 key-value pairs).
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
@@ -64,7 +64,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	return router, store, api
 }
 
-func TestAPI_CreateFlow(t *testing.T) {
+func TestAPI_CreateAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	body := `{
@@ -75,14 +75,14 @@ func TestAPI_CreateFlow(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusCreated, w.Code)
 
-	var created model.Flow
+	var created model.Automation
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&created))
 	assert.NotEmpty(t, created.ID)
 	assert.Equal(t, "Test Flow", created.Name)
@@ -102,18 +102,18 @@ func TestAPI_CreateFlow(t *testing.T) {
 	assert.Equal(t, created.Name, got.Name)
 }
 
-func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
+func TestAPI_CreateAutomation_InvalidBody(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString("not json"))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString("not json"))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
+func TestAPI_CreateAutomation_InvalidActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -124,7 +124,7 @@ func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -132,7 +132,7 @@ func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "invalid")
 }
 
-func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
+func TestAPI_CreateAutomation_MissingActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -143,7 +143,7 @@ func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -151,7 +151,7 @@ func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "id is required")
 }
 
-func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
+func TestAPI_CreateAutomation_DuplicateActionIDs(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -165,7 +165,7 @@ func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -173,48 +173,48 @@ func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "duplicate")
 }
 
-func TestAPI_GetFlow(t *testing.T) {
+func TestAPI_GetAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Flow 1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/f1", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/f1", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var got model.Flow
+	var got model.Automation
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&got))
 	assert.Equal(t, "f1", got.ID)
 	assert.Equal(t, "Flow 1", got.Name)
 }
 
-func TestAPI_GetFlow_NotFound(t *testing.T) {
+func TestAPI_GetAutomation_NotFound(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/nonexistent", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/nonexistent", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestAPI_ListFlows(t *testing.T) {
+func TestAPI_ListAutomations(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -222,31 +222,31 @@ func TestAPI_ListFlows(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-	var flows []*model.Flow
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Len(t, flows, 2)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Len(t, automations, 2)
 }
 
-func TestAPI_ListFlows_Empty(t *testing.T) {
+func TestAPI_ListAutomations_Empty(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Flow
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Empty(t, flows)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Empty(t, automations)
 }
 
-func TestAPI_UpdateFlow(t *testing.T) {
+func TestAPI_UpdateAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	original := &model.Flow{
+	original := &model.Automation{
 		ID:        "f1",
 		Name:      "Original",
 		CreatedAt: 1000,
@@ -263,14 +263,14 @@ func TestAPI_UpdateFlow(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "other-user")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var updated model.Flow
+	var updated model.Automation
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&updated))
 	assert.Equal(t, "f1", updated.ID)
 	assert.Equal(t, "Updated", updated.Name)
@@ -283,31 +283,31 @@ func TestAPI_UpdateFlow(t *testing.T) {
 	assert.Equal(t, "new-action", updated.Actions[0].ID)
 }
 
-func TestAPI_UpdateFlow_NotFound(t *testing.T) {
+func TestAPI_UpdateAutomation_NotFound(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/nonexistent", bytes.NewBufferString(`{"name":"x"}`))
+	r := httptest.NewRequest(http.MethodPut, "/automations/nonexistent", bytes.NewBufferString(`{"name":"x"}`))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
+func TestAPI_UpdateAutomation_InvalidBody(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString("not json"))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString("not json"))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
+func TestAPI_CreateAutomation_ScheduleTrigger_MissingInterval(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -318,7 +318,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -326,7 +326,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "interval")
 }
 
-func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
+func TestAPI_CreateAutomation_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -337,7 +337,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -345,7 +345,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
-func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
+func TestAPI_CreateAutomation_UnknownTriggerType(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -356,17 +356,17 @@ func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
+func TestAPI_UpdateAutomation_ScheduleValidation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -379,7 +379,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -387,11 +387,11 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
-func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
+func TestAPI_UpdateAutomation_UnchangedPastStartAt(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	pastStartAt := model.TimeToTimestamp(time.Now().Add(-1 * time.Hour))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}},
 	}))
@@ -404,20 +404,20 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 	}`, pastStartAt)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestAPI_DeleteFlow(t *testing.T) {
+func TestAPI_DeleteAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)
+	r := httptest.NewRequest(http.MethodDelete, "/automations/f1", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -429,26 +429,26 @@ func TestAPI_DeleteFlow(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestAPI_DeleteFlow_Unauthorized(t *testing.T) {
+func TestAPI_DeleteAutomation_Unauthorized(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodDelete, "/flows/f1", nil)
+	r := httptest.NewRequest(http.MethodDelete, "/automations/f1", nil)
 	// Deliberately omit Mattermost-User-ID header.
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestAPI_UpdateFlow_Unauthorized(t *testing.T) {
+func TestAPI_UpdateAutomation_Unauthorized(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(`{"name":"x","trigger":{"message_posted":{"channel_id":"ch1"}},"actions":[{"id":"a","send_message":{"channel_id":"ch1","body":"hi"}}]}`))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(`{"name":"x","trigger":{"message_posted":{"channel_id":"ch1"}},"actions":[{"id":"a","send_message":{"channel_id":"ch1","body":"hi"}}]}`))
 	// Deliberately omit Mattermost-User-ID header.
 
 	router.ServeHTTP(w, r)
@@ -469,7 +469,7 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 	return router, store
 }
 
-// setupAPIWithLimit creates an API handler with a per-channel flow limit.
+// setupAPIWithLimit creates an API handler with a per-channel automation limit.
 func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 	t.Helper()
 
@@ -482,14 +482,14 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: limit})
+	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxAutomationsPerChannel: limit})
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
 	return router, store
 }
 
-func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
+func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -507,7 +507,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -515,7 +515,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -533,7 +533,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -541,7 +541,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
+func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -559,7 +559,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -567,22 +567,22 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
+func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	// Allow existing flow's channel.
+	// Allow existing automation's channel.
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	)
-	// Deny new flow's channel.
+	// Deny new automation's channel.
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Original",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -596,7 +596,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -604,7 +604,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
+func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -620,7 +620,7 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 
 	router.ServeHTTP(w, r)
@@ -630,14 +630,14 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
-func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
+func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Original",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -651,7 +651,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 
 	router.ServeHTTP(w, r)
@@ -660,7 +660,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
-func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
+func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -679,7 +679,7 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -689,7 +689,7 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -706,7 +706,7 @@ func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -714,7 +714,7 @@ func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -731,7 +731,7 @@ func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testin
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -739,7 +739,7 @@ func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testin
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -754,14 +754,14 @@ func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_TeamAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -778,14 +778,14 @@ func TestAPI_CreateFlow_ChannelCreated_TeamAdminAllowed(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 	// With the temporary channel guardrail, channel_created triggers must use
 	// the template expression for send_message channel_id.
 	router, _, _ := setupAPI(t)
@@ -798,7 +798,7 @@ func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -806,7 +806,7 @@ func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "must use a template expression")
 }
 
-func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
+func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -818,78 +818,78 @@ func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 
 	router, store := setupAPIWithCustomMock(t, api)
 
-	// A normal flow the user can see.
-	require.NoError(t, store.Save(&model.Flow{
+	// A normal automation the user can see.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Normal Flow",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	// A channel_created flow — should be hidden from non-team-admin.
-	require.NoError(t, store.Save(&model.Flow{
+	// A channel_created automation — should be hidden from non-team-admin.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Team Flow",
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Flow
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
-func TestAPI_ListFlows_FilterByChannel(t *testing.T) {
+func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
-	require.NoError(t, store.Save(&model.Flow{ID: "f3", Name: "Flow 3", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f3", Name: "Flow 3", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows?channel_id=ch1", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations?channel_id=ch1", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Flow
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	require.Len(t, flows, 2)
-	ids := []string{flows[0].ID, flows[1].ID}
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	require.Len(t, automations, 2)
+	ids := []string{automations[0].ID, automations[1].ID}
 	assert.ElementsMatch(t, []string{"f1", "f3"}, ids)
 }
 
-func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
+func TestAPI_ListAutomations_FilterByChannel_NoMatch(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows?channel_id=ch-nonexistent", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations?channel_id=ch-nonexistent", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Flow
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Empty(t, flows)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Empty(t, automations)
 }
 
-func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelLimitReached(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// Save one flow on ch1 — fills the limit.
-	require.NoError(t, store.Save(&model.Flow{
+	// Save one automation on ch1 — fills the limit.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -902,7 +902,7 @@ func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -910,11 +910,11 @@ func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "maximum")
 }
 
-func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
+func TestAPI_CreateAutomation_DifferentChannelSucceeds(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
 	// ch1 is full.
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -928,24 +928,24 @@ func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
+func TestAPI_UpdateAutomation_SameChannelSelfExclusion(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has one flow — at the limit.
-	require.NoError(t, store.Save(&model.Flow{
+	// ch1 has one automation — at the limit.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Original",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
-	// Updating the same flow on the same channel should succeed (self-exclusion).
+	// Updating the same automation on the same channel should succeed (self-exclusion).
 	body := `{
 		"name": "Updated",
 		"enabled": true,
@@ -954,22 +954,22 @@ func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
+func TestAPI_UpdateAutomation_MoveToFullChannel(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has a flow, ch2 has a flow.
-	require.NoError(t, store.Save(&model.Flow{
+	// ch1 has a automation, ch2 has a automation.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
 	}))
@@ -983,7 +983,7 @@ func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -991,15 +991,15 @@ func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "maximum")
 }
 
-func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
+func TestAPI_CreateAutomation_UnlimitedAllowsAny(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 0)
 
-	// Even with many flows, limit=0 means unlimited.
-	require.NoError(t, store.Save(&model.Flow{
+	// Even with many automations, limit=0 means unlimited.
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -1012,25 +1012,25 @@ func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreatedBypassesLimit(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: 1})
+	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxAutomationsPerChannel: 1})
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
-	// channel_created flows have no trigger channel, so they bypass the limit.
+	// channel_created automations have no trigger channel, so they bypass the limit.
 	body := `{
 		"name": "Team Flow",
 		"enabled": true,
@@ -1039,14 +1039,14 @@ func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_EmptyName(t *testing.T) {
+func TestAPI_CreateAutomation_EmptyName(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1057,7 +1057,7 @@ func TestAPI_CreateFlow_EmptyName(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1065,7 +1065,7 @@ func TestAPI_CreateFlow_EmptyName(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "name is required")
 }
 
-func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
+func TestAPI_CreateAutomation_NameTooLong(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	longName := strings.Repeat("a", 101)
@@ -1077,7 +1077,7 @@ func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
 	}`, longName)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1085,10 +1085,10 @@ func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "100 characters")
 }
 
-func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
+func TestAPI_UpdateAutomation_EmptyName(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Original",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -1102,7 +1102,7 @@ func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1110,10 +1110,10 @@ func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "name is required")
 }
 
-func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
+func TestAPI_UpdateAutomation_NameTooLong(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Flow{
+	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Original",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -1128,7 +1128,7 @@ func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
 	}`, longName)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1136,7 +1136,7 @@ func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "100 characters")
 }
 
-func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
+func TestAPI_CreateAutomation_EmptyActions(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1147,7 +1147,7 @@ func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1155,7 +1155,7 @@ func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least one action")
 }
 
-func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
+func TestAPI_CreateAutomation_MultipleTriggerTypes(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1166,7 +1166,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1174,7 +1174,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "exactly one trigger type")
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1191,14 +1191,14 @@ func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1215,7 +1215,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -1223,7 +1223,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_GetTeam500(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_GetTeam500(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1241,7 +1241,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_GetTeam500(t *testing.T) {
 	}`
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/flows", bytes.NewBufferString(body))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)

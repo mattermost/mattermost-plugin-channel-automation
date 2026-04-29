@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"encoding/json"
@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	flowKeyPrefix                    = "flow:"
-	flowIndexKey                     = "flow_index"
+	automationKeyPrefix              = "automation:"
+	automationIndexKey               = "automation_index"
 	triggerIndexPrefix               = "ti:mp:" // shortened to stay within 50-char KV key limit (6 + 26 = 32)
 	channelTriggerIndexPrefix        = "ct:"    // all trigger types by channel (3 + 26 = 29)
 	membershipTriggerIndexPrefix     = "ti:mc:" // membership_changed by channel (6 + 26 = 32)
@@ -30,129 +30,129 @@ type KVStore struct {
 	indexMu sync.Locker
 }
 
-// NewStore creates a new KV-backed flow store. The caller must supply
+// NewStore creates a new KV-backed automation store. The caller must supply
 // a cluster-safe mutex (e.g. cluster.Mutex) to protect index
 // read-modify-write cycles across plugin instances.
 func NewStore(api plugin.API, indexMu sync.Locker) model.Store {
 	return &KVStore{api: api, indexMu: indexMu}
 }
 
-func (s *KVStore) Get(id string) (*model.Flow, error) {
-	data, appErr := s.api.KVGet(flowKeyPrefix + id)
+func (s *KVStore) Get(id string) (*model.Automation, error) {
+	data, appErr := s.api.KVGet(automationKeyPrefix + id)
 	if appErr != nil {
-		return nil, fmt.Errorf("failed to get flow %s: %w", id, appErr)
+		return nil, fmt.Errorf("failed to get automation %s: %w", id, appErr)
 	}
 	if data == nil {
 		return nil, nil
 	}
 
-	var f model.Flow
-	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal flow %s: %w", id, err)
+	var a model.Automation
+	if err := json.Unmarshal(data, &a); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal automation %s: %w", id, err)
 	}
-	return &f, nil
+	return &a, nil
 }
 
-func (s *KVStore) List() ([]*model.Flow, error) {
+func (s *KVStore) List() ([]*model.Automation, error) {
 	ids, err := s.getIndex()
 	if err != nil {
 		return nil, err
 	}
 
-	flows := make([]*model.Flow, 0, len(ids))
+	automations := make([]*model.Automation, 0, len(ids))
 	for _, id := range ids {
-		f, err := s.Get(id)
+		a, err := s.Get(id)
 		if err != nil {
 			return nil, err
 		}
-		if f != nil {
-			flows = append(flows, f)
+		if a != nil {
+			automations = append(automations, a)
 		}
 	}
-	return flows, nil
+	return automations, nil
 }
 
-func (s *KVStore) ListByTriggerChannel(channelID string) ([]*model.Flow, error) {
+func (s *KVStore) ListByTriggerChannel(channelID string) ([]*model.Automation, error) {
 	ids, err := s.getChannelTriggerIndex(channelID)
 	if err != nil {
 		return nil, err
 	}
 
-	flows := make([]*model.Flow, 0, len(ids))
+	automations := make([]*model.Automation, 0, len(ids))
 	for _, id := range ids {
-		f, err := s.Get(id)
+		a, err := s.Get(id)
 		if err != nil {
 			return nil, err
 		}
-		if f != nil {
-			flows = append(flows, f)
+		if a != nil {
+			automations = append(automations, a)
 		}
 	}
-	return flows, nil
+	return automations, nil
 }
 
-func (s *KVStore) ListScheduled() ([]*model.Flow, error) {
+func (s *KVStore) ListScheduled() ([]*model.Automation, error) {
 	ids, err := s.getScheduleIndex()
 	if err != nil {
 		return nil, err
 	}
 
-	flows := make([]*model.Flow, 0, len(ids))
+	automations := make([]*model.Automation, 0, len(ids))
 	for _, id := range ids {
-		f, err := s.Get(id)
+		a, err := s.Get(id)
 		if err != nil {
 			return nil, err
 		}
-		if f != nil {
-			flows = append(flows, f)
+		if a != nil {
+			automations = append(automations, a)
 		}
 	}
-	return flows, nil
+	return automations, nil
 }
 
-func (s *KVStore) Save(f *model.Flow) error {
-	// Read old flow to clean up stale trigger index entries.
-	old, err := s.Get(f.ID)
+func (s *KVStore) Save(a *model.Automation) error {
+	// Read old automation to clean up stale trigger index entries.
+	old, err := s.Get(a.ID)
 	if err != nil {
 		return err
 	}
 
-	data, err := json.Marshal(f)
+	data, err := json.Marshal(a)
 	if err != nil {
-		return fmt.Errorf("failed to marshal flow %s: %w", f.ID, err)
+		return fmt.Errorf("failed to marshal automation %s: %w", a.ID, err)
 	}
 
-	if appErr := s.api.KVSet(flowKeyPrefix+f.ID, data); appErr != nil {
-		return fmt.Errorf("failed to save flow %s: %w", f.ID, appErr)
+	if appErr := s.api.KVSet(automationKeyPrefix+a.ID, data); appErr != nil {
+		return fmt.Errorf("failed to save automation %s: %w", a.ID, appErr)
 	}
 
-	// Update the flow index (add if new).
+	// Update the automation index (add if new).
 	if old == nil {
-		if err := s.addToIndex(f.ID); err != nil {
+		if err := s.addToIndex(a.ID); err != nil {
 			return err
 		}
 	}
 
 	// Update trigger index: remove old entry, add new entry.
 	if old != nil && old.Trigger.MessagePosted != nil && old.Trigger.MessagePosted.ChannelID != "" {
-		if err := s.removeTriggerIndex(old.Trigger.MessagePosted.ChannelID, f.ID); err != nil {
+		if err := s.removeTriggerIndex(old.Trigger.MessagePosted.ChannelID, a.ID); err != nil {
 			return err
 		}
 	}
-	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
-		if err := s.addTriggerIndex(f.Trigger.MessagePosted.ChannelID, f.ID); err != nil {
+	if a.Trigger.MessagePosted != nil && a.Trigger.MessagePosted.ChannelID != "" {
+		if err := s.addTriggerIndex(a.Trigger.MessagePosted.ChannelID, a.ID); err != nil {
 			return err
 		}
 	}
 
 	// Update membership trigger index: remove old entry, add new entry.
 	if old != nil && old.Trigger.MembershipChanged != nil && old.Trigger.MembershipChanged.ChannelID != "" {
-		if err := s.removeMembershipTriggerIndex(old.Trigger.MembershipChanged.ChannelID, f.ID); err != nil {
+		if err := s.removeMembershipTriggerIndex(old.Trigger.MembershipChanged.ChannelID, a.ID); err != nil {
 			return err
 		}
 	}
-	if f.Trigger.MembershipChanged != nil && f.Trigger.MembershipChanged.ChannelID != "" {
-		if err := s.addMembershipTriggerIndex(f.Trigger.MembershipChanged.ChannelID, f.ID); err != nil {
+	if a.Trigger.MembershipChanged != nil && a.Trigger.MembershipChanged.ChannelID != "" {
+		if err := s.addMembershipTriggerIndex(a.Trigger.MembershipChanged.ChannelID, a.ID); err != nil {
 			return err
 		}
 	}
@@ -160,53 +160,53 @@ func (s *KVStore) Save(f *model.Flow) error {
 	// Update channel-trigger index (covers all trigger types).
 	if old != nil {
 		if oldChID := old.TriggerChannelID(); oldChID != "" {
-			if err := s.removeChannelTriggerIndex(oldChID, f.ID); err != nil {
+			if err := s.removeChannelTriggerIndex(oldChID, a.ID); err != nil {
 				return err
 			}
 		}
 	}
-	if newChID := f.TriggerChannelID(); newChID != "" {
-		if err := s.addChannelTriggerIndex(newChID, f.ID); err != nil {
+	if newChID := a.TriggerChannelID(); newChID != "" {
+		if err := s.addChannelTriggerIndex(newChID, a.ID); err != nil {
 			return err
 		}
 	}
 
 	// Update schedule index.
 	oldHasSchedule := old != nil && old.Trigger.Schedule != nil
-	newHasSchedule := f.Trigger.Schedule != nil
+	newHasSchedule := a.Trigger.Schedule != nil
 
 	if oldHasSchedule && !newHasSchedule {
-		if err := s.removeFromScheduleIndex(f.ID); err != nil {
+		if err := s.removeFromScheduleIndex(a.ID); err != nil {
 			return err
 		}
 	} else if !oldHasSchedule && newHasSchedule {
-		if err := s.addToScheduleIndex(f.ID); err != nil {
+		if err := s.addToScheduleIndex(a.ID); err != nil {
 			return err
 		}
 	}
 
 	// Update channel-created index.
 	oldHasChannelCreated := old != nil && old.Trigger.ChannelCreated != nil
-	newHasChannelCreated := f.Trigger.ChannelCreated != nil
+	newHasChannelCreated := a.Trigger.ChannelCreated != nil
 
 	if oldHasChannelCreated && !newHasChannelCreated {
-		if err := s.removeFromChannelCreatedIndex(f.ID); err != nil {
+		if err := s.removeFromChannelCreatedIndex(a.ID); err != nil {
 			return err
 		}
 	} else if !oldHasChannelCreated && newHasChannelCreated {
-		if err := s.addToChannelCreatedIndex(f.ID); err != nil {
+		if err := s.addToChannelCreatedIndex(a.ID); err != nil {
 			return err
 		}
 	}
 
 	// Update user-joined-team trigger index.
 	if old != nil && old.Trigger.UserJoinedTeam != nil && old.Trigger.UserJoinedTeam.TeamID != "" {
-		if err := s.removeUserJoinedTeamTriggerIndex(old.Trigger.UserJoinedTeam.TeamID, f.ID); err != nil {
+		if err := s.removeUserJoinedTeamTriggerIndex(old.Trigger.UserJoinedTeam.TeamID, a.ID); err != nil {
 			return err
 		}
 	}
-	if f.Trigger.UserJoinedTeam != nil && f.Trigger.UserJoinedTeam.TeamID != "" {
-		if err := s.addUserJoinedTeamTriggerIndex(f.Trigger.UserJoinedTeam.TeamID, f.ID); err != nil {
+	if a.Trigger.UserJoinedTeam != nil && a.Trigger.UserJoinedTeam.TeamID != "" {
+		if err := s.addUserJoinedTeamTriggerIndex(a.Trigger.UserJoinedTeam.TeamID, a.ID); err != nil {
 			return err
 		}
 	}
@@ -215,54 +215,54 @@ func (s *KVStore) Save(f *model.Flow) error {
 }
 
 func (s *KVStore) Delete(id string) error {
-	f, err := s.Get(id)
+	a, err := s.Get(id)
 	if err != nil {
 		return err
 	}
-	if f == nil {
+	if a == nil {
 		return nil
 	}
 
-	if appErr := s.api.KVDelete(flowKeyPrefix + id); appErr != nil {
-		return fmt.Errorf("failed to delete flow %s: %w", id, appErr)
+	if appErr := s.api.KVDelete(automationKeyPrefix + id); appErr != nil {
+		return fmt.Errorf("failed to delete automation %s: %w", id, appErr)
 	}
 
 	if err := s.removeFromIndex(id); err != nil {
 		return err
 	}
 
-	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
-		if err := s.removeTriggerIndex(f.Trigger.MessagePosted.ChannelID, id); err != nil {
+	if a.Trigger.MessagePosted != nil && a.Trigger.MessagePosted.ChannelID != "" {
+		if err := s.removeTriggerIndex(a.Trigger.MessagePosted.ChannelID, id); err != nil {
 			return err
 		}
 	}
 
-	if f.Trigger.MembershipChanged != nil && f.Trigger.MembershipChanged.ChannelID != "" {
-		if err := s.removeMembershipTriggerIndex(f.Trigger.MembershipChanged.ChannelID, id); err != nil {
+	if a.Trigger.MembershipChanged != nil && a.Trigger.MembershipChanged.ChannelID != "" {
+		if err := s.removeMembershipTriggerIndex(a.Trigger.MembershipChanged.ChannelID, id); err != nil {
 			return err
 		}
 	}
 
-	if chID := f.TriggerChannelID(); chID != "" {
+	if chID := a.TriggerChannelID(); chID != "" {
 		if err := s.removeChannelTriggerIndex(chID, id); err != nil {
 			return err
 		}
 	}
 
-	if f.Trigger.Schedule != nil {
+	if a.Trigger.Schedule != nil {
 		if err := s.removeFromScheduleIndex(id); err != nil {
 			return err
 		}
 	}
 
-	if f.Trigger.ChannelCreated != nil {
+	if a.Trigger.ChannelCreated != nil {
 		if err := s.removeFromChannelCreatedIndex(id); err != nil {
 			return err
 		}
 	}
 
-	if f.Trigger.UserJoinedTeam != nil && f.Trigger.UserJoinedTeam.TeamID != "" {
-		if err := s.removeUserJoinedTeamTriggerIndex(f.Trigger.UserJoinedTeam.TeamID, id); err != nil {
+	if a.Trigger.UserJoinedTeam != nil && a.Trigger.UserJoinedTeam.TeamID != "" {
+		if err := s.removeUserJoinedTeamTriggerIndex(a.Trigger.UserJoinedTeam.TeamID, id); err != nil {
 			return err
 		}
 	}
@@ -270,7 +270,7 @@ func (s *KVStore) Delete(id string) error {
 	return nil
 }
 
-// CountByTriggerChannel returns the number of flows targeting the given channel
+// CountByTriggerChannel returns the number of automations targeting the given channel
 // across all trigger types (message_posted, schedule, membership_changed).
 func (s *KVStore) CountByTriggerChannel(channelID string) (int, error) {
 	ids, err := s.getChannelTriggerIndex(channelID)
@@ -280,27 +280,27 @@ func (s *KVStore) CountByTriggerChannel(channelID string) (int, error) {
 	return len(ids), nil
 }
 
-// GetFlowIDsForChannel returns flow IDs triggered by messages in the given channel.
-func (s *KVStore) GetFlowIDsForChannel(channelID string) ([]string, error) {
+// GetAutomationIDsForChannel returns automation IDs triggered by messages in the given channel.
+func (s *KVStore) GetAutomationIDsForChannel(channelID string) ([]string, error) {
 	return s.getTriggerIndex(channelID)
 }
 
-// GetFlowIDsForMembershipChannel returns flow IDs triggered by membership changes in the given channel.
-func (s *KVStore) GetFlowIDsForMembershipChannel(channelID string) ([]string, error) {
+// GetAutomationIDsForMembershipChannel returns automation IDs triggered by membership changes in the given channel.
+func (s *KVStore) GetAutomationIDsForMembershipChannel(channelID string) ([]string, error) {
 	return s.getMembershipTriggerIndex(channelID)
 }
 
-// GetChannelCreatedFlowIDs returns flow IDs triggered by channel creation events.
-func (s *KVStore) GetChannelCreatedFlowIDs() ([]string, error) {
+// GetChannelCreatedAutomationIDs returns automation IDs triggered by channel creation events.
+func (s *KVStore) GetChannelCreatedAutomationIDs() ([]string, error) {
 	return s.getChannelCreatedIndex()
 }
 
 // --- Index helpers ---
 
 func (s *KVStore) getIndex() ([]string, error) {
-	data, appErr := s.api.KVGet(flowIndexKey)
+	data, appErr := s.api.KVGet(automationIndexKey)
 	if appErr != nil {
-		return nil, fmt.Errorf("failed to get flow index: %w", appErr)
+		return nil, fmt.Errorf("failed to get automation index: %w", appErr)
 	}
 	if data == nil {
 		return nil, nil
@@ -308,7 +308,7 @@ func (s *KVStore) getIndex() ([]string, error) {
 
 	var ids []string
 	if err := json.Unmarshal(data, &ids); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal flow index: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal automation index: %w", err)
 	}
 	return ids, nil
 }
@@ -316,10 +316,10 @@ func (s *KVStore) getIndex() ([]string, error) {
 func (s *KVStore) setIndex(ids []string) error {
 	data, err := json.Marshal(ids)
 	if err != nil {
-		return fmt.Errorf("failed to marshal flow index: %w", err)
+		return fmt.Errorf("failed to marshal automation index: %w", err)
 	}
-	if appErr := s.api.KVSet(flowIndexKey, data); appErr != nil {
-		return fmt.Errorf("failed to save flow index: %w", appErr)
+	if appErr := s.api.KVSet(automationIndexKey, data); appErr != nil {
+		return fmt.Errorf("failed to save automation index: %w", appErr)
 	}
 	return nil
 }
@@ -395,7 +395,7 @@ func (s *KVStore) setTriggerIndex(channelID string, ids []string) error {
 	return nil
 }
 
-func (s *KVStore) addTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) addTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -403,14 +403,14 @@ func (s *KVStore) addTriggerIndex(channelID, flowID string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(ids, flowID) {
+	if slices.Contains(ids, automationID) {
 		return nil
 	}
-	ids = append(ids, flowID)
+	ids = append(ids, automationID)
 	return s.setTriggerIndex(channelID, ids)
 }
 
-func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) removeTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -420,7 +420,7 @@ func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
 	}
 	filtered := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if id != flowID {
+		if id != automationID {
 			filtered = append(filtered, id)
 		}
 	}
@@ -468,7 +468,7 @@ func (s *KVStore) setMembershipTriggerIndex(channelID string, ids []string) erro
 	return nil
 }
 
-func (s *KVStore) addMembershipTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) addMembershipTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -476,14 +476,14 @@ func (s *KVStore) addMembershipTriggerIndex(channelID, flowID string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(ids, flowID) {
+	if slices.Contains(ids, automationID) {
 		return nil
 	}
-	ids = append(ids, flowID)
+	ids = append(ids, automationID)
 	return s.setMembershipTriggerIndex(channelID, ids)
 }
 
-func (s *KVStore) removeMembershipTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) removeMembershipTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -493,7 +493,7 @@ func (s *KVStore) removeMembershipTriggerIndex(channelID, flowID string) error {
 	}
 	filtered := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if id != flowID {
+		if id != automationID {
 			filtered = append(filtered, id)
 		}
 	}
@@ -541,7 +541,7 @@ func (s *KVStore) setChannelTriggerIndex(channelID string, ids []string) error {
 	return nil
 }
 
-func (s *KVStore) addChannelTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) addChannelTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -549,14 +549,14 @@ func (s *KVStore) addChannelTriggerIndex(channelID, flowID string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(ids, flowID) {
+	if slices.Contains(ids, automationID) {
 		return nil
 	}
-	ids = append(ids, flowID)
+	ids = append(ids, automationID)
 	return s.setChannelTriggerIndex(channelID, ids)
 }
 
-func (s *KVStore) removeChannelTriggerIndex(channelID, flowID string) error {
+func (s *KVStore) removeChannelTriggerIndex(channelID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -566,7 +566,7 @@ func (s *KVStore) removeChannelTriggerIndex(channelID, flowID string) error {
 	}
 	filtered := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if id != flowID {
+		if id != automationID {
 			filtered = append(filtered, id)
 		}
 	}
@@ -713,8 +713,8 @@ func makeUserJoinedTeamTriggerIndexKey(teamID string) string {
 	return userJoinedTeamTriggerIndexPrefix + teamID
 }
 
-// GetFlowIDsForUserJoinedTeam returns flow IDs triggered by user-joined-team events for the given team.
-func (s *KVStore) GetFlowIDsForUserJoinedTeam(teamID string) ([]string, error) {
+// GetAutomationIDsForUserJoinedTeam returns automation IDs triggered by user-joined-team events for the given team.
+func (s *KVStore) GetAutomationIDsForUserJoinedTeam(teamID string) ([]string, error) {
 	return s.getUserJoinedTeamTriggerIndex(teamID)
 }
 
@@ -753,7 +753,7 @@ func (s *KVStore) setUserJoinedTeamTriggerIndex(teamID string, ids []string) err
 	return nil
 }
 
-func (s *KVStore) addUserJoinedTeamTriggerIndex(teamID, flowID string) error {
+func (s *KVStore) addUserJoinedTeamTriggerIndex(teamID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -761,14 +761,14 @@ func (s *KVStore) addUserJoinedTeamTriggerIndex(teamID, flowID string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(ids, flowID) {
+	if slices.Contains(ids, automationID) {
 		return nil
 	}
-	ids = append(ids, flowID)
+	ids = append(ids, automationID)
 	return s.setUserJoinedTeamTriggerIndex(teamID, ids)
 }
 
-func (s *KVStore) removeUserJoinedTeamTriggerIndex(teamID, flowID string) error {
+func (s *KVStore) removeUserJoinedTeamTriggerIndex(teamID, automationID string) error {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 
@@ -778,7 +778,7 @@ func (s *KVStore) removeUserJoinedTeamTriggerIndex(teamID, flowID string) error 
 	}
 	filtered := make([]string, 0, len(ids))
 	for _, id := range ids {
-		if id != flowID {
+		if id != automationID {
 			filtered = append(filtered, id)
 		}
 	}

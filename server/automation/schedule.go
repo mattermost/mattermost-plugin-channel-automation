@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"io"
@@ -32,45 +32,45 @@ func defaultScheduleFunc(api plugin.API, key string, wait cluster.NextWaitInterv
 	return cluster.Schedule(api, key, wait, cb)
 }
 
-// ScheduleManager manages cluster.Job instances for schedule-triggered flows.
+// ScheduleManager manages cluster.Job instances for schedule-triggered automations.
 type ScheduleManager struct {
-	api       plugin.API
-	flowStore model.Store
-	enqueuer  WorkItemEnqueuer
-	notifier  WorkerNotifier
+	api             plugin.API
+	automationStore model.Store
+	enqueuer        WorkItemEnqueuer
+	notifier        WorkerNotifier
 
 	scheduleFn scheduleFunc
 	mu         sync.Mutex
-	jobs       map[string]io.Closer // flow ID → active cluster.Job
+	jobs       map[string]io.Closer // automation ID → active cluster.Job
 }
 
 // NewScheduleManager creates a new ScheduleManager.
-func NewScheduleManager(api plugin.API, flowStore model.Store, enqueuer WorkItemEnqueuer, notifier WorkerNotifier) *ScheduleManager {
+func NewScheduleManager(api plugin.API, automationStore model.Store, enqueuer WorkItemEnqueuer, notifier WorkerNotifier) *ScheduleManager {
 	return &ScheduleManager{
-		api:        api,
-		flowStore:  flowStore,
-		enqueuer:   enqueuer,
-		notifier:   notifier,
-		scheduleFn: defaultScheduleFunc,
-		jobs:       make(map[string]io.Closer),
+		api:             api,
+		automationStore: automationStore,
+		enqueuer:        enqueuer,
+		notifier:        notifier,
+		scheduleFn:      defaultScheduleFunc,
+		jobs:            make(map[string]io.Closer),
 	}
 }
 
-// Start lists schedule-triggered flows and creates cluster jobs for enabled ones.
+// Start lists schedule-triggered automations and creates cluster jobs for enabled ones.
 func (sm *ScheduleManager) Start() error {
-	flows, err := sm.flowStore.ListScheduled()
+	automations, err := sm.automationStore.ListScheduled()
 	if err != nil {
 		return err
 	}
 
-	for _, f := range flows {
-		if !f.Enabled {
+	for _, a := range automations {
+		if !a.Enabled {
 			continue
 		}
-		if err := sm.startJob(f); err != nil {
+		if err := sm.startJob(a); err != nil {
 			sm.api.LogError("Failed to start schedule job",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"err", err.Error(),
 			)
 		}
@@ -85,39 +85,39 @@ func (sm *ScheduleManager) Stop() {
 
 	for id, job := range sm.jobs {
 		if err := job.Close(); err != nil {
-			sm.api.LogError("Failed to close schedule job", "flow_id", id, "err", err.Error())
+			sm.api.LogError("Failed to close schedule job", "automation_id", id, "err", err.Error())
 		}
 	}
 	sm.jobs = make(map[string]io.Closer)
 }
 
-// SyncFlow updates the schedule job for a flow after create or update.
-// It compares the existing flow (nil on create) with the new flow and
+// SyncAutomation updates the schedule job for an automation after create or update.
+// It compares the existing automation (nil on create) with the new automation and
 // only restarts the cluster job when the schedule-relevant fields
 // (Trigger.Type, Enabled, Interval, StartAt) actually changed.
-func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) error {
+func (sm *ScheduleManager) SyncAutomation(existing *model.Automation, a *model.Automation) error {
 	oldIsActive := existing != nil && existing.Trigger.Schedule != nil && existing.Enabled
-	newIsActive := f.Trigger.Schedule != nil && f.Enabled
+	newIsActive := a.Trigger.Schedule != nil && a.Enabled
 
 	// Determine whether the schedule parameters changed.
 	scheduleChanged := true // default true for create (no existing)
 	if oldIsActive && newIsActive {
-		scheduleChanged = existing.Trigger.Schedule.ChannelID != f.Trigger.Schedule.ChannelID ||
-			existing.Trigger.Schedule.Interval != f.Trigger.Schedule.Interval ||
-			existing.Trigger.Schedule.StartAt != f.Trigger.Schedule.StartAt
+		scheduleChanged = existing.Trigger.Schedule.ChannelID != a.Trigger.Schedule.ChannelID ||
+			existing.Trigger.Schedule.Interval != a.Trigger.Schedule.Interval ||
+			existing.Trigger.Schedule.StartAt != a.Trigger.Schedule.StartAt
 	}
 
 	// Stop the old job if it was active and either no longer active or params changed.
 	if oldIsActive && (!newIsActive || scheduleChanged) {
-		sm.stopJob(f.ID)
+		sm.stopJob(a.ID)
 	}
 
 	// Start a new job if it should be active and either wasn't before or params changed.
 	if newIsActive && (!oldIsActive || scheduleChanged) {
-		if err := sm.startJob(f); err != nil {
+		if err := sm.startJob(a); err != nil {
 			sm.api.LogError("Failed to sync schedule job",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"err", err.Error(),
 			)
 			return err
@@ -127,59 +127,59 @@ func (sm *ScheduleManager) SyncFlow(existing *model.Flow, f *model.Flow) error {
 	return nil
 }
 
-// RemoveFlow stops the schedule job for a deleted flow.
-func (sm *ScheduleManager) RemoveFlow(flowID string) {
-	sm.stopJob(flowID)
+// RemoveAutomation stops the schedule job for a deleted automation.
+func (sm *ScheduleManager) RemoveAutomation(automationID string) {
+	sm.stopJob(automationID)
 }
 
-func (sm *ScheduleManager) startJob(f *model.Flow) error {
-	interval, err := time.ParseDuration(f.Trigger.Schedule.Interval)
+func (sm *ScheduleManager) startJob(a *model.Automation) error {
+	interval, err := time.ParseDuration(a.Trigger.Schedule.Interval)
 	if err != nil {
 		return err
 	}
 
-	key := scheduleJobKeyPrefix + f.ID
-	waitFn := makeScheduleWaitInterval(interval, f.Trigger.Schedule.StartAt)
-	flowID := f.ID
-	flowName := f.Name
-	intervalStr := f.Trigger.Schedule.Interval
-	channelID := f.Trigger.Schedule.ChannelID
+	key := scheduleJobKeyPrefix + a.ID
+	waitFn := makeScheduleWaitInterval(interval, a.Trigger.Schedule.StartAt)
+	automationID := a.ID
+	automationName := a.Name
+	intervalStr := a.Trigger.Schedule.Interval
+	channelID := a.Trigger.Schedule.ChannelID
 
 	job, err := sm.scheduleFn(sm.api, key, waitFn, func() {
-		sm.fireSchedule(flowID, flowName, intervalStr, channelID)
+		sm.fireSchedule(automationID, automationName, intervalStr, channelID)
 	})
 	if err != nil {
 		return err
 	}
 
 	sm.mu.Lock()
-	sm.jobs[f.ID] = job
+	sm.jobs[a.ID] = job
 	sm.mu.Unlock()
 
-	sm.api.LogInfo("Schedule job started", "flow_id", f.ID, "flow_name", f.Name, "interval", f.Trigger.Schedule.Interval)
+	sm.api.LogInfo("Schedule job started", "automation_id", a.ID, "automation_name", a.Name, "interval", a.Trigger.Schedule.Interval)
 	return nil
 }
 
-func (sm *ScheduleManager) stopJob(flowID string) {
+func (sm *ScheduleManager) stopJob(automationID string) {
 	sm.mu.Lock()
-	job, ok := sm.jobs[flowID]
+	job, ok := sm.jobs[automationID]
 	if ok {
-		delete(sm.jobs, flowID)
+		delete(sm.jobs, automationID)
 	}
 	sm.mu.Unlock()
 
 	if ok {
 		if err := job.Close(); err != nil {
-			sm.api.LogError("Failed to close schedule job", "flow_id", flowID, "err", err.Error())
+			sm.api.LogError("Failed to close schedule job", "automation_id", automationID, "err", err.Error())
 		}
 	}
 }
 
-func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval, channelID string) {
+func (sm *ScheduleManager) fireSchedule(automationID, automationName, interval, channelID string) {
 	item := &model.WorkItem{
-		ID:       mmmodel.NewId(),
-		FlowID:   flowID,
-		FlowName: flowName,
+		ID:             mmmodel.NewId(),
+		AutomationID:   automationID,
+		AutomationName: automationName,
 		TriggerData: model.TriggerData{
 			Channel: &model.SafeChannel{Id: channelID},
 			Schedule: &model.ScheduleInfo{
@@ -191,8 +191,8 @@ func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval, channelID st
 
 	if err := sm.enqueuer.Enqueue(item); err != nil {
 		sm.api.LogError("Failed to enqueue scheduled work item",
-			"flow_id", flowID,
-			"flow_name", flowName,
+			"automation_id", automationID,
+			"automation_name", automationName,
 			"err", err.Error(),
 		)
 		return
@@ -200,8 +200,8 @@ func (sm *ScheduleManager) fireSchedule(flowID, flowName, interval, channelID st
 
 	sm.api.LogDebug("Scheduled work item enqueued",
 		"work_item_id", item.ID,
-		"flow_id", flowID,
-		"flow_name", flowName,
+		"automation_id", automationID,
+		"automation_name", automationName,
 	)
 
 	sm.notifier.Notify()
@@ -216,7 +216,7 @@ func makeScheduleWaitInterval(interval time.Duration, startAtMs int64) cluster.N
 	return func(now time.Time, metadata cluster.JobMetadata) time.Duration {
 		// If startAt is set and still in the future, always wait until
 		// then — even if stale LastFinished metadata exists from a
-		// previous cluster job (e.g. after a flow update).
+		// previous cluster job (e.g. after an automation update).
 		if startAtMs > 0 {
 			startAt := model.TimestampToTime(startAtMs)
 			if now.Before(startAt) {

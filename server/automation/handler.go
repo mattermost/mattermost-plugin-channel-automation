@@ -1,4 +1,4 @@
-package flow
+package automation
 
 import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"

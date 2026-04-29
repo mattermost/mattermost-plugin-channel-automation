@@ -12,11 +12,11 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/action"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/command"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
@@ -39,13 +39,13 @@ type Plugin struct {
 
 	bridgeClient *bridgeclient.Client
 
-	botUserID       string
-	registry        *flow.Registry
-	flowStore       model.Store
-	historyStore    model.ExecutionStore
-	triggerService  *flow.TriggerService
-	flowExecutor    *flow.FlowExecutor
-	scheduleManager *flow.ScheduleManager
+	botUserID          string
+	registry           *automation.Registry
+	automationStore    model.Store
+	historyStore       model.ExecutionStore
+	triggerService     *automation.TriggerService
+	automationExecutor *automation.AutomationExecutor
+	scheduleManager    *automation.ScheduleManager
 
 	// configurationLock synchronizes access to the configuration.
 	configurationLock sync.RWMutex
@@ -78,7 +78,7 @@ func (p *Plugin) OnActivate() error {
 
 	// TODO: Register tools in the bridge client
 
-	p.registry = flow.NewRegistry()
+	p.registry = automation.NewRegistry()
 	p.registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
 	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
 	p.registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
@@ -87,13 +87,13 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
-	flowIndexMu, err := cluster.NewMutex(p.API, "flow_index_mutex")
+	automationIndexMu, err := cluster.NewMutex(p.API, "automation_index_mutex")
 	if err != nil {
-		return fmt.Errorf("failed to create flow index mutex: %w", err)
+		return fmt.Errorf("failed to create automation index mutex: %w", err)
 	}
-	p.flowStore = flow.NewStore(p.API, flowIndexMu)
-	p.triggerService = flow.NewTriggerService(p.flowStore, p.registry)
-	p.flowExecutor = flow.NewFlowExecutor(p.registry)
+	p.automationStore = automation.NewStore(p.API, automationIndexMu)
+	p.triggerService = automation.NewTriggerService(p.automationStore, p.registry)
+	p.automationExecutor = automation.NewAutomationExecutor(p.registry)
 
 	// Set up persistent work queue.
 	indexMu, err := cluster.NewMutex(p.API, "wq_index_mutex")
@@ -115,16 +115,16 @@ func (p *Plugin) OnActivate() error {
 		p.API.LogInfo("Reset orphaned work items to pending", "count", resetCount)
 	}
 
-	maxWorkers := p.getConfiguration().MaxConcurrentFlowsLimit
+	maxWorkers := p.getConfiguration().MaxConcurrentAutomationsLimit
 	if maxWorkers <= 0 {
 		maxWorkers = 4
 	}
 
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, p.API, maxWorkers)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.automationExecutor, p.automationStore, p.historyStore, p.API, maxWorkers)
 	p.workerPool.Start()
 
 	// Start schedule manager after worker pool so scheduled items can be processed.
-	p.scheduleManager = flow.NewScheduleManager(p.API, p.flowStore, p.workQueueStore, p.workerPool)
+	p.scheduleManager = automation.NewScheduleManager(p.API, p.automationStore, p.workQueueStore, p.workerPool)
 	if err := p.scheduleManager.Start(); err != nil {
 		p.API.LogError("Failed to start schedule manager", "err", err.Error())
 	}
@@ -157,10 +157,10 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *mmmodel.CommandArgs) (*
 }
 
 // MessageHasBeenPosted is invoked after a message is posted. It finds matching
-// flows and enqueues work items for asynchronous execution.
+// automations and enqueues work items for asynchronous execution.
 func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 	// Ignore system messages, bot posts, and webhook posts to prevent
-	// loops and unintended flow triggers.
+	// loops and unintended automation triggers.
 	if post.UserId == p.botUserID {
 		return
 	}
@@ -182,12 +182,12 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 		Post: post,
 	}
 
-	flows, err := p.triggerService.FindMatchingFlows(event)
+	automations, err := p.triggerService.FindMatchingAutomations(event)
 	if err != nil {
-		p.API.LogError("Failed to find flows for post", "err", err.Error())
+		p.API.LogError("Failed to find automations for post", "err", err.Error())
 		return
 	}
-	if len(flows) == 0 {
+	if len(automations) == 0 {
 		return
 	}
 
@@ -209,18 +209,18 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 		User:    model.NewSafeUser(user),
 	}
 
-	for _, f := range flows {
+	for _, a := range automations {
 		item := &model.WorkItem{
-			ID:          mmmodel.NewId(),
-			FlowID:      f.ID,
-			FlowName:    f.Name,
-			TriggerData: triggerData,
+			ID:             mmmodel.NewId(),
+			AutomationID:   a.ID,
+			AutomationName: a.Name,
+			TriggerData:    triggerData,
 		}
 
 		if err := p.workQueueStore.Enqueue(item); err != nil {
 			p.API.LogError("Failed to enqueue work item",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"post_id", post.Id,
 				"err", err.Error(),
 			)
@@ -229,8 +229,8 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 
 		p.API.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
-			"flow_name", f.Name,
+			"automation_id", a.ID,
+			"automation_name", a.Name,
 			"post_id", post.Id,
 		)
 	}
@@ -276,12 +276,12 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 		MembershipAction: action,
 	}
 
-	flows, err := p.triggerService.FindMatchingFlows(event)
+	automations, err := p.triggerService.FindMatchingAutomations(event)
 	if err != nil {
-		p.API.LogError("Failed to find flows for membership change", "err", err.Error())
+		p.API.LogError("Failed to find automations for membership change", "err", err.Error())
 		return
 	}
-	if len(flows) == 0 {
+	if len(automations) == 0 {
 		return
 	}
 
@@ -291,18 +291,18 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 		Membership: &model.MembershipInfo{Action: action},
 	}
 
-	for _, f := range flows {
+	for _, a := range automations {
 		item := &model.WorkItem{
-			ID:          mmmodel.NewId(),
-			FlowID:      f.ID,
-			FlowName:    f.Name,
-			TriggerData: triggerData,
+			ID:             mmmodel.NewId(),
+			AutomationID:   a.ID,
+			AutomationName: a.Name,
+			TriggerData:    triggerData,
 		}
 
 		if err := p.workQueueStore.Enqueue(item); err != nil {
 			p.API.LogError("Failed to enqueue work item",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"channel_id", member.ChannelId,
 				"user_id", member.UserId,
 				"action", action,
@@ -313,8 +313,8 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 
 		p.API.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
-			"flow_name", f.Name,
+			"automation_id", a.ID,
+			"automation_name", a.Name,
 			"channel_id", member.ChannelId,
 			"user_id", member.UserId,
 			"action", action,
@@ -325,7 +325,7 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 }
 
 // ChannelHasBeenCreated is invoked after a new channel is created.
-// Only public channels (type "O") trigger flows.
+// Only public channels (type "O") trigger automations.
 func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Channel) {
 	if channel.Type != mmmodel.ChannelTypeOpen {
 		return
@@ -336,12 +336,12 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 		Channel: channel,
 	}
 
-	flows, err := p.triggerService.FindMatchingFlows(event)
+	automations, err := p.triggerService.FindMatchingAutomations(event)
 	if err != nil {
-		p.API.LogError("Failed to find flows for channel creation", "err", err.Error())
+		p.API.LogError("Failed to find automations for channel creation", "err", err.Error())
 		return
 	}
-	if len(flows) == 0 {
+	if len(automations) == 0 {
 		return
 	}
 
@@ -358,18 +358,18 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 		}
 	}
 
-	for _, f := range flows {
+	for _, a := range automations {
 		item := &model.WorkItem{
-			ID:          mmmodel.NewId(),
-			FlowID:      f.ID,
-			FlowName:    f.Name,
-			TriggerData: triggerData,
+			ID:             mmmodel.NewId(),
+			AutomationID:   a.ID,
+			AutomationName: a.Name,
+			TriggerData:    triggerData,
 		}
 
 		if err := p.workQueueStore.Enqueue(item); err != nil {
 			p.API.LogError("Failed to enqueue work item",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"channel_id", channel.Id,
 				"err", err.Error(),
 			)
@@ -378,8 +378,8 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 
 		p.API.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
-			"flow_name", f.Name,
+			"automation_id", a.ID,
+			"automation_name", a.Name,
 			"channel_id", channel.Id,
 		)
 	}
@@ -411,12 +411,12 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 		User: user,
 	}
 
-	flows, err := p.triggerService.FindMatchingFlows(event)
+	automations, err := p.triggerService.FindMatchingAutomations(event)
 	if err != nil {
-		p.API.LogError("Failed to find flows for team join", "team_id", teamMember.TeamId, "user_id", teamMember.UserId, "err", err.Error())
+		p.API.LogError("Failed to find automations for team join", "team_id", teamMember.TeamId, "user_id", teamMember.UserId, "err", err.Error())
 		return
 	}
-	if len(flows) == 0 {
+	if len(automations) == 0 {
 		return
 	}
 
@@ -439,18 +439,18 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 		Team: safeTeam,
 	}
 
-	for _, f := range flows {
+	for _, a := range automations {
 		item := &model.WorkItem{
-			ID:          mmmodel.NewId(),
-			FlowID:      f.ID,
-			FlowName:    f.Name,
-			TriggerData: triggerData,
+			ID:             mmmodel.NewId(),
+			AutomationID:   a.ID,
+			AutomationName: a.Name,
+			TriggerData:    triggerData,
 		}
 
 		if err := p.workQueueStore.Enqueue(item); err != nil {
 			p.API.LogError("Failed to enqueue work item",
-				"flow_id", f.ID,
-				"flow_name", f.Name,
+				"automation_id", a.ID,
+				"automation_name", a.Name,
 				"team_id", teamMember.TeamId,
 				"user_id", teamMember.UserId,
 				"err", err.Error(),
@@ -460,8 +460,8 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 
 		p.API.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
-			"flow_name", f.Name,
+			"automation_id", a.ID,
+			"automation_name", a.Name,
 			"team_id", teamMember.TeamId,
 			"user_id", teamMember.UserId,
 		)

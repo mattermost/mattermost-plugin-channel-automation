@@ -87,21 +87,21 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 	return nil
 }
 
-// ValidateSendMessageChannel checks that every send_message action in the flow
+// ValidateSendMessageChannel checks that every send_message action in the automation
 // targets the same channel that the trigger is bound to. For triggers with a
 // channel_id (message_posted, schedule, membership_changed), the action channel
 // must be either the literal trigger channel ID or a template containing
 // ".Trigger.Channel.Id". For triggers without a bound channel (channel_created,
 // user_joined_team), any Go template expression is accepted (e.g.
 // "{{.Trigger.Channel.Id}}" or "{{.Trigger.Team.DefaultChannelId}}").
-func ValidateSendMessageChannel(f *Flow) error {
-	triggerChannelID := f.TriggerChannelID()
+func ValidateSendMessageChannel(automation *Automation) error {
+	triggerChannelID := automation.TriggerChannelID()
 
-	for i, a := range f.Actions {
-		if a.SendMessage == nil {
+	for i, act := range automation.Actions {
+		if act.SendMessage == nil {
 			continue
 		}
-		chID := a.SendMessage.ChannelID
+		chID := act.SendMessage.ChannelID
 		if isTriggerChannelTemplate(chID) {
 			continue
 		}
@@ -132,7 +132,7 @@ func ValidateSendMessageChannel(f *Flow) error {
 // outputs (e.g. {{.Steps.<id>.ChannelID}}) are rejected at create time. Step
 // output chaining is not currently supported for send_message channel IDs.
 //
-// This is a UX guardrail, not a security boundary — CheckFlowPermissions is
+// This is a UX guardrail, not a security boundary — CheckAutomationPermissions is
 // the actual authorization layer for literal channel IDs. Templates are
 // intentionally excluded from permission checks because their values aren't
 // known until runtime.
@@ -155,8 +155,8 @@ func isTriggerChannelTemplate(s string) bool {
 }
 
 // disallowedTools lists tool names that may not appear in allowed_tools
-// because they would let an automation post messages outside the flow's
-// controlled output path.
+// because they would let an automation post messages outside the
+// automation's controlled output path.
 var disallowedTools = map[string]struct{}{
 	"create_post":   {},
 	"dm":            {},
