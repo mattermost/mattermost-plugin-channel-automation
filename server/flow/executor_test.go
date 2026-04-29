@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
@@ -28,6 +29,10 @@ func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.Comple
 func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastReq = req
 	return m.agentResponse, nil
+}
+
+func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeToolInfo, error) {
+	return nil, nil
 }
 
 func TestFlowExecutor_SingleAction(t *testing.T) {
@@ -58,8 +63,10 @@ func TestFlowExecutor_SingleAction(t *testing.T) {
 		User:    &model.SafeUser{Id: "user1", Username: "alice"},
 	}
 
-	_, err := executor.Execute(f, triggerData)
+	ctx, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
+	require.NotNil(t, ctx)
+	assert.Equal(t, "flow1", ctx.FlowID)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
 
@@ -128,6 +135,10 @@ func TestFlowExecutor_FirstFailureStops(t *testing.T) {
 	_, err := executor.Execute(f, triggerData)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `action "act1" failed`)
+	var actionErr *ActionError
+	require.True(t, errors.As(err, &actionErr), "expected *ActionError, got %T", err)
+	assert.Equal(t, "act1", actionErr.ActionID)
+	assert.Equal(t, "send_message", actionErr.ActionType)
 	// Second action should never be called.
 	api.AssertNumberOfCalls(t, "CreatePost", 1)
 }

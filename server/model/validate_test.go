@@ -1,9 +1,12 @@
 package model
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -264,57 +267,137 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("allowed_tools rejects create_post", func(t *testing.T) {
+	t.Run("guardrails requires allowed_tools", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"search", "create_post"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
+		assert.Contains(t, err.Error(), "guardrails requires non-empty allowed_tools")
 	})
 
-	t.Run("allowed_tools rejects dm", func(t *testing.T) {
+	t.Run("guardrails invalid channel id", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"dm"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{{ChannelID: "not-a-valid-id"}}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
+		assert.Contains(t, err.Error(), "invalid channel id")
 	})
 
-	t.Run("allowed_tools rejects group_message", func(t *testing.T) {
+	t.Run("guardrails duplicate channel id", func(t *testing.T) {
+		dup := mmmodel.NewId()
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"group_message"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{
+					{ChannelID: dup},
+					{ChannelID: dup},
+				}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "group_message" is not allowed`)
+		assert.Contains(t, err.Error(), "duplicate channel id")
 	})
 
-	t.Run("allowed_tools rejects create_post with whitespace and case variants", func(t *testing.T) {
+	t.Run("guardrails empty channels slice ok", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"  Create_Post  "}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
-	})
-
-	t.Run("allowed_tools rejects DM with case variant", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"DM"}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
-	})
-
-	t.Run("allowed_tools ignores empty/whitespace entries", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"", "   "}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{}},
+			},
 		}})
 		require.NoError(t, err)
+	})
+
+	t.Run("guardrails JSON shape stays as channel_ids", func(t *testing.T) {
+		id := mmmodel.NewId()
+		raw, err := json.Marshal(&Guardrails{Channels: []GuardrailChannel{{ChannelID: id, TeamID: "should-not-leak"}}})
+		require.NoError(t, err)
+		assert.JSONEq(t, fmt.Sprintf(`{"channel_ids":[%q]}`, id), string(raw))
+
+		var g Guardrails
+		require.NoError(t, json.Unmarshal(fmt.Appendf(nil, `{"channel_ids":[%q]}`, id), &g))
+		require.Len(t, g.Channels, 1)
+		assert.Equal(t, id, g.Channels[0].ChannelID)
+		assert.Empty(t, g.Channels[0].TeamID, "team_id should never be parsed from the wire")
+	})
+
+	t.Run("nil guardrails ok", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "agent", ProviderID: "bot1"},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("unknown provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "bogus", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	t.Run("empty provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	// The bridge enforces that allowed_tools is rejected for service
+	// completion endpoints (HTTP 400 "allowed_tools is only supported for
+	// agent completion endpoints"). Mirror that rule at save time so users
+	// see the misconfiguration immediately rather than at execute time.
+	t.Run("service with allowed_tools rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				AllowedTools: []string{"search"},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `allowed_tools is only supported with provider_type "agent"`)
+	})
+
+	t.Run("service with empty allowed_tools passes", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-svc",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "service", ProviderID: "openai"},
+		}})
+		require.NoError(t, err)
+	})
+
+	// Guardrails imply allowed_tools, which agents-only. Reject the
+	// combination explicitly so the error message names the actual issue
+	// (otherwise the user would see the secondary "guardrails requires
+	// non-empty allowed_tools" check fire when they remove tools to comply).
+	t.Run("service with guardrails rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `guardrails is only supported with provider_type "agent"`)
 	})
 }
 
