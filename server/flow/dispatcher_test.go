@@ -72,6 +72,21 @@ func TestDispatcher_NilEvent_IsSafe(t *testing.T) {
 	assert.Zero(t, notifier.called)
 }
 
+func TestDispatcher_UnknownTriggerType_IsSilent(t *testing.T) {
+	d, _, enqueuer, notifier, api := setupDispatcher(t)
+	api.On("LogError", "Failed to find matching flows",
+		"type", "unknown_trigger_type",
+		"err", mock.Anything,
+	).Return().Once()
+
+	assert.NotPanics(t, func() {
+		d.Dispatch(&model.Event{Type: "unknown_trigger_type"})
+	})
+
+	assert.Empty(t, enqueuer.items)
+	assert.Zero(t, notifier.called)
+}
+
 func TestDispatcher_NoMatchingFlows_IsSilent(t *testing.T) {
 	d, _, enqueuer, notifier, _ := setupDispatcher(t)
 
