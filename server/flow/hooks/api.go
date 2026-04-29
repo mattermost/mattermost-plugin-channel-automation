@@ -274,16 +274,6 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 }
 
 func stringArg(args map[string]any, key string) string {
-	if args == nil {
-		return ""
-	}
-	v, ok := args[key]
-	if !ok || v == nil {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
+	s, _ := args[key].(string)
 	return strings.TrimSpace(s)
 }
