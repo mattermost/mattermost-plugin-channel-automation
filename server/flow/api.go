@@ -160,15 +160,6 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
-		code := http.StatusBadRequest
-		if errors.Is(err, hooks.ErrToolDiscovery) {
-			code = http.StatusBadGateway
-		}
-		httputil.WriteErrorJSON(w, code, err.Error(), "")
-		return
-	}
-
 	if err := permissions.CheckFlowPermissions(h.api, f.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
@@ -178,6 +169,17 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	if err := permissions.CheckGuardrailChannelPermissions(h.api, f.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	// Bridge-backed agent access verification runs after the local permission
+	// checks so we never call the bridge for flows the user cannot manage.
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
 		return
 	}
 
@@ -310,15 +312,6 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
-		code := http.StatusBadRequest
-		if errors.Is(err, hooks.ErrToolDiscovery) {
-			code = http.StatusBadGateway
-		}
-		httputil.WriteErrorJSON(w, code, err.Error(), "")
-		return
-	}
-
 	// New flow configuration must remain admissible for the creator (covers
 	// the sysadmin-edit case: catches references the creator cannot manage).
 	if err := permissions.CheckFlowPermissions(h.api, existing.CreatedBy, &f); err != nil {
@@ -330,6 +323,19 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	if err := permissions.CheckGuardrailChannelPermissions(h.api, existing.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	// Bridge-backed agent access verification uses the original creator's
+	// identity (matches the runtime model where the bridge ACL is checked
+	// against created_by, not the editor) and runs after the local permission
+	// checks so we never call the bridge for inadmissible flows.
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
 		return
 	}
 

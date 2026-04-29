@@ -123,12 +123,12 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 	var response string
 	switch cfg.ProviderType {
-	case "agent":
+	case model.AIProviderTypeAgent:
 		response, err = a.bridgeClient.AgentCompletion(cfg.ProviderID, req)
-	case "service":
+	case model.AIProviderTypeService:
 		response, err = a.bridgeClient.ServiceCompletion(cfg.ProviderID, req)
 	default:
-		return nil, fmt.Errorf("unsupported provider_type %q, must be \"agent\" or \"service\"", cfg.ProviderType)
+		return nil, fmt.Errorf("unsupported provider_type %q, must be %q or %q", cfg.ProviderType, model.AIProviderTypeAgent, model.AIProviderTypeService)
 	}
 	if err != nil {
 		a.api.LogDebug("AI prompt action: completion failed",

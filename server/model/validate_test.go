@@ -341,6 +341,64 @@ func TestValidateActions(t *testing.T) {
 		}})
 		require.NoError(t, err)
 	})
+
+	t.Run("unknown provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "bogus", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	t.Run("empty provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	// The bridge enforces that allowed_tools is rejected for service
+	// completion endpoints (HTTP 400 "allowed_tools is only supported for
+	// agent completion endpoints"). Mirror that rule at save time so users
+	// see the misconfiguration immediately rather than at execute time.
+	t.Run("service with allowed_tools rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				AllowedTools: []string{"search"},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `allowed_tools is only supported with provider_type "agent"`)
+	})
+
+	t.Run("service with empty allowed_tools passes", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-svc",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "service", ProviderID: "openai"},
+		}})
+		require.NoError(t, err)
+	})
+
+	// Guardrails imply allowed_tools, which agents-only. Reject the
+	// combination explicitly so the error message names the actual issue
+	// (otherwise the user would see the secondary "guardrails requires
+	// non-empty allowed_tools" check fire when they remove tools to comply).
+	t.Run("service with guardrails rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `guardrails is only supported with provider_type "agent"`)
+	})
 }
 
 func TestValidateSendMessageChannel(t *testing.T) {
