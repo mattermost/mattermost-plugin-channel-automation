@@ -195,7 +195,7 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to create automation", "user_id", f.CreatedBy, "automation_id", f.ID, "automation_name", f.Name, "error", err.Error())
+		h.api.LogError("Failed to create automation", "user_id", f.CreatedBy, "automation_id", f.ID, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create automation", err.Error())
 		return
 	}

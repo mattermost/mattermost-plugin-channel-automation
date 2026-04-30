@@ -187,7 +187,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Failed to verify automation creator",
 			"work_item_id", item.ID,
 			"automation_id", f.ID,
-			"automation_name", f.Name,
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
@@ -216,7 +215,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			wp.api.LogError("Failed to verify automation creator permissions",
 				"work_item_id", item.ID,
 				"automation_id", f.ID,
-				"automation_name", f.Name,
 				"created_by", f.CreatedBy,
 				"err", permErr.Error(),
 			)
@@ -242,7 +240,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Automation execution failed",
 			"work_item_id", item.ID,
 			"automation_id", item.AutomationID,
-			"automation_name", item.AutomationName,
 			"err", execErr.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -263,7 +260,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogInfo("Automation executed successfully",
 			"work_item_id", item.ID,
 			"automation_id", item.AutomationID,
-			"automation_name", item.AutomationName,
 		)
 	}
 
@@ -273,7 +269,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 func (wp *WorkerPool) disableAutomation(f *model.Automation, item *model.WorkItem, reason string) {
 	wp.api.LogWarn("Disabling automation",
 		"automation_id", f.ID,
-		"automation_name", f.Name,
 		"created_by", f.CreatedBy,
 		"reason", reason,
 	)

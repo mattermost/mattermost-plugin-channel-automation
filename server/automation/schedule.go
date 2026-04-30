@@ -70,7 +70,6 @@ func (sm *ScheduleManager) Start() error {
 		if err := sm.startJob(a); err != nil {
 			sm.api.LogError("Failed to start schedule job",
 				"automation_id", a.ID,
-				"automation_name", a.Name,
 				"err", err.Error(),
 			)
 		}
@@ -117,7 +116,6 @@ func (sm *ScheduleManager) SyncAutomation(existing *model.Automation, a *model.A
 		if err := sm.startJob(a); err != nil {
 			sm.api.LogError("Failed to sync schedule job",
 				"automation_id", a.ID,
-				"automation_name", a.Name,
 				"err", err.Error(),
 			)
 			return err
@@ -156,7 +154,7 @@ func (sm *ScheduleManager) startJob(a *model.Automation) error {
 	sm.jobs[a.ID] = job
 	sm.mu.Unlock()
 
-	sm.api.LogInfo("Schedule job started", "automation_id", a.ID, "automation_name", a.Name, "interval", a.Trigger.Schedule.Interval)
+	sm.api.LogInfo("Schedule job started", "automation_id", a.ID, "interval", a.Trigger.Schedule.Interval)
 	return nil
 }
 
@@ -192,7 +190,6 @@ func (sm *ScheduleManager) fireSchedule(automationID, automationName, interval, 
 	if err := sm.enqueuer.Enqueue(item); err != nil {
 		sm.api.LogError("Failed to enqueue scheduled work item",
 			"automation_id", automationID,
-			"automation_name", automationName,
 			"err", err.Error(),
 		)
 		return
@@ -201,7 +198,6 @@ func (sm *ScheduleManager) fireSchedule(automationID, automationName, interval, 
 	sm.api.LogDebug("Scheduled work item enqueued",
 		"work_item_id", item.ID,
 		"automation_id", automationID,
-		"automation_name", automationName,
 	)
 
 	sm.notifier.Notify()
