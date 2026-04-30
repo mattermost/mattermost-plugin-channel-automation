@@ -195,7 +195,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "flow_name", f.Name, "error", err.Error())
+		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
 		return
 	}

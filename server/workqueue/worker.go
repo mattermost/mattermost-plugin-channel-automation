@@ -187,7 +187,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Failed to verify flow creator",
 			"work_item_id", item.ID,
 			"flow_id", f.ID,
-			"flow_name", f.Name,
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
@@ -216,7 +215,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			wp.api.LogError("Failed to verify flow creator permissions",
 				"work_item_id", item.ID,
 				"flow_id", f.ID,
-				"flow_name", f.Name,
 				"created_by", f.CreatedBy,
 				"err", permErr.Error(),
 			)
@@ -242,7 +240,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Flow execution failed",
 			"work_item_id", item.ID,
 			"flow_id", item.FlowID,
-			"flow_name", item.FlowName,
 			"err", execErr.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -263,7 +260,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogInfo("Flow executed successfully",
 			"work_item_id", item.ID,
 			"flow_id", item.FlowID,
-			"flow_name", item.FlowName,
 		)
 	}
 
@@ -273,7 +269,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason string) {
 	wp.api.LogWarn("Disabling flow",
 		"flow_id", f.ID,
-		"flow_name", f.Name,
 		"created_by", f.CreatedBy,
 		"reason", reason,
 	)
