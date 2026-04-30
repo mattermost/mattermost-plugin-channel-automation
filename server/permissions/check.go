@@ -19,7 +19,7 @@ import (
 //
 // When no concrete channels can be verified (e.g. only templated or AI-only
 // actions on a non-channel_created trigger), we require system admin permission.
-func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automation) error {
+func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automation) error {
 	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		return nil
 	}
@@ -27,8 +27,8 @@ func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automati
 	// channel_created and user_joined_team automations use team-level authorization.
 	// We call GetTeam first because HasPermissionToTeam is boolean-only and
 	// cannot distinguish infrastructure failures from genuine permission denials.
-	if a.Trigger.ChannelCreated != nil {
-		teamID := a.Trigger.ChannelCreated.TeamID
+	if f.Trigger.ChannelCreated != nil {
+		teamID := f.Trigger.ChannelCreated.TeamID
 		if _, appErr := api.GetTeam(teamID); appErr != nil {
 			if appErr.StatusCode >= http.StatusInternalServerError {
 				return fmt.Errorf("failed to verify team: %w", appErr)
@@ -38,7 +38,7 @@ func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automati
 		if !api.HasPermissionToTeam(userID, teamID, mmmodel.PermissionManageTeam) {
 			return fmt.Errorf("you must be a team admin on the team specified in the channel_created trigger")
 		}
-		for _, chID := range model.CollectChannelIDs(a) {
+		for _, chID := range model.CollectChannelIDs(f) {
 			ch, appErr := api.GetChannel(chID)
 			if appErr != nil {
 				if appErr.StatusCode >= http.StatusInternalServerError {
@@ -53,10 +53,10 @@ func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automati
 		return nil
 	}
 
-	if a.Trigger.UserJoinedTeam != nil {
-		teamIDs := model.CollectTeamIDs(a)
+	if f.Trigger.UserJoinedTeam != nil {
+		teamIDs := model.CollectTeamIDs(f)
 		if len(teamIDs) == 0 {
-			return fmt.Errorf("system admin permission is required for automations without explicit team references")
+			return fmt.Errorf("system admin permission is required for flows without explicit team references")
 		}
 		for _, teamID := range teamIDs {
 			if _, appErr := api.GetTeam(teamID); appErr != nil {
@@ -72,9 +72,9 @@ func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automati
 		return nil
 	}
 
-	channelIDs := model.CollectChannelIDs(a)
+	channelIDs := model.CollectChannelIDs(f)
 	if len(channelIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for automations without explicit channel references")
+		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
 	}
 	for _, chID := range channelIDs {
 		member, appErr := api.GetChannelMember(chID, userID)
@@ -86,8 +86,82 @@ func CheckAutomationPermissions(api plugin.API, userID string, a *model.Automati
 			}
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
 		}
-		if !member.SchemeAdmin {
+		if member.SchemeAdmin {
+			continue
+		}
+		// DM and GM channels have no channel-admin role: any participant may
+		// create an automation on a channel they belong to. The participant
+		// could already read or post to it manually, so this grants no new
+		// access.
+		ch, chErr := api.GetChannel(chID)
+		if chErr != nil {
+			if chErr.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("failed to verify channel permissions: %w", chErr)
+			}
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+		}
+		if ch == nil || (ch.Type != mmmodel.ChannelTypeDirect && ch.Type != mmmodel.ChannelTypeGroup) {
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+		}
+	}
+	return nil
+}
+
+// CanEditFlow returns nil when userID is permitted to modify or delete the
+// given automation. Editors are restricted to the automation's creator or a system admin.
+//
+// Limiting edits to creator-or-sysadmin is the security boundary that lets
+// downstream checks (CheckGuardrailChannelPermissions, ValidateAllowedTools)
+// safely validate against the creator's permissions rather than the editor's:
+// non-creator editors are sysadmins (already maximally privileged), and the
+// agent always runs with the creator's identity at execute time, so there is
+// no privilege-escalation path through editor-supplied configuration.
+func CanEditFlow(api plugin.API, userID string, f *model.Automation) error {
+	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
+		return nil
+	}
+	if f != nil && f.CreatedBy != "" && userID == f.CreatedBy {
+		return nil
+	}
+	return fmt.Errorf("only the automation creator or a system admin may modify this automation")
+}
+
+// CheckGuardrailChannelPermissions verifies that userID can read every channel
+// referenced by ai_prompt guardrails on the automation. Callers should pass the
+// automation's creator (CreatedBy): the AI agent runs with the creator's identity at
+// execute time, so a guardrail channel the creator cannot read would silently
+// break the automation. Authorization to edit the automation is enforced separately
+// by CanEditFlow. There is no sysadmin shortcut here: sysadmins implicitly
+// satisfy PermissionReadChannel on every channel, so the same uniform
+// per-channel check is correct for everyone.
+func CheckGuardrailChannelPermissions(api plugin.API, userID string, f *model.Automation) error {
+	seen := make(map[string]struct{})
+	for i := range f.Actions {
+		ai := f.Actions[i].AIPrompt
+		if ai == nil || ai.Guardrails == nil {
+			continue
+		}
+		for _, c := range ai.Guardrails.Channels {
+			if c.ChannelID == "" {
+				continue
+			}
+			if _, dup := seen[c.ChannelID]; dup {
+				continue
+			}
+			seen[c.ChannelID] = struct{}{}
+
+			// GetChannel first so 5xx infrastructure failures surface
+			// distinctly from genuine "no such channel" / "no access" cases,
+			// matching the pattern used in the channel_created branch above.
+			if _, appErr := api.GetChannel(c.ChannelID); appErr != nil {
+				if appErr.StatusCode >= http.StatusInternalServerError {
+					return fmt.Errorf("failed to verify guardrail channel: %w", appErr)
+				}
+				return fmt.Errorf("you do not have permission to read one or more channels referenced by ai_prompt guardrails")
+			}
+			if !api.HasPermissionToChannel(userID, c.ChannelID, mmmodel.PermissionReadChannel) {
+				return fmt.Errorf("you do not have permission to read one or more channels referenced by ai_prompt guardrails")
+			}
 		}
 	}
 	return nil

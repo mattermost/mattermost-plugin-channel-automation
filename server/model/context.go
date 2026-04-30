@@ -4,9 +4,10 @@ import mmmodel "github.com/mattermost/mattermost/server/public/model"
 
 // AutomationContext is the runtime context built up during automation execution.
 type AutomationContext struct {
-	CreatedBy string                `json:"created_by"`
-	Trigger   TriggerData           `json:"trigger"`
-	Steps     map[string]StepOutput `json:"steps"`
+	AutomationID string                `json:"automation_id"`
+	CreatedBy    string                `json:"created_by"`
+	Trigger      TriggerData           `json:"trigger"`
+	Steps        map[string]StepOutput `json:"steps"`
 }
 
 // TriggerData holds the data from the event that triggered the automation.

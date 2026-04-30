@@ -11,6 +11,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
@@ -22,6 +23,7 @@ type WorkerPool struct {
 	executor        *automation.AutomationExecutor
 	automationStore model.Store
 	historyStore    model.ExecutionStore
+	notifier        notifier.FailureNotifier
 	api             plugin.API
 	maxWorkers      int
 	pollInterval    time.Duration
@@ -33,12 +35,14 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
-func NewWorkerPool(store *Store, executor *automation.AutomationExecutor, automationStore model.Store, historyStore model.ExecutionStore, api plugin.API, maxWorkers int) *WorkerPool {
+// notifier may be nil to disable failure notifications.
+func NewWorkerPool(store *Store, executor *automation.AutomationExecutor, automationStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
 		store:           store,
 		executor:        executor,
 		automationStore: automationStore,
 		historyStore:    historyStore,
+		notifier:        failureNotifier,
 		api:             api,
 		maxWorkers:      maxWorkers,
 		pollInterval:    30 * time.Second,
@@ -141,7 +145,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		}
 	}()
 
-	a, err := wp.automationStore.Get(item.AutomationID)
+	f, err := wp.automationStore.Get(item.AutomationID)
 	if err != nil {
 		wp.api.LogError("Failed to get automation for work item",
 			"work_item_id", item.ID,
@@ -158,7 +162,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 
 	// Automation was deleted or disabled between enqueue and execute — silently complete.
-	if a == nil || !a.Enabled {
+	if f == nil || !f.Enabled {
 		if err := wp.store.Complete(item.ID); err != nil {
 			wp.api.LogError("Failed to complete work item for deleted/disabled automation",
 				"work_item_id", item.ID,
@@ -170,21 +174,21 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 
 	// Check that the automation creator is still an active user.
-	creator, appErr := wp.api.GetUser(a.CreatedBy)
+	creator, appErr := wp.api.GetUser(f.CreatedBy)
 	if appErr != nil {
 		if appErr.StatusCode == http.StatusNotFound {
 			// Creator has been permanently deleted — disable the automation.
-			wp.disableAutomation(a, item, "automation creator account has been deactivated or deleted")
+			wp.disableAutomation(f, item, "automation creator account has been deactivated or deleted")
 			return
 		}
 
 		// Transient API error — fail this execution but leave the automation enabled.
-		reason := fmt.Sprintf("failed to look up automation creator %q: %s", a.CreatedBy, appErr.Error())
+		reason := fmt.Sprintf("failed to look up automation creator %q: %s", f.CreatedBy, appErr.Error())
 		wp.api.LogError("Failed to verify automation creator",
 			"work_item_id", item.ID,
-			"automation_id", a.ID,
-			"automation_name", a.Name,
-			"created_by", a.CreatedBy,
+			"automation_id", f.ID,
+			"automation_name", f.Name,
+			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -198,22 +202,22 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	}
 	if creator.DeleteAt != 0 {
 		// Creator has been deactivated — disable the automation.
-		wp.disableAutomation(a, item, "automation creator account has been deactivated or deleted")
+		wp.disableAutomation(f, item, "automation creator account has been deactivated or deleted")
 		return
 	}
 
 	// Verify the creator still has the required permissions (e.g. channel
 	// admin, team admin, or system admin) — the same check performed at
 	// automation creation time.
-	if permErr := permissions.CheckAutomationPermissions(wp.api, a.CreatedBy, a); permErr != nil {
+	if permErr := permissions.CheckAutomationPermissions(wp.api, f.CreatedBy, f); permErr != nil {
 		var appErr *mmmodel.AppError
 		if errors.As(permErr, &appErr) {
 			// Transient API error — fail this execution but leave the automation enabled.
 			wp.api.LogError("Failed to verify automation creator permissions",
 				"work_item_id", item.ID,
-				"automation_id", a.ID,
-				"automation_name", a.Name,
-				"created_by", a.CreatedBy,
+				"automation_id", f.ID,
+				"automation_name", f.Name,
+				"created_by", f.CreatedBy,
 				"err", permErr.Error(),
 			)
 			if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -227,11 +231,11 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		}
 
 		// Creator lost the required permissions — disable the automation.
-		wp.disableAutomation(a, item, fmt.Sprintf("automation creator no longer has the required permissions: %s", permErr.Error()))
+		wp.disableAutomation(f, item, fmt.Sprintf("automation creator no longer has the required permissions: %s", permErr.Error()))
 		return
 	}
 
-	ctx, execErr := wp.executor.Execute(a, item.TriggerData)
+	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
 	completedAt := model.NowTimestamp()
 
 	if execErr != nil {
@@ -247,6 +251,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 				"err", storeErr.Error(),
 			)
 		}
+		wp.notifyFailure(f, item, execErr)
 	} else {
 		if err := wp.store.Complete(item.ID); err != nil {
 			wp.api.LogError("Failed to complete work item",
@@ -265,18 +270,18 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	wp.saveExecutionRecord(item, ctx, execErr, completedAt)
 }
 
-func (wp *WorkerPool) disableAutomation(a *model.Automation, item *model.WorkItem, reason string) {
+func (wp *WorkerPool) disableAutomation(f *model.Automation, item *model.WorkItem, reason string) {
 	wp.api.LogWarn("Disabling automation",
-		"automation_id", a.ID,
-		"automation_name", a.Name,
-		"created_by", a.CreatedBy,
+		"automation_id", f.ID,
+		"automation_name", f.Name,
+		"created_by", f.CreatedBy,
 		"reason", reason,
 	)
 
-	a.Enabled = false
-	if saveErr := wp.automationStore.Save(a); saveErr != nil {
+	f.Enabled = false
+	if saveErr := wp.automationStore.Save(f); saveErr != nil {
 		wp.api.LogError("Failed to disable automation with inactive creator",
-			"automation_id", a.ID,
+			"automation_id", f.ID,
 			"err", saveErr.Error(),
 		)
 	}
@@ -284,11 +289,52 @@ func (wp *WorkerPool) disableAutomation(a *model.Automation, item *model.WorkIte
 	if storeErr := wp.store.Fail(item.ID); storeErr != nil {
 		wp.api.LogError("Failed to remove work item after disabling automation",
 			"work_item_id", item.ID,
-			"automation_id", a.ID,
+			"automation_id", f.ID,
 			"err", storeErr.Error(),
 		)
 	}
 	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), model.NowTimestamp())
+}
+
+// notifyFailure surfaces the failure to the automation creator via the configured
+// notifier (typically a DM from the plugin bot). Safe to call with a nil
+// notifier or nil automation.
+func (wp *WorkerPool) notifyFailure(f *model.Automation, item *model.WorkItem, execErr error) {
+	if wp.notifier == nil || f == nil || execErr == nil {
+		wp.api.LogWarn("Skipping failure notification due to missing inputs",
+			"work_item_id", item.ID,
+			"notifier_nil", wp.notifier == nil,
+			"automation_nil", f == nil,
+			"err_nil", execErr == nil,
+		)
+		return
+	}
+
+	details := notifier.FailureDetails{
+		AutomationID:   f.ID,
+		AutomationName: f.Name,
+		CreatedBy:      f.CreatedBy,
+		ErrorMsg:       execErr.Error(),
+		ExecutionID:    item.ID,
+	}
+	if ch := item.TriggerData.Channel; ch != nil {
+		details.ChannelID = ch.Id
+		// Prefer DisplayName for readability; fall back to Name (handle).
+		if ch.DisplayName != "" {
+			details.ChannelDisplayName = ch.DisplayName
+		} else {
+			details.ChannelDisplayName = ch.Name
+		}
+	}
+
+	var actionErr *automation.ActionError
+	if errors.As(execErr, &actionErr) {
+		details.ActionID = actionErr.ActionID
+		details.ActionType = actionErr.ActionType
+		details.ErrorMsg = actionErr.Err.Error()
+	}
+
+	wp.notifier.NotifyFailure(details)
 }
 
 func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.AutomationContext, execErr error, completedAt int64) {

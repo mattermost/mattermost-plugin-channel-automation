@@ -468,7 +468,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 
 	// Create a WorkerPool but don't start it — we just need Notify() to not block.
 	executor := automation.NewAutomationExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, api, 1)
+	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, nil, api, 1)
 
 	p := &Plugin{
 		botUserID:       "bot-id",
@@ -479,6 +479,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		workerPool:      wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = automation.NewDispatcher(api, triggerService, wqStore, wp)
 
 	return p, wqStore
 }
@@ -486,7 +487,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
-	// Save a automation triggered by messages in ch1.
+	// Save an automation triggered by messages in ch1.
 	f := &model.Automation{
 		ID:      "f1",
 		Name:    "Test Flow",
@@ -650,7 +651,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	triggerService := automation.NewTriggerService(automationStore, registry)
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
 	executor := automation.NewAutomationExecutor(registry)
-	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, api, 1)
+	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, nil, api, 1)
 
 	p := &Plugin{
 		botUserID:       "bot-id",
@@ -661,6 +662,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 		workerPool:      wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = automation.NewDispatcher(api, triggerService, wqStore, wp)
 
 	f := &model.Automation{
 		ID:      "f1",
@@ -685,8 +687,8 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	require.NotNil(t, item.TriggerData.Team)
-	assert.Empty(t, item.TriggerData.Team.Id)
-	assert.Equal(t, "[unknown team]", item.TriggerData.Team.Name)
-	assert.Equal(t, "[unknown team]", item.TriggerData.Team.DisplayName)
+	assert.Equal(t, "team1", item.TriggerData.Team.Id, "Team.Id should fall back to event.Team.Id when GetTeam fails")
+	assert.Empty(t, item.TriggerData.Team.Name)
+	assert.Empty(t, item.TriggerData.Team.DisplayName)
 	assert.Empty(t, item.TriggerData.Team.DefaultChannelId, "DefaultChannelId should stay empty on failure so SendMessage fails fast")
 }

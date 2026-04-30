@@ -8,6 +8,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -18,6 +19,7 @@ const completionScopeInstruction = "Complete only the specific task described in
 type BridgeClient interface {
 	AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error)
 	ServiceCompletion(service string, req bridgeclient.CompletionRequest) (string, error)
+	GetAgentTools(agentID, userID string) ([]bridgeclient.BridgeToolInfo, error)
 }
 
 // AIPromptAction sends a rendered prompt to an AI agent or service and stores the response.
@@ -96,16 +98,38 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	}
 
 	if len(cfg.AllowedTools) > 0 {
+		// Re-validate at execute time so catalog updates that demote a tool
+		// to Allowed=false (or agent changes that drop a tool) take effect on
+		// already-saved automations without requiring a re-save.
+		stub := &model.Automation{Actions: []model.Action{*action}}
+		if vErr := hooks.ValidateAllowedTools(stub, ctx.CreatedBy, a.bridgeClient); vErr != nil {
+			return nil, fmt.Errorf("allowed_tools validation failed: %w", vErr)
+		}
 		req.AllowedTools = cfg.AllowedTools
+	}
+	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
+		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
+		for _, t := range cfg.AllowedTools {
+			entry, ok := hooks.LookupMattermostMCPTool(t)
+			if !ok || entry.Before == nil {
+				continue
+			}
+			toolHooks[t] = bridgeclient.ToolHookConfig{
+				BeforeCallback: hooks.HookURL(ctx.AutomationID, action.ID),
+			}
+		}
+		if len(toolHooks) > 0 {
+			req.ToolHooks = toolHooks
+		}
 	}
 	var response string
 	switch cfg.ProviderType {
-	case "agent":
+	case model.AIProviderTypeAgent:
 		response, err = a.bridgeClient.AgentCompletion(cfg.ProviderID, req)
-	case "service":
+	case model.AIProviderTypeService:
 		response, err = a.bridgeClient.ServiceCompletion(cfg.ProviderID, req)
 	default:
-		return nil, fmt.Errorf("unsupported provider_type %q, must be \"agent\" or \"service\"", cfg.ProviderType)
+		return nil, fmt.Errorf("unsupported provider_type %q, must be %q or %q", cfg.ProviderType, model.AIProviderTypeAgent, model.AIProviderTypeService)
 	}
 	if err != nil {
 		a.api.LogDebug("AI prompt action: completion failed",

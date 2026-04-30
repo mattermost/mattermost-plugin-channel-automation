@@ -10,6 +10,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 - **Trigger-action automation** — Create named automations with a trigger and a sequence of actions that execute in order.
 - **Go template engine** — Action fields support `text/template` syntax with access to trigger context (post, channel, user) and outputs from previous actions.
 - **Persistent work queue** — Automation executions are durably queued in the KV store with bounded concurrency and automatic crash recovery.
+- **Failure notifications** — When an action in an automation fails (e.g. an `ai_prompt` returns an error), the plugin DMs the automation's creator with the failing action ID and error message, rate-limited to once per hour per automation and coordinated cluster-wide via the KV store.
 - **Management UI** — A dedicated webapp section for listing, creating, editing, enabling/disabling, and deleting automations.
 
 ### Triggers
@@ -110,25 +111,25 @@ Sensitive user fields (email, password, auth data) are stripped from the templat
 
 ## Configuration
 
-| Setting                          | Default | Description                                                                                                       |
-| -------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
-| **Max Concurrent Automations**   | `4`     | Maximum automation executions running concurrently per plugin instance. Requires a plugin restart to take effect. |
-| **Max Automations Per Channel**  | `0`     | Maximum number of automations that can target a single channel. Set to 0 for unlimited.                           |
+| Setting                         | Default | Description                                                                                                       |
+| ------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Max Concurrent Automations**  | `4`     | Maximum automation executions running concurrently per plugin instance. Requires a plugin restart to take effect. |
+| **Max Automations Per Channel** | `0`     | Maximum number of automations that can target a single channel. Set to 0 for unlimited.                           |
 
 ## API
 
 The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. Otherwise the user must be a channel admin on every channel referenced by the automation.
 
-| Method   | Path                                          | Description                         |
-| -------- | --------------------------------------------- | ----------------------------------- |
-| `GET`    | `/automations`                                | List all automations                |
-| `POST`   | `/automations`                                | Create a new automation             |
-| `GET`    | `/automations/{id}`                           | Get an automation by ID             |
-| `PUT`    | `/automations/{id}`                           | Update an automation                |
-| `DELETE` | `/automations/{id}`                           | Delete an automation                |
-| `GET`    | `/automations/{automation_id}/executions`     | List executions for an automation   |
-| `GET`    | `/executions/{id}`                            | Get a single execution record       |
-| `GET`    | `/executions`                                 | List recent executions (admin only) |
+| Method   | Path                                        | Description                         |
+| -------- | ------------------------------------------- | ----------------------------------- |
+| `GET`    | `/automations`                              | List all automations                |
+| `POST`   | `/automations`                              | Create a new automation             |
+| `GET`    | `/automations/{id}`                         | Get an automation by ID             |
+| `PUT`    | `/automations/{id}`                         | Update an automation                |
+| `DELETE` | `/automations/{id}`                         | Delete an automation                |
+| `GET`    | `/automations/{automation_id}/executions`   | List executions for an automation   |
+| `GET`    | `/executions/{id}`                          | Get a single execution record       |
+| `GET`    | `/executions`                               | List recent executions (admin only) |
 
 See [docs/api.md](docs/api.md) for the full API reference with request/response schemas.
 

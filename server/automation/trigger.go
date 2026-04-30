@@ -6,7 +6,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// TriggerService evaluates incoming events against stored automations.
+// TriggerService evaluates incoming events against stored flows.
 type TriggerService struct {
 	store    model.Store
 	registry *Registry
@@ -17,64 +17,45 @@ func NewTriggerService(store model.Store, registry *Registry) *TriggerService {
 	return &TriggerService{store: store, registry: registry}
 }
 
-// FindMatchingAutomations returns all enabled automations whose trigger matches the given event.
-func (t *TriggerService) FindMatchingAutomations(event *model.Event) ([]*model.Automation, error) {
+// FindMatchingAutomations returns the registered handler for the event type along
+// with all enabled flows whose trigger matches the event. The handler is
+// returned so callers can drive the rest of the trigger lifecycle (e.g.
+// BuildTriggerData) without a second registry lookup, which would risk a
+// silent divergence if the registry mutated between calls.
+//
+// Returns an error if no handler is registered for the event type — this is
+// a programming/wiring error (a hook fired for a type nobody registered)
+// and must not be silently dropped.
+func (t *TriggerService) FindMatchingAutomations(event *model.Event) (model.TriggerHandler, []*model.Automation, error) {
 	handler, ok := t.registry.GetTrigger(event.Type)
 	if !ok {
-		return nil, nil
+		return nil, nil, fmt.Errorf("no trigger handler registered for event type %q", event.Type)
 	}
 
-	var candidateIDs []string
-	var err error
-
-	switch event.Type {
-	case model.TriggerTypeMessagePosted:
-		if event.Post == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetAutomationIDsForChannel(event.Post.ChannelId)
-	case model.TriggerTypeMembershipChanged:
-		if event.Channel == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetAutomationIDsForMembershipChannel(event.Channel.Id)
-	case model.TriggerTypeChannelCreated:
-		if event.Channel == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetChannelCreatedAutomationIDs()
-	case model.TriggerTypeUserJoinedTeam:
-		if event.Team == nil || event.Team.Id == "" {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetAutomationIDsForUserJoinedTeam(event.Team.Id)
-	default:
-		return nil, fmt.Errorf("trigger type %q is registered but has no candidate resolution logic", event.Type)
-	}
-
+	candidateIDs, err := handler.CandidateAutomationIDs(t.store, event)
 	if err != nil {
-		return nil, err
+		return handler, nil, err
 	}
 	if len(candidateIDs) == 0 {
-		return nil, nil
+		return handler, nil, nil
 	}
 
-	var automations []*model.Automation
+	var flows []*model.Automation
 	for _, id := range candidateIDs {
-		a, err := t.store.Get(id)
+		f, err := t.store.Get(id)
 		if err != nil {
-			return nil, err
+			return handler, nil, err
 		}
-		if a == nil {
+		if f == nil {
 			continue
 		}
-		if !a.Enabled {
+		if !f.Enabled {
 			continue
 		}
-		if !handler.Matches(&a.Trigger, event) {
+		if !handler.Matches(&f.Trigger, event) {
 			continue
 		}
-		automations = append(automations, a)
+		flows = append(flows, f)
 	}
-	return automations, nil
+	return handler, flows, nil
 }

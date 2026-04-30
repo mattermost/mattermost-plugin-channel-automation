@@ -14,6 +14,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/action"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/command"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
@@ -46,6 +47,7 @@ type Plugin struct {
 	triggerService     *automation.TriggerService
 	automationExecutor *automation.AutomationExecutor
 	scheduleManager    *automation.ScheduleManager
+	dispatcher         *automation.Dispatcher
 
 	// configurationLock synchronizes access to the configuration.
 	configurationLock sync.RWMutex
@@ -120,8 +122,12 @@ func (p *Plugin) OnActivate() error {
 		maxWorkers = 4
 	}
 
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.automationExecutor, p.automationStore, p.historyStore, p.API, maxWorkers)
+	cooldownStore := notifier.NewCooldownStore(p.API, notifier.NotificationCooldown)
+	failureNotifier := notifier.NewCreatorNotifier(p.API, cooldownStore, p.botUserID)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.automationExecutor, p.automationStore, p.historyStore, failureNotifier, p.API, maxWorkers)
 	p.workerPool.Start()
+
+	p.dispatcher = automation.NewDispatcher(p.API, p.triggerService, p.workQueueStore, p.workerPool)
 
 	// Start schedule manager after worker pool so scheduled items can be processed.
 	p.scheduleManager = automation.NewScheduleManager(p.API, p.automationStore, p.workQueueStore, p.workerPool)
@@ -156,11 +162,9 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *mmmodel.CommandArgs) (*
 	return response, nil
 }
 
-// MessageHasBeenPosted is invoked after a message is posted. It finds matching
-// automations and enqueues work items for asynchronous execution.
+// MessageHasBeenPosted is invoked after a message is posted.
 func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
-	// Ignore system messages, bot posts, and webhook posts to prevent
-	// loops and unintended automation triggers.
+	// Filter bot/system/webhook/AI posts to prevent loops and unintended triggers.
 	if post.UserId == p.botUserID {
 		return
 	}
@@ -177,65 +181,10 @@ func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
 		return
 	}
 
-	event := &model.Event{
+	p.dispatcher.Dispatch(&model.Event{
 		Type: model.TriggerTypeMessagePosted,
 		Post: post,
-	}
-
-	automations, err := p.triggerService.FindMatchingAutomations(event)
-	if err != nil {
-		p.API.LogError("Failed to find automations for post", "err", err.Error())
-		return
-	}
-	if len(automations) == 0 {
-		return
-	}
-
-	// Build trigger data once before the loop.
-	channel, appErr := p.API.GetChannel(post.ChannelId)
-	if appErr != nil {
-		p.API.LogError("Failed to get channel for trigger", "channel_id", post.ChannelId, "err", appErr.Error())
-		return
-	}
-	user, appErr := p.API.GetUser(post.UserId)
-	if appErr != nil {
-		p.API.LogError("Failed to get user for trigger", "user_id", post.UserId, "err", appErr.Error())
-		return
-	}
-
-	triggerData := model.TriggerData{
-		Post:    model.NewSafePost(post),
-		Channel: model.NewSafeChannel(channel),
-		User:    model.NewSafeUser(user),
-	}
-
-	for _, a := range automations {
-		item := &model.WorkItem{
-			ID:             mmmodel.NewId(),
-			AutomationID:   a.ID,
-			AutomationName: a.Name,
-			TriggerData:    triggerData,
-		}
-
-		if err := p.workQueueStore.Enqueue(item); err != nil {
-			p.API.LogError("Failed to enqueue work item",
-				"automation_id", a.ID,
-				"automation_name", a.Name,
-				"post_id", post.Id,
-				"err", err.Error(),
-			)
-			continue
-		}
-
-		p.API.LogDebug("Work item enqueued",
-			"work_item_id", item.ID,
-			"automation_id", a.ID,
-			"automation_name", a.Name,
-			"post_id", post.Id,
-		)
-	}
-
-	p.workerPool.Notify()
+	})
 }
 
 // UserHasJoinedChannel is invoked after a user joins a channel.
@@ -248,7 +197,9 @@ func (p *Plugin) UserHasLeftChannel(_ *plugin.Context, member *mmmodel.ChannelMe
 	p.handleMembershipChange(member, "left")
 }
 
-// handleMembershipChange is the shared logic for join/leave hooks.
+// handleMembershipChange is the shared logic for join/leave hooks. It
+// resolves the user and channel up front because the membership filter
+// needs to inspect the user (bot check) before dispatching.
 func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action string) {
 	if member.UserId == p.botUserID {
 		return
@@ -269,59 +220,12 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 		return
 	}
 
-	event := &model.Event{
+	p.dispatcher.Dispatch(&model.Event{
 		Type:             model.TriggerTypeMembershipChanged,
 		Channel:          channel,
 		User:             user,
 		MembershipAction: action,
-	}
-
-	automations, err := p.triggerService.FindMatchingAutomations(event)
-	if err != nil {
-		p.API.LogError("Failed to find automations for membership change", "err", err.Error())
-		return
-	}
-	if len(automations) == 0 {
-		return
-	}
-
-	triggerData := model.TriggerData{
-		Channel:    model.NewSafeChannel(channel),
-		User:       model.NewSafeUser(user),
-		Membership: &model.MembershipInfo{Action: action},
-	}
-
-	for _, a := range automations {
-		item := &model.WorkItem{
-			ID:             mmmodel.NewId(),
-			AutomationID:   a.ID,
-			AutomationName: a.Name,
-			TriggerData:    triggerData,
-		}
-
-		if err := p.workQueueStore.Enqueue(item); err != nil {
-			p.API.LogError("Failed to enqueue work item",
-				"automation_id", a.ID,
-				"automation_name", a.Name,
-				"channel_id", member.ChannelId,
-				"user_id", member.UserId,
-				"action", action,
-				"err", err.Error(),
-			)
-			continue
-		}
-
-		p.API.LogDebug("Work item enqueued",
-			"work_item_id", item.ID,
-			"automation_id", a.ID,
-			"automation_name", a.Name,
-			"channel_id", member.ChannelId,
-			"user_id", member.UserId,
-			"action", action,
-		)
-	}
-
-	p.workerPool.Notify()
+	})
 }
 
 // ChannelHasBeenCreated is invoked after a new channel is created.
@@ -331,60 +235,10 @@ func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Chann
 		return
 	}
 
-	event := &model.Event{
+	p.dispatcher.Dispatch(&model.Event{
 		Type:    model.TriggerTypeChannelCreated,
 		Channel: channel,
-	}
-
-	automations, err := p.triggerService.FindMatchingAutomations(event)
-	if err != nil {
-		p.API.LogError("Failed to find automations for channel creation", "err", err.Error())
-		return
-	}
-	if len(automations) == 0 {
-		return
-	}
-
-	triggerData := model.TriggerData{
-		Channel: model.NewSafeChannel(channel),
-	}
-
-	if channel.CreatorId != "" {
-		user, appErr := p.API.GetUser(channel.CreatorId)
-		if appErr != nil {
-			p.API.LogError("Failed to get user for channel creation trigger", "user_id", channel.CreatorId, "err", appErr.Error())
-		} else {
-			triggerData.User = model.NewSafeUser(user)
-		}
-	}
-
-	for _, a := range automations {
-		item := &model.WorkItem{
-			ID:             mmmodel.NewId(),
-			AutomationID:   a.ID,
-			AutomationName: a.Name,
-			TriggerData:    triggerData,
-		}
-
-		if err := p.workQueueStore.Enqueue(item); err != nil {
-			p.API.LogError("Failed to enqueue work item",
-				"automation_id", a.ID,
-				"automation_name", a.Name,
-				"channel_id", channel.Id,
-				"err", err.Error(),
-			)
-			continue
-		}
-
-		p.API.LogDebug("Work item enqueued",
-			"work_item_id", item.ID,
-			"automation_id", a.ID,
-			"automation_name", a.Name,
-			"channel_id", channel.Id,
-		)
-	}
-
-	p.workerPool.Notify()
+	})
 }
 
 // UserHasJoinedTeam is invoked after a user joins a team.
@@ -405,69 +259,11 @@ func (p *Plugin) UserHasJoinedTeam(_ *plugin.Context, teamMember *mmmodel.TeamMe
 		return
 	}
 
-	event := &model.Event{
+	p.dispatcher.Dispatch(&model.Event{
 		Type: model.TriggerTypeUserJoinedTeam,
 		Team: &mmmodel.Team{Id: teamMember.TeamId},
 		User: user,
-	}
-
-	automations, err := p.triggerService.FindMatchingAutomations(event)
-	if err != nil {
-		p.API.LogError("Failed to find automations for team join", "team_id", teamMember.TeamId, "user_id", teamMember.UserId, "err", err.Error())
-		return
-	}
-	if len(automations) == 0 {
-		return
-	}
-
-	team, appErr := p.API.GetTeam(teamMember.TeamId)
-	if appErr != nil {
-		p.API.LogWarn("Failed to get team for team join trigger, continuing with partial data", "team_id", teamMember.TeamId, "err", appErr.Error())
-	}
-
-	safeTeam := model.NewSafeTeam(team)
-
-	defaultChannel, appErr := p.API.GetChannelByName(teamMember.TeamId, mmmodel.DefaultChannelName, false)
-	if appErr != nil {
-		p.API.LogWarn("Failed to get default channel for team join trigger", "team_id", teamMember.TeamId, "err", appErr.Error())
-	} else {
-		safeTeam.DefaultChannelId = defaultChannel.Id
-	}
-
-	triggerData := model.TriggerData{
-		User: model.NewSafeUser(user),
-		Team: safeTeam,
-	}
-
-	for _, a := range automations {
-		item := &model.WorkItem{
-			ID:             mmmodel.NewId(),
-			AutomationID:   a.ID,
-			AutomationName: a.Name,
-			TriggerData:    triggerData,
-		}
-
-		if err := p.workQueueStore.Enqueue(item); err != nil {
-			p.API.LogError("Failed to enqueue work item",
-				"automation_id", a.ID,
-				"automation_name", a.Name,
-				"team_id", teamMember.TeamId,
-				"user_id", teamMember.UserId,
-				"err", err.Error(),
-			)
-			continue
-		}
-
-		p.API.LogDebug("Work item enqueued",
-			"work_item_id", item.ID,
-			"automation_id", a.ID,
-			"automation_name", a.Name,
-			"team_id", teamMember.TeamId,
-			"user_id", teamMember.UserId,
-		)
-	}
-
-	p.workerPool.Notify()
+	})
 }
 
 // See https://developers.mattermost.com/extend/plugins/server/reference/

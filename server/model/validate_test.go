@@ -1,181 +1,44 @@
 package model
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
-	"time"
 
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateTrigger_MessagePosted(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}}, nil)
-		require.NoError(t, err)
+func TestValidateTriggerExclusivity(t *testing.T) {
+	t.Run("single trigger type ok", func(t *testing.T) {
+		require.NoError(t, ValidateTriggerExclusivity(&Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}}))
 	})
 
-	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MessagePosted: &MessagePostedConfig{}}, nil)
+	t.Run("two trigger types rejected", func(t *testing.T) {
+		err := ValidateTriggerExclusivity(&Trigger{
+			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
+			Schedule:      &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
+		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "channel_id")
-	})
-}
-
-func TestValidateTrigger_Schedule(t *testing.T) {
-	t.Run("valid minimal", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}, nil)
-		require.NoError(t, err)
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 	})
 
-	t.Run("valid with start_at", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "1h", StartAt: TimeToTimestamp(time.Now().Add(1 * time.Hour))}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{Interval: "1h"}}, nil)
+	t.Run("three trigger types rejected", func(t *testing.T) {
+		err := ValidateTriggerExclusivity(&Trigger{
+			MessagePosted:     &MessagePostedConfig{ChannelID: "ch1"},
+			Schedule:          &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
+			MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"},
+		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "channel_id")
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set, got 3")
 	})
 
-	t.Run("missing interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1"}}, nil)
+	t.Run("no trigger type rejected", func(t *testing.T) {
+		err := ValidateTriggerExclusivity(&Trigger{})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "interval")
+		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 	})
-
-	t.Run("unparseable interval", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "not-a-duration"}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid interval")
-	})
-
-	t.Run("interval too small", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "30m"}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "at least 1h")
-	})
-
-	t.Run("start_at in the past", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-1 * time.Hour))}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start_at")
-	})
-
-	t.Run("update with unchanged past start_at is valid", func(t *testing.T) {
-		pastStartAt := TimeToTimestamp(time.Now().Add(-1 * time.Hour))
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
-		err := ValidateTrigger(updated, existing)
-		require.NoError(t, err)
-	})
-
-	t.Run("update with round-tripped past start_at is valid", func(t *testing.T) {
-		// The webapp truncates to minute precision via datetime-local input;
-		// a round-tripped value may differ by up to 59s but should still be
-		// treated as unchanged.
-		pastStartAt := TimeToTimestamp(time.Now().Add(-1 * time.Hour))
-		truncated := TimeToTimestamp(TimestampToTime(pastStartAt).Truncate(time.Minute))
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: pastStartAt}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: truncated}}
-		err := ValidateTrigger(updated, existing)
-		require.NoError(t, err)
-	})
-
-	t.Run("update with new past start_at is rejected", func(t *testing.T) {
-		existing := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-2 * time.Hour))}}
-		updated := &Trigger{Schedule: &ScheduleConfig{ChannelID: "ch1", Interval: "2h", StartAt: TimeToTimestamp(time.Now().Add(-1 * time.Hour))}}
-		err := ValidateTrigger(updated, existing)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start_at")
-	})
-}
-
-func TestValidateTrigger_MembershipChanged(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with joined action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "joined"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with left action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "left"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with empty action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: ""}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("invalid action", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1", Action: "kicked"}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "action")
-	})
-
-	t.Run("missing channel_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{MembershipChanged: &MembershipChangedConfig{}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "channel_id")
-	})
-}
-
-func TestValidateTrigger_ChannelCreated(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{TeamID: "team1"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("missing team_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{ChannelCreated: &ChannelCreatedConfig{}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "team_id")
-	})
-}
-
-func TestValidateTrigger_UserJoinedTeam(t *testing.T) {
-	t.Run("valid", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with user_type user", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "user"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with user_type guest", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "guest"}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("valid with empty user_type", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: ""}}, nil)
-		require.NoError(t, err)
-	})
-
-	t.Run("invalid user_type", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1", UserType: "admin"}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "user_type")
-	})
-
-	t.Run("missing team_id", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{UserJoinedTeam: &UserJoinedTeamConfig{}}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "team_id")
-	})
-}
-
-func TestValidateTrigger_NoTriggerType(t *testing.T) {
-	err := ValidateTrigger(&Trigger{}, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 }
 
 func TestValidateActions(t *testing.T) {
@@ -264,57 +127,137 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("allowed_tools rejects create_post", func(t *testing.T) {
+	t.Run("guardrails requires allowed_tools", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"search", "create_post"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
+		assert.Contains(t, err.Error(), "guardrails requires non-empty allowed_tools")
 	})
 
-	t.Run("allowed_tools rejects dm", func(t *testing.T) {
+	t.Run("guardrails invalid channel id", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"dm"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{{ChannelID: "not-a-valid-id"}}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
+		assert.Contains(t, err.Error(), "invalid channel id")
 	})
 
-	t.Run("allowed_tools rejects group_message", func(t *testing.T) {
+	t.Run("guardrails duplicate channel id", func(t *testing.T) {
+		dup := mmmodel.NewId()
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"group_message"}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{
+					{ChannelID: dup},
+					{ChannelID: dup},
+				}},
+			},
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "group_message" is not allowed`)
+		assert.Contains(t, err.Error(), "duplicate channel id")
 	})
 
-	t.Run("allowed_tools rejects create_post with whitespace and case variants", func(t *testing.T) {
+	t.Run("guardrails empty channels slice ok", func(t *testing.T) {
 		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"  Create_Post  "}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "create_post" is not allowed`)
-	})
-
-	t.Run("allowed_tools rejects DM with case variant", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"DM"}},
-		}})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `tool "dm" is not allowed`)
-	})
-
-	t.Run("allowed_tools ignores empty/whitespace entries", func(t *testing.T) {
-		err := ValidateActions([]Action{{
-			ID:       "ask-ai",
-			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", AllowedTools: []string{"", "   "}},
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				AllowedTools: []string{"search_posts"},
+				Guardrails:   &Guardrails{Channels: []GuardrailChannel{}},
+			},
 		}})
 		require.NoError(t, err)
+	})
+
+	t.Run("guardrails JSON shape stays as channel_ids", func(t *testing.T) {
+		id := mmmodel.NewId()
+		raw, err := json.Marshal(&Guardrails{Channels: []GuardrailChannel{{ChannelID: id, TeamID: "should-not-leak"}}})
+		require.NoError(t, err)
+		assert.JSONEq(t, fmt.Sprintf(`{"channel_ids":[%q]}`, id), string(raw))
+
+		var g Guardrails
+		require.NoError(t, json.Unmarshal(fmt.Appendf(nil, `{"channel_ids":[%q]}`, id), &g))
+		require.Len(t, g.Channels, 1)
+		assert.Equal(t, id, g.Channels[0].ChannelID)
+		assert.Empty(t, g.Channels[0].TeamID, "team_id should never be parsed from the wire")
+	})
+
+	t.Run("nil guardrails ok", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "agent", ProviderID: "bot1"},
+		}})
+		require.NoError(t, err)
+	})
+
+	t.Run("unknown provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "bogus", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	t.Run("empty provider_type rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderID: "bot1"},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `provider_type must be "agent" or "service"`)
+	})
+
+	// The bridge enforces that allowed_tools is rejected for service
+	// completion endpoints (HTTP 400 "allowed_tools is only supported for
+	// agent completion endpoints"). Mirror that rule at save time so users
+	// see the misconfiguration immediately rather than at execute time.
+	t.Run("service with allowed_tools rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				AllowedTools: []string{"search"},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `allowed_tools is only supported with provider_type "agent"`)
+	})
+
+	t.Run("service with empty allowed_tools passes", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-svc",
+			AIPrompt: &AIPromptActionConfig{Prompt: "x", ProviderType: "service", ProviderID: "openai"},
+		}})
+		require.NoError(t, err)
+	})
+
+	// Guardrails imply allowed_tools, which agents-only. Reject the
+	// combination explicitly so the error message names the actual issue
+	// (otherwise the user would see the secondary "guardrails requires
+	// non-empty allowed_tools" check fire when they remove tools to comply).
+	t.Run("service with guardrails rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				Guardrails: &Guardrails{Channels: []GuardrailChannel{{ChannelID: mmmodel.NewId()}}},
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `guardrails is only supported with provider_type "agent"`)
 	})
 }
 
@@ -457,32 +400,5 @@ func TestValidateSendMessageChannel(t *testing.T) {
 		err := ValidateSendMessageChannel(f)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must reference the triggering channel")
-	})
-}
-
-func TestValidateTrigger_MutualExclusion(t *testing.T) {
-	t.Run("two trigger types rejected", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{
-			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
-			Schedule:      &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
-		}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
-	})
-
-	t.Run("three trigger types rejected", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{
-			MessagePosted:     &MessagePostedConfig{ChannelID: "ch1"},
-			Schedule:          &ScheduleConfig{ChannelID: "ch1", Interval: "2h"},
-			MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"},
-		}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exactly one trigger type must be set, got 3")
-	})
-
-	t.Run("no trigger type rejected", func(t *testing.T) {
-		err := ValidateTrigger(&Trigger{}, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exactly one trigger type must be set")
 	})
 }

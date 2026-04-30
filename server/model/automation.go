@@ -2,6 +2,14 @@ package model
 
 import "strings"
 
+// Valid AIPromptActionConfig.ProviderType values. Agents are bots that go
+// through the per-user bridge ACL and can use tools; services are raw LLM
+// completion endpoints that cannot.
+const (
+	AIProviderTypeAgent   = "agent"
+	AIProviderTypeService = "service"
+)
+
 // Automation represents a trigger-action automation.
 type Automation struct {
 	ID        string   `json:"id"`
@@ -54,6 +62,19 @@ type Trigger struct {
 	UserJoinedTeam    *UserJoinedTeamConfig    `json:"user_joined_team,omitempty"`
 }
 
+// GuardrailsForAction returns the guardrails configured on the AI prompt
+// action with the given ID, or nil if the action does not exist, is not an
+// AI prompt action, or has no guardrails configured.
+func (a *Automation) GuardrailsForAction(actionID string) *Guardrails {
+	for i := range a.Actions {
+		act := &a.Actions[i]
+		if act.ID == actionID && act.AIPrompt != nil && act.AIPrompt.Guardrails != nil {
+			return act.AIPrompt.Guardrails
+		}
+	}
+	return nil
+}
+
 // TriggerChannelID returns the channel ID from the automation's trigger config,
 // regardless of trigger type. Returns empty string if no trigger is set.
 func (a *Automation) TriggerChannelID() string {
@@ -99,11 +120,12 @@ type SendMessageActionConfig struct {
 
 // AIPromptActionConfig holds config for the ai_prompt action type.
 type AIPromptActionConfig struct {
-	SystemPrompt string   `json:"system_prompt,omitempty"`
-	Prompt       string   `json:"prompt"`
-	ProviderType string   `json:"provider_type"`
-	ProviderID   string   `json:"provider_id"`
-	AllowedTools []string `json:"allowed_tools,omitempty"`
+	SystemPrompt string      `json:"system_prompt,omitempty"`
+	Prompt       string      `json:"prompt"`
+	ProviderType string      `json:"provider_type"`
+	ProviderID   string      `json:"provider_id"`
+	AllowedTools []string    `json:"allowed_tools,omitempty"`
+	Guardrails   *Guardrails `json:"guardrails,omitempty"`
 }
 
 // Action defines a single step in an automation. Exactly one config pointer should be set.

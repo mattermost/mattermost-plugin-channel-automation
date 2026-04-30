@@ -45,7 +45,7 @@ func (m *mockFlowStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, e
 
 // expectLogCalls registers permissive LogError and LogWarn expectations that
 // accept any number of arguments. This covers enriched log calls that include
-// user_id, flow_id, execution_id, and other context fields.
+// user_id, automation_id, execution_id, and other context fields.
 func expectLogCalls(api *plugintest.API) {
 	// LogError with 3, 5, 7, or 9 args (msg + 1-4 key-value pairs).
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
@@ -157,6 +157,9 @@ func TestExecutionAPI_ListByAutomation_RequiresAutomationPermission(t *testing.T
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
 
 	router, _, automationStore := setupAPIHandlerWithCustomMock(t, api)

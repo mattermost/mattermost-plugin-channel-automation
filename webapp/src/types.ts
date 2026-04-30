@@ -57,12 +57,17 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+export interface Guardrails {
+    channel_ids?: string[];
+}
+
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
     allowed_tools?: string[];
+    guardrails?: Guardrails;
 }
 
 export interface Action {
