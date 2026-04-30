@@ -58,9 +58,49 @@ func (t *MessagePostedTrigger) BuildTriggerData(api model.TriggerAPI, event *mod
 		return model.TriggerData{}, fmt.Errorf("get user %s: %w", event.Post.UserId, appErr)
 	}
 
-	return model.TriggerData{
+	data := model.TriggerData{
 		Post:    model.NewSafePost(event.Post),
 		Channel: model.NewSafeChannel(channel),
 		User:    model.NewSafeUser(user),
-	}, nil
+	}
+
+	// This branch is only reachable when MessagePostedConfig
+	// .IncludeThreadReplies is on (otherwise Matches drops reply events
+	// before BuildTriggerData runs).
+	if event.Post.RootId != "" {
+		data.Thread = fetchThread(api, event.Post.RootId)
+	}
+
+	return data, nil
+}
+
+// fetchThread loads the full thread rooted at rootID and returns it as
+// a SafeThread with each author's user pre-resolved. Returns nil on any
+// fetch failure (logging a warning) so the caller can attach nil and
+// continue — losing thread context is preferable to dropping the event.
+func fetchThread(api model.TriggerAPI, rootID string) *model.SafeThread {
+	postList, appErr := api.GetPostThread(rootID)
+	if appErr != nil {
+		api.LogWarn("message_posted trigger: failed to fetch thread for root post, continuing without thread context",
+			"root_id", rootID,
+			"error", appErr.Error(),
+		)
+		return nil
+	}
+	userFor := func(userID string) *model.SafeUser {
+		u, userErr := api.GetUser(userID)
+		if userErr != nil || u == nil {
+			errMsg := "<nil>"
+			if userErr != nil {
+				errMsg = userErr.Error()
+			}
+			api.LogWarn("message_posted trigger: failed to resolve thread author user, falling back to user-id-only display",
+				"user_id", userID,
+				"error", errMsg,
+			)
+			return nil
+		}
+		return model.NewSafeUser(u)
+	}
+	return model.NewSafeThread(postList, rootID, userFor)
 }

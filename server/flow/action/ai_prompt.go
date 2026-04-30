@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -172,6 +173,20 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 		}
 		if p.Message != "" {
 			user.WriteString("Post Message:\n" + p.Message + "\n")
+		}
+	}
+
+	if trigger.Thread != nil {
+		th := trigger.Thread
+		// Thread metadata (counts, IDs) is trusted system context.
+		meta.WriteString("Thread Post Count: " + strconv.Itoa(th.PostCount) + "\n")
+		if th.RootID != "" {
+			meta.WriteString("Thread Root ID: " + th.RootID + "\n")
+		}
+		// The transcript is user-generated content and must live in the
+		// user_data block where prompt-injection guardrails apply.
+		if transcript := th.TranscriptDisplay(); transcript != "" {
+			user.WriteString("Thread Transcript (oldest first):\n" + transcript + "\n")
 		}
 	}
 

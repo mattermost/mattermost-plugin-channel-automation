@@ -162,6 +162,108 @@ func TestMessagePostedTrigger_BuildTriggerData(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "get user")
 	})
+
+	t.Run("root post does not fetch thread", func(t *testing.T) {
+		api := newFakeTriggerAPI()
+		api.channels["ch1"] = &mmmodel.Channel{Id: "ch1", Name: "n"}
+		api.users["u1"] = &mmmodel.User{Id: "u1", Username: "alice"}
+		event := &model.Event{
+			Type: model.TriggerTypeMessagePosted,
+			Post: &mmmodel.Post{Id: "p1", ChannelId: "ch1", UserId: "u1"},
+		}
+		td, err := tr.BuildTriggerData(api, event)
+		require.NoError(t, err)
+		assert.Nil(t, td.Thread)
+	})
+
+	t.Run("reply attaches sorted SafeThread with resolved users", func(t *testing.T) {
+		api := newFakeTriggerAPI()
+		api.channels["ch1"] = &mmmodel.Channel{Id: "ch1", Name: "n"}
+		api.users["u1"] = &mmmodel.User{Id: "u1", Username: "alice", FirstName: "Alice", LastName: "A."}
+		api.users["u2"] = &mmmodel.User{Id: "u2", Username: "bob", FirstName: "Bob", LastName: "B."}
+		api.postThreads["root1"] = &mmmodel.PostList{
+			Order: []string{"reply2", "root1", "reply1"}, // intentionally out of order
+			Posts: map[string]*mmmodel.Post{
+				"root1":  {Id: "root1", ChannelId: "ch1", UserId: "u1", Message: "hello", CreateAt: 100},
+				"reply1": {Id: "reply1", ChannelId: "ch1", UserId: "u2", Message: "world", CreateAt: 200, RootId: "root1"},
+				"reply2": {Id: "reply2", ChannelId: "ch1", UserId: "u1", Message: "again", CreateAt: 300, RootId: "root1"},
+			},
+		}
+
+		event := &model.Event{
+			Type: model.TriggerTypeMessagePosted,
+			Post: &mmmodel.Post{Id: "reply2", ChannelId: "ch1", UserId: "u1", RootId: "root1", Message: "again"},
+		}
+		td, err := tr.BuildTriggerData(api, event)
+		require.NoError(t, err)
+		require.NotNil(t, td.Thread)
+		assert.Equal(t, "root1", td.Thread.RootID)
+		assert.Equal(t, 3, td.Thread.PostCount)
+		require.Len(t, td.Thread.Messages, 3)
+
+		// Sorted by CreateAt: root1 (100), reply1 (200), reply2 (300).
+		assert.Equal(t, "root1", td.Thread.Messages[0].Id)
+		require.NotNil(t, td.Thread.Messages[0].User)
+		assert.Equal(t, "alice", td.Thread.Messages[0].User.Username)
+		assert.Equal(t, "hello", td.Thread.Messages[0].Message)
+		assert.Equal(t, int64(100), td.Thread.Messages[0].CreateAt)
+		assert.Equal(t, "root1", td.Thread.Messages[0].ThreadId)
+
+		assert.Equal(t, "reply1", td.Thread.Messages[1].Id)
+		require.NotNil(t, td.Thread.Messages[1].User)
+		assert.Equal(t, "bob", td.Thread.Messages[1].User.Username)
+		assert.Equal(t, "world", td.Thread.Messages[1].Message)
+
+		assert.Equal(t, "reply2", td.Thread.Messages[2].Id)
+		require.NotNil(t, td.Thread.Messages[2].User)
+		assert.Equal(t, "alice", td.Thread.Messages[2].User.Username)
+	})
+
+	t.Run("thread fetch error continues without thread and logs", func(t *testing.T) {
+		api := newFakeTriggerAPI()
+		api.channels["ch1"] = &mmmodel.Channel{Id: "ch1", Name: "n"}
+		api.users["u1"] = &mmmodel.User{Id: "u1", Username: "alice"}
+		// Note: postThreads has no entry for "root1", so the fake returns a 500.
+
+		event := &model.Event{
+			Type: model.TriggerTypeMessagePosted,
+			Post: &mmmodel.Post{Id: "reply1", ChannelId: "ch1", UserId: "u1", RootId: "root1", Message: "x"},
+		}
+		td, err := tr.BuildTriggerData(api, event)
+		require.NoError(t, err)
+		assert.Nil(t, td.Thread)
+		assert.Contains(t, api.warnCalls, "message_posted trigger: failed to fetch thread for root post, continuing without thread context")
+	})
+
+	t.Run("thread author lookup failure keeps user-id fallback", func(t *testing.T) {
+		api := newFakeTriggerAPI()
+		api.channels["ch1"] = &mmmodel.Channel{Id: "ch1", Name: "n"}
+		api.users["u1"] = &mmmodel.User{Id: "u1", Username: "alice"}
+		// u-missing is not registered → GetUser returns error.
+		api.postThreads["root1"] = &mmmodel.PostList{
+			Order: []string{"root1", "reply1"},
+			Posts: map[string]*mmmodel.Post{
+				"root1":  {Id: "root1", ChannelId: "ch1", UserId: "u1", Message: "hello", CreateAt: 100},
+				"reply1": {Id: "reply1", ChannelId: "ch1", UserId: "u-missing", Message: "x", CreateAt: 200, RootId: "root1"},
+			},
+		}
+
+		event := &model.Event{
+			Type: model.TriggerTypeMessagePosted,
+			Post: &mmmodel.Post{Id: "reply1", ChannelId: "ch1", UserId: "u1", RootId: "root1", Message: "x"},
+		}
+		td, err := tr.BuildTriggerData(api, event)
+		require.NoError(t, err)
+		require.NotNil(t, td.Thread)
+		require.Len(t, td.Thread.Messages, 2)
+		require.NotNil(t, td.Thread.Messages[0].User)
+		assert.Equal(t, "alice", td.Thread.Messages[0].User.Username)
+		require.NotNil(t, td.Thread.Messages[1].User)
+		// Failed lookup → SafeUser carries only the user ID; AuthorDisplay() falls back to it.
+		assert.Equal(t, "u-missing", td.Thread.Messages[1].User.Id)
+		assert.Empty(t, td.Thread.Messages[1].User.Username)
+		assert.Contains(t, api.warnCalls, "message_posted trigger: failed to resolve thread author user, falling back to user-id-only display")
+	})
 }
 
 func TestMessagePostedTrigger_CandidateFlowIDs(t *testing.T) {

@@ -26,6 +26,136 @@ func TestNewSafePost_PreservesRootId(t *testing.T) {
 	assert.Equal(t, "root1", safe.ThreadId, "ThreadId should equal RootId when set")
 }
 
+func TestNewSafeThread_NilInput(t *testing.T) {
+	assert.Nil(t, NewSafeThread(nil, "root", nil))
+}
+
+func TestNewSafeThread_EmptyList(t *testing.T) {
+	list := &mmmodel.PostList{Order: []string{}, Posts: map[string]*mmmodel.Post{}}
+	st := NewSafeThread(list, "root1", nil)
+	require.NotNil(t, st)
+	assert.Equal(t, "root1", st.RootID)
+	assert.Equal(t, 0, st.PostCount)
+	assert.Nil(t, st.Messages)
+}
+
+func TestNewSafeThread_SortsOldestFirstAndDedupesUserLookups(t *testing.T) {
+	list := &mmmodel.PostList{
+		// Order is intentionally newest-first (the server convention) to
+		// verify we do not rely on it and instead sort by CreateAt.
+		Order: []string{"p3", "p1", "p2"},
+		Posts: map[string]*mmmodel.Post{
+			"p1": {Id: "p1", UserId: "u1", Message: "first", CreateAt: 100},
+			"p2": {Id: "p2", UserId: "u2", Message: "second", CreateAt: 200},
+			"p3": {Id: "p3", UserId: "u1", Message: "third", CreateAt: 300},
+		},
+	}
+	calls := 0
+	userFor := func(uid string) *SafeUser {
+		calls++
+		return &SafeUser{Id: uid, Username: "name-" + uid, FirstName: "First-" + uid, LastName: "Last-" + uid}
+	}
+	st := NewSafeThread(list, "p1", userFor)
+	require.NotNil(t, st)
+	assert.Equal(t, 3, st.PostCount)
+	require.Len(t, st.Messages, 3)
+	assert.Equal(t, "p1", st.Messages[0].Id)
+	assert.Equal(t, "p2", st.Messages[1].Id)
+	assert.Equal(t, "p3", st.Messages[2].Id)
+	require.NotNil(t, st.Messages[0].User)
+	assert.Equal(t, "name-u1", st.Messages[0].User.Username)
+	assert.Equal(t, "name-u2", st.Messages[1].User.Username)
+	assert.Equal(t, "name-u1", st.Messages[2].User.Username)
+	// u1 appears twice but lookup happens once per distinct user.
+	assert.Equal(t, 2, calls, "userFor should dedupe lookups per user ID")
+}
+
+func TestNewSafeThread_OverridesThreadIdAndKeepsRawMessage(t *testing.T) {
+	// NewSafePost would set the root post's ThreadId to its own Id;
+	// NewSafeThread must override it to the resolved root for consistency
+	// across all messages in the thread. Message must remain raw — no
+	// attachment flattening.
+	root := &mmmodel.Post{Id: "p1", UserId: "u1", Message: "raw body", CreateAt: 1}
+	mmmodel.ParseSlackAttachment(root, []*mmmodel.SlackAttachment{{Title: "Alert", Text: "details"}})
+	list := &mmmodel.PostList{
+		Order: []string{"p1"},
+		Posts: map[string]*mmmodel.Post{"p1": root},
+	}
+	st := NewSafeThread(list, "p1", func(_ string) *SafeUser { return &SafeUser{Id: "u1", Username: "alice"} })
+	require.NotNil(t, st)
+	require.Len(t, st.Messages, 1)
+	assert.Equal(t, "p1", st.Messages[0].ThreadId)
+	assert.Equal(t, "raw body", st.Messages[0].Message, "Message must mirror NewSafePost (raw, no attachment flattening)")
+}
+
+func TestNewSafeThread_NilUsernameResolverKeepsUserIdFallback(t *testing.T) {
+	list := &mmmodel.PostList{
+		Order: []string{"p1"},
+		Posts: map[string]*mmmodel.Post{
+			"p1": {Id: "p1", UserId: "u1", Message: "hi", CreateAt: 1},
+		},
+	}
+	st := NewSafeThread(list, "p1", nil)
+	require.NotNil(t, st)
+	require.Len(t, st.Messages, 1)
+	require.NotNil(t, st.Messages[0].User)
+	assert.Equal(t, "u1", st.Messages[0].User.Id)
+	assert.Empty(t, st.Messages[0].User.Username)
+}
+
+func TestNewSafeThread_FailedUserLookupKeepsUserIdFallback(t *testing.T) {
+	list := &mmmodel.PostList{
+		Order: []string{"p1"},
+		Posts: map[string]*mmmodel.Post{
+			"p1": {Id: "p1", UserId: "u1", Message: "hi", CreateAt: 1},
+		},
+	}
+	st := NewSafeThread(list, "p1", func(_ string) *SafeUser { return nil })
+	require.NotNil(t, st)
+	require.Len(t, st.Messages, 1)
+	require.NotNil(t, st.Messages[0].User)
+	assert.Equal(t, "u1", st.Messages[0].User.Id)
+}
+
+func TestSafeUser_AuthorDisplay(t *testing.T) {
+	tests := []struct {
+		name string
+		in   *SafeUser
+		want string
+	}{
+		{"both", &SafeUser{Username: "alice", FirstName: "Alice", LastName: "Smith"}, "@alice (Alice Smith)"},
+		{"username only", &SafeUser{Username: "alice"}, "@alice"},
+		{"name only", &SafeUser{FirstName: "Alice", LastName: "Smith"}, "(Alice Smith)"},
+		{"first name only", &SafeUser{FirstName: "Alice"}, "(Alice)"},
+		{"userid fallback", &SafeUser{Id: "u123"}, "u123"},
+		{"empty user", &SafeUser{}, "unknown"},
+		{"nil receiver", nil, "unknown"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.in.AuthorDisplay())
+		})
+	}
+}
+
+func TestSafeThread_TranscriptDisplay(t *testing.T) {
+	t.Run("nil receiver", func(t *testing.T) {
+		var st *SafeThread
+		assert.Empty(t, st.TranscriptDisplay())
+	})
+	t.Run("empty messages", func(t *testing.T) {
+		st := &SafeThread{}
+		assert.Empty(t, st.TranscriptDisplay())
+	})
+	t.Run("renders one line per message", func(t *testing.T) {
+		st := &SafeThread{Messages: []SafePost{
+			{User: &SafeUser{Username: "alice", FirstName: "Alice", LastName: "Smith"}, Message: "hi"},
+			{User: &SafeUser{Id: "u2"}, Message: "fallback id"},
+		}}
+		assert.Equal(t, "@alice (Alice Smith): hi\nu2: fallback id", st.TranscriptDisplay())
+	})
+}
+
 func TestNewSafeUser_NilInput(t *testing.T) {
 	assert.Nil(t, NewSafeUser(nil))
 }

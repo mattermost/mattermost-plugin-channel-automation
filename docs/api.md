@@ -571,6 +571,8 @@ Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
+When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the entire parent thread (root + all replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the flow continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
+
 ### `schedule`
 
 Fires on a recurring interval. The `interval` field accepts any Go `time.ParseDuration` string (e.g. `"1h"`, `"24h"`). The minimum interval is 1 hour.
@@ -633,19 +635,22 @@ Action templates receive a `FlowContext` object with the following structure:
 {{.Trigger.Team}}       — the team the user joined (user_joined_team only)
 {{.Trigger.Schedule}}   — schedule metadata (schedule only)
 {{.Trigger.Membership}} — membership change metadata (membership_changed only)
+{{.Trigger.Thread}}     — parent thread of the triggering reply (message_posted with include_thread_replies, reply posts only)
 {{.Steps.<action_id>}}  — output from a previous action step
 ```
 
 ### Trigger data fields
 
-**Post** _(message_posted trigger only):_
+**Post** _(message_posted trigger; same shape used inside each `Trigger.Thread.Messages` element):_
 
-| Field      | Access                        |
-| ---------- | ----------------------------- |
-| ID         | `{{.Trigger.Post.Id}}`        |
-| Channel ID | `{{.Trigger.Post.ChannelId}}` |
-| Thread ID  | `{{.Trigger.Post.ThreadId}}`  |
-| Message    | `{{.Trigger.Post.Message}}`   |
+| Field      | Access                        | Notes                                                                                                                                                            |
+| ---------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ID         | `{{.Trigger.Post.Id}}`        |                                                                                                                                                                  |
+| Channel ID | `{{.Trigger.Post.ChannelId}}` |                                                                                                                                                                  |
+| Thread ID  | `{{.Trigger.Post.ThreadId}}`  |                                                                                                                                                                  |
+| Message    | `{{.Trigger.Post.Message}}`   | For posts inside a thread transcript, this is the post body with any slack-style attachment text appended.                                                       |
+| User       | `{{.Trigger.Post.User}}`      | Populated only on thread-message posts (`{{range .Trigger.Thread.Messages}}{{.User.AuthorDisplay}}{{end}}`). Nil on the top-level triggering post — use `{{.Trigger.User}}` there. |
+| Create At  | `{{.Trigger.Post.CreateAt}}`  | Unix milliseconds. Populated only on thread-message posts.                                                                                                       |
 
 **Channel** _(message_posted, membership_changed, channel_created):_
 
@@ -659,13 +664,14 @@ Action templates receive a `FlowContext` object with the following structure:
 
 > **Note:** For `user_joined_team` triggers, `{{.Trigger.Channel}}` is **not** available. Use `{{.Trigger.Team.DefaultChannelId}}` to reference the team's default channel.
 
-| Field      | Access                        |
-| ---------- | ----------------------------- |
-| ID         | `{{.Trigger.User.Id}}`        |
-| Username   | `{{.Trigger.User.Username}}`  |
-| First Name | `{{.Trigger.User.FirstName}}` |
-| Last Name  | `{{.Trigger.User.LastName}}`  |
-| Is Guest   | `{{.Trigger.User.IsGuest}}`   |
+| Field          | Access                            | Notes                                                                                                |
+| -------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| ID             | `{{.Trigger.User.Id}}`            |                                                                                                      |
+| Username       | `{{.Trigger.User.Username}}`      |                                                                                                      |
+| First Name     | `{{.Trigger.User.FirstName}}`     |                                                                                                      |
+| Last Name      | `{{.Trigger.User.LastName}}`      |                                                                                                      |
+| Is Guest       | `{{.Trigger.User.IsGuest}}`       |                                                                                                      |
+| Author Display | `{{.Trigger.User.AuthorDisplay}}` | Renders `@username (First Last)` with graceful fallbacks (down to user ID, then `"unknown"` on a nil receiver). Useful inside `{{range .Trigger.Thread.Messages}}` blocks. |
 
 **Membership** _(membership_changed trigger only):_
 
@@ -688,6 +694,15 @@ Action templates receive a `FlowContext` object with the following structure:
 | -------- | -------------------------------- |
 | Fired At | `{{.Trigger.Schedule.FiredAt}}`  |
 | Interval | `{{.Trigger.Schedule.Interval}}` |
+
+**Thread** _(message_posted trigger with `include_thread_replies`, only when the firing post is a reply):_
+
+| Field             | Access                                       | Notes                                                                                                                                                          |
+| ----------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root ID           | `{{.Trigger.Thread.RootID}}`                 | ID of the thread root post.                                                                                                                                    |
+| Post Count        | `{{.Trigger.Thread.PostCount}}`              | Number of posts in the thread (root included).                                                                                                                 |
+| Messages          | `{{range .Trigger.Thread.Messages}}…{{end}}` | Ordered oldest first. Each element is a [Post](#trigger-data-fields) with `User` and `CreateAt` populated.                                                     |
+| Transcript        | `{{.Trigger.Thread.TranscriptDisplay}}`      | Plaintext transcript with one `authorDisplay: message` line per post. Empty for a nil receiver. The `ai_prompt` action renders this automatically inside its `<user_data>` block. |
 
 ### Step output fields
 
