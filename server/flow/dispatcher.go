@@ -62,7 +62,6 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 		if err := d.enqueuer.Enqueue(item); err != nil {
 			d.api.LogError("Failed to enqueue work item",
 				"flow_id", f.ID,
-				"flow_name", f.Name,
 				"type", event.Type,
 				"err", err.Error(),
 			)
@@ -72,7 +71,6 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 		d.api.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
 			"flow_id", f.ID,
-			"flow_name", f.Name,
 			"type", event.Type,
 		)
 	}

@@ -120,7 +120,6 @@ func TestDispatcher_EnqueuesOnePerMatchingFlow(t *testing.T) {
 	api.On("LogDebug", "Work item enqueued",
 		"work_item_id", mock.Anything,
 		"flow_id", mock.Anything,
-		"flow_name", mock.Anything,
 		"type", model.TriggerTypeMessagePosted,
 	).Return().Times(2)
 
@@ -186,7 +185,6 @@ func TestDispatcher_EnqueueFailureSkipsItemButNotifies(t *testing.T) {
 	api.On("GetUser", "u1").Return(&mmmodel.User{Id: "u1"}, (*mmmodel.AppError)(nil))
 	api.On("LogError", "Failed to enqueue work item",
 		"flow_id", mock.Anything,
-		"flow_name", mock.Anything,
 		"type", model.TriggerTypeMessagePosted,
 		"err", mock.Anything,
 	).Return().Once()
@@ -231,12 +229,10 @@ func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 	api.On("LogDebug", "Work item enqueued",
 		"work_item_id", mock.Anything,
 		"flow_id", mock.Anything,
-		"flow_name", mock.Anything,
 		"type", model.TriggerTypeMessagePosted,
 	).Return().Times(2)
 	api.On("LogError", "Failed to enqueue work item",
 		"flow_id", mock.Anything,
-		"flow_name", mock.Anything,
 		"type", model.TriggerTypeMessagePosted,
 		"err", mock.Anything,
 	).Return().Once()
