@@ -479,6 +479,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		workerPool:     wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = flow.NewDispatcher(api, triggerService, wqStore, wp)
 
 	return p, wqStore
 }
@@ -661,6 +662,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 		workerPool:     wp,
 	}
 	p.SetAPI(api)
+	p.dispatcher = flow.NewDispatcher(api, triggerService, wqStore, wp)
 
 	f := &model.Flow{
 		ID:      "f1",
@@ -685,8 +687,8 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	require.NotNil(t, item.TriggerData.Team)
-	assert.Empty(t, item.TriggerData.Team.Id)
-	assert.Equal(t, "[unknown team]", item.TriggerData.Team.Name)
-	assert.Equal(t, "[unknown team]", item.TriggerData.Team.DisplayName)
+	assert.Equal(t, "team1", item.TriggerData.Team.Id, "Team.Id should fall back to event.Team.Id when GetTeam fails")
+	assert.Empty(t, item.TriggerData.Team.Name)
+	assert.Empty(t, item.TriggerData.Team.DisplayName)
 	assert.Empty(t, item.TriggerData.Team.DefaultChannelId, "DefaultChannelId should stay empty on failure so SendMessage fails fast")
 }

@@ -23,6 +23,7 @@ type APIHandler struct {
 	store           model.Store
 	historyStore    model.ExecutionStore
 	api             plugin.API
+	registry        *Registry
 	scheduleManager *ScheduleManager
 	config          model.Configuration
 	bridge          hooks.AgentToolsLister
@@ -30,8 +31,8 @@ type APIHandler struct {
 
 // NewAPIHandler creates a new flow API handler. bridge may be nil in tests
 // that do not exercise allowed_tools validation.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config, bridge: bridge}
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, registry *Registry, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, registry: registry, scheduleManager: scheduleManager, config: config, bridge: bridge}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -144,7 +145,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
+	if err := ValidateTrigger(h.registry, &f.Trigger, nil); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
@@ -306,7 +307,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
+	if err := ValidateTrigger(h.registry, &f.Trigger, &existing.Trigger); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}

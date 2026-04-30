@@ -17,53 +17,34 @@ func NewTriggerService(store model.Store, registry *Registry) *TriggerService {
 	return &TriggerService{store: store, registry: registry}
 }
 
-// FindMatchingFlows returns all enabled flows whose trigger matches the given event.
-func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, error) {
+// FindMatchingFlows returns the registered handler for the event type along
+// with all enabled flows whose trigger matches the event. The handler is
+// returned so callers can drive the rest of the trigger lifecycle (e.g.
+// BuildTriggerData) without a second registry lookup, which would risk a
+// silent divergence if the registry mutated between calls.
+//
+// Returns an error if no handler is registered for the event type — this is
+// a programming/wiring error (a hook fired for a type nobody registered)
+// and must not be silently dropped.
+func (t *TriggerService) FindMatchingFlows(event *model.Event) (model.TriggerHandler, []*model.Flow, error) {
 	handler, ok := t.registry.GetTrigger(event.Type)
 	if !ok {
-		return nil, nil
+		return nil, nil, fmt.Errorf("no trigger handler registered for event type %q", event.Type)
 	}
 
-	var candidateIDs []string
-	var err error
-
-	switch event.Type {
-	case model.TriggerTypeMessagePosted:
-		if event.Post == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetFlowIDsForChannel(event.Post.ChannelId)
-	case model.TriggerTypeMembershipChanged:
-		if event.Channel == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetFlowIDsForMembershipChannel(event.Channel.Id)
-	case model.TriggerTypeChannelCreated:
-		if event.Channel == nil {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetChannelCreatedFlowIDs()
-	case model.TriggerTypeUserJoinedTeam:
-		if event.Team == nil || event.Team.Id == "" {
-			return nil, nil
-		}
-		candidateIDs, err = t.store.GetFlowIDsForUserJoinedTeam(event.Team.Id)
-	default:
-		return nil, fmt.Errorf("trigger type %q is registered but has no candidate resolution logic", event.Type)
-	}
-
+	candidateIDs, err := handler.CandidateFlowIDs(t.store, event)
 	if err != nil {
-		return nil, err
+		return handler, nil, err
 	}
 	if len(candidateIDs) == 0 {
-		return nil, nil
+		return handler, nil, nil
 	}
 
 	var flows []*model.Flow
 	for _, id := range candidateIDs {
 		f, err := t.store.Get(id)
 		if err != nil {
-			return nil, err
+			return handler, nil, err
 		}
 		if f == nil {
 			continue
@@ -76,5 +57,5 @@ func (t *TriggerService) FindMatchingFlows(event *model.Event) ([]*model.Flow, e
 		}
 		flows = append(flows, f)
 	}
-	return flows, nil
+	return handler, flows, nil
 }

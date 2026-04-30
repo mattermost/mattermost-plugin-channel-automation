@@ -58,7 +58,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, nil, api, nil, nil, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, nil, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -465,7 +465,7 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, nil, nil, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, nil, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -485,7 +485,7 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: limit}, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxFlowsPerChannel: limit}, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -518,7 +518,7 @@ func setupAPIWithBridge(t *testing.T, api *plugintest.API, bridge *stubAgentTool
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, nil, nil, bridge)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, nil, bridge)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -1110,7 +1110,7 @@ func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, nil, &testConfig{maxFlowsPerChannel: 1}, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxFlowsPerChannel: 1}, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 

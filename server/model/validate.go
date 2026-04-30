@@ -4,20 +4,16 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 )
 
-const minScheduleInterval = 1 * time.Hour
-
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
-// ValidateTrigger validates a trigger configuration based on its type.
-// Exactly one trigger type must be set. An optional existing trigger can be
-// passed for update scenarios; when provided, start_at is only validated if
-// it changed from the existing value.
-func ValidateTrigger(t *Trigger, existing *Trigger) error {
+// ValidateTriggerExclusivity checks that exactly one trigger-config pointer
+// is set. Per-type field validation lives on each TriggerHandler and is
+// dispatched by the flow package's validator.
+func ValidateTriggerExclusivity(t *Trigger) error {
 	count := 0
 	if t.MessagePosted != nil {
 		count++
@@ -39,52 +35,6 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 	}
 	if count > 1 {
 		return fmt.Errorf("exactly one trigger type must be set, got %d", count)
-	}
-
-	switch {
-	case t.MessagePosted != nil:
-		if t.MessagePosted.ChannelID == "" {
-			return fmt.Errorf("message_posted trigger requires channel_id")
-		}
-	case t.Schedule != nil:
-		if t.Schedule.ChannelID == "" {
-			return fmt.Errorf("schedule trigger requires channel_id")
-		}
-		if t.Schedule.Interval == "" {
-			return fmt.Errorf("schedule trigger requires interval")
-		}
-		d, err := time.ParseDuration(t.Schedule.Interval)
-		if err != nil {
-			return fmt.Errorf("schedule trigger has invalid interval: %w", err)
-		}
-		if d < minScheduleInterval {
-			return fmt.Errorf("schedule trigger interval must be at least %dh", int(minScheduleInterval.Hours()))
-		}
-		startAtChanged := existing == nil || existing.Schedule == nil ||
-			TimestampToTime(existing.Schedule.StartAt).Truncate(time.Minute) != TimestampToTime(t.Schedule.StartAt).Truncate(time.Minute)
-		if startAtChanged && t.Schedule.StartAt != 0 && TimestampToTime(t.Schedule.StartAt).Before(time.Now().UTC()) {
-			return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
-		}
-	case t.MembershipChanged != nil:
-		if t.MembershipChanged.ChannelID == "" {
-			return fmt.Errorf("membership_changed trigger requires channel_id")
-		}
-		if a := t.MembershipChanged.Action; a != "" && a != "joined" && a != "left" {
-			return fmt.Errorf("membership_changed trigger action must be \"joined\", \"left\", or empty (both)")
-		}
-	case t.ChannelCreated != nil:
-		if t.ChannelCreated.TeamID == "" {
-			return fmt.Errorf("channel_created trigger requires team_id")
-		}
-	case t.UserJoinedTeam != nil:
-		if t.UserJoinedTeam.TeamID == "" {
-			return fmt.Errorf("user_joined_team trigger requires team_id")
-		}
-		if ut := t.UserJoinedTeam.UserType; ut != "" && ut != "user" && ut != "guest" {
-			return fmt.Errorf("user_joined_team trigger user_type must be \"user\", \"guest\", or empty (both)")
-		}
-	default:
-		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}
 	return nil
 }
