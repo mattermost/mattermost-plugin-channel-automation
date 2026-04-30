@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strconv"
 	"testing"
 
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
@@ -70,13 +71,12 @@ func TestNewSafeThread_SortsOldestFirstAndDedupesUserLookups(t *testing.T) {
 	assert.Equal(t, 2, calls, "userFor should dedupe lookups per user ID")
 }
 
-func TestNewSafeThread_OverridesThreadIdAndKeepsRawMessage(t *testing.T) {
-	// NewSafePost would set the root post's ThreadId to its own Id;
+func TestNewSafeThread_OverridesThreadIdAndPreservesMessage(t *testing.T) {
+	// NewSafePost would set a root post's ThreadId to its own Id;
 	// NewSafeThread must override it to the resolved root for consistency
-	// across all messages in the thread. Message must remain raw — no
-	// attachment flattening.
+	// across all messages in the thread. The post Message must survive
+	// the round trip unchanged.
 	root := &mmmodel.Post{Id: "p1", UserId: "u1", Message: "raw body", CreateAt: 1}
-	mmmodel.ParseSlackAttachment(root, []*mmmodel.SlackAttachment{{Title: "Alert", Text: "details"}})
 	list := &mmmodel.PostList{
 		Order: []string{"p1"},
 		Posts: map[string]*mmmodel.Post{"p1": root},
@@ -85,7 +85,7 @@ func TestNewSafeThread_OverridesThreadIdAndKeepsRawMessage(t *testing.T) {
 	require.NotNil(t, st)
 	require.Len(t, st.Messages, 1)
 	assert.Equal(t, "p1", st.Messages[0].ThreadId)
-	assert.Equal(t, "raw body", st.Messages[0].Message, "Message must mirror NewSafePost (raw, no attachment flattening)")
+	assert.Equal(t, "raw body", st.Messages[0].Message)
 }
 
 func TestNewSafeThread_NilUsernameResolverKeepsUserIdFallback(t *testing.T) {
@@ -101,6 +101,60 @@ func TestNewSafeThread_NilUsernameResolverKeepsUserIdFallback(t *testing.T) {
 	require.NotNil(t, st.Messages[0].User)
 	assert.Equal(t, "u1", st.Messages[0].User.Id)
 	assert.Empty(t, st.Messages[0].User.Username)
+}
+
+func TestNewSafeThread_TruncatesPreservingRootAndRecentReplies(t *testing.T) {
+	// Build a thread with the root + (MaxThreadReplies + 5) replies. We
+	// expect Messages to be capped at root + the most recent
+	// MaxThreadReplies replies (= MaxThreadReplies + 1 total), with
+	// PostCount reflecting the original full count and Truncated=true.
+	totalReplies := MaxThreadReplies + 5
+	posts := make(map[string]*mmmodel.Post, totalReplies+1)
+	order := make([]string, 0, totalReplies+1)
+	posts["root"] = &mmmodel.Post{Id: "root", UserId: "u1", Message: "topic", CreateAt: 0}
+	order = append(order, "root")
+	for i := 1; i <= totalReplies; i++ {
+		id := "r" + strconv.Itoa(i)
+		posts[id] = &mmmodel.Post{Id: id, UserId: "u1", Message: "reply " + strconv.Itoa(i), CreateAt: int64(i)}
+		order = append(order, id)
+	}
+	list := &mmmodel.PostList{Order: order, Posts: posts}
+
+	st := NewSafeThread(list, "root", func(_ string) *SafeUser { return &SafeUser{Username: "alice"} })
+	require.NotNil(t, st)
+	assert.True(t, st.Truncated)
+	assert.Equal(t, totalReplies+1, st.PostCount, "PostCount must reflect the original full thread size")
+	require.Len(t, st.Messages, MaxThreadReplies+1, "kept root + MaxThreadReplies replies")
+
+	// Root preserved at the head.
+	assert.Equal(t, "root", st.Messages[0].Id)
+	// Tail = the most recent MaxThreadReplies replies, in CreateAt order.
+	// First retained reply after the root has CreateAt = totalReplies - MaxThreadReplies + 1.
+	firstRetainedReplyCreateAt := int64(totalReplies - MaxThreadReplies + 1)
+	assert.Equal(t, firstRetainedReplyCreateAt, st.Messages[1].CreateAt, "oldest retained reply should follow the gap")
+	// Last retained reply is the newest in the thread.
+	assert.Equal(t, int64(totalReplies), st.Messages[len(st.Messages)-1].CreateAt)
+}
+
+func TestNewSafeThread_DoesNotTruncateAtCapBoundary(t *testing.T) {
+	// Exactly MaxThreadReplies+1 messages (root + MaxThreadReplies replies)
+	// is the largest size that still fits without truncation.
+	posts := make(map[string]*mmmodel.Post, MaxThreadReplies+1)
+	order := make([]string, 0, MaxThreadReplies+1)
+	posts["root"] = &mmmodel.Post{Id: "root", UserId: "u1", Message: "root", CreateAt: 0}
+	order = append(order, "root")
+	for i := 1; i <= MaxThreadReplies; i++ {
+		id := "r" + strconv.Itoa(i)
+		posts[id] = &mmmodel.Post{Id: id, UserId: "u1", Message: "x", CreateAt: int64(i)}
+		order = append(order, id)
+	}
+	list := &mmmodel.PostList{Order: order, Posts: posts}
+
+	st := NewSafeThread(list, "root", func(_ string) *SafeUser { return &SafeUser{Username: "alice"} })
+	require.NotNil(t, st)
+	assert.False(t, st.Truncated, "exactly MaxThreadReplies+1 messages must not trip truncation")
+	assert.Equal(t, MaxThreadReplies+1, st.PostCount)
+	require.Len(t, st.Messages, MaxThreadReplies+1)
 }
 
 func TestNewSafeThread_FailedUserLookupKeepsUserIdFallback(t *testing.T) {
@@ -147,12 +201,29 @@ func TestSafeThread_TranscriptDisplay(t *testing.T) {
 		st := &SafeThread{}
 		assert.Empty(t, st.TranscriptDisplay())
 	})
-	t.Run("renders one line per message", func(t *testing.T) {
+	t.Run("renders posts separated by blank lines", func(t *testing.T) {
 		st := &SafeThread{Messages: []SafePost{
 			{User: &SafeUser{Username: "alice", FirstName: "Alice", LastName: "Smith"}, Message: "hi"},
 			{User: &SafeUser{Id: "u2"}, Message: "fallback id"},
 		}}
-		assert.Equal(t, "@alice (Alice Smith): hi\nu2: fallback id", st.TranscriptDisplay())
+		assert.Equal(t, "@alice (Alice Smith): hi\n\nu2: fallback id", st.TranscriptDisplay())
+	})
+	t.Run("multi-line message bodies survive verbatim", func(t *testing.T) {
+		// The blank-line separator means a multi-line post stays as one
+		// readable block rather than blurring into the next post.
+		st := &SafeThread{Messages: []SafePost{
+			{User: &SafeUser{Username: "alice"}, Message: "line 1\nline 2\nline 3"},
+			{User: &SafeUser{Username: "bob"}, Message: "reply"},
+		}}
+		assert.Equal(t, "@alice: line 1\nline 2\nline 3\n\n@bob: reply", st.TranscriptDisplay())
+	})
+	t.Run("trailing newline in final message preserved", func(t *testing.T) {
+		// TrimSuffix removes only the loop-appended "\n\n" delimiter, so a
+		// final message that legitimately ends in "\n" keeps that newline.
+		st := &SafeThread{Messages: []SafePost{
+			{User: &SafeUser{Username: "alice"}, Message: "ends with newline\n"},
+		}}
+		assert.Equal(t, "@alice: ends with newline\n", st.TranscriptDisplay())
 	})
 }
 

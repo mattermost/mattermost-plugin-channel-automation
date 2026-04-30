@@ -34,10 +34,18 @@ type TriggerData struct {
 	Thread *SafeThread `json:"thread,omitempty"`
 }
 
+const MaxThreadReplies = 60
+
 type SafeThread struct {
 	RootID    string     `json:"root_id"`
 	PostCount int        `json:"post_count"`
 	Messages  []SafePost `json:"messages,omitempty"`
+	// Truncated reports whether NewSafeThread dropped older replies to fit
+	// within MaxThreadReplies. When true, len(Messages) < PostCount and the
+	// root post (Messages[0]) is preserved alongside the most recent
+	// MaxThreadReplies replies. Templates and prompt builders should disclose
+	// truncation to the model so it knows it is not seeing the full thread.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 func (t *SafeThread) TranscriptDisplay() string {
@@ -49,9 +57,9 @@ func (t *SafeThread) TranscriptDisplay() string {
 		b.WriteString(m.User.AuthorDisplay())
 		b.WriteString(": ")
 		b.WriteString(m.Message)
-		b.WriteString("\n")
+		b.WriteString("\n\n")
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return strings.TrimSuffix(b.String(), "\n\n")
 }
 
 // MembershipInfo contains metadata about a membership change trigger firing.
@@ -183,6 +191,16 @@ func NewSafeThread(list *mmmodel.PostList, rootID string, userFor func(userID st
 		return sorted[i].Id < sorted[j].Id
 	})
 	st.PostCount = len(sorted)
+
+	// When the thread exceeds the cap, keep the root post (oldest, sets
+	// the topic the LLM needs for context) plus the most recent
+	// MaxThreadReplies replies.
+	if len(sorted) > MaxThreadReplies+1 {
+		root := sorted[0]
+		recent := sorted[len(sorted)-MaxThreadReplies:]
+		sorted = append([]*mmmodel.Post{root}, recent...)
+		st.Truncated = true
+	}
 
 	cache := make(map[string]*SafeUser, 5)
 	resolveUser := func(uid string) *SafeUser {

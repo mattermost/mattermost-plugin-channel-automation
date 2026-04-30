@@ -762,6 +762,47 @@ func TestAIPromptAction_Execute_ThreadContext_InjectsTranscriptAndMetadata(t *te
 	assert.Equal(t, "Reply to the thread", bc.lastReq.Posts[2].Message)
 }
 
+func TestAIPromptAction_Execute_ThreadContext_DisclosesTruncationToModel(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply to the thread",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	// Synthetic truncated thread: original count higher than len(Messages),
+	// Truncated=true. The trigger metadata system block must surface this
+	// so the model knows it is not seeing the full conversation.
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "replyp", ThreadId: "rootp", ChannelId: "ch1", Message: "x"},
+			Thread: &model.SafeThread{
+				RootID:    "rootp",
+				PostCount: 250,
+				Truncated: true,
+				Messages: []model.SafePost{
+					{Id: "rootp", User: &model.SafeUser{Username: "alice"}, Message: "topic", CreateAt: 0},
+					{Id: "replyp", User: &model.SafeUser{Username: "bob"}, Message: "latest", CreateAt: 250},
+				},
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+
+	triggerMeta := bc.lastReq.Posts[0]
+	assert.Contains(t, triggerMeta.Message, "Thread Post Count: 250")
+	assert.Contains(t, triggerMeta.Message, "Thread Truncated: true")
+	assert.Contains(t, triggerMeta.Message, "most recent 1 replies")
+}
+
 func TestAIPromptAction_Execute_ThreadContext_NotInjectedWhenAbsent(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok"}

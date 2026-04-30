@@ -571,7 +571,9 @@ Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
-When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the entire parent thread (root + all replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the flow continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
+When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the parent thread (root + replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the flow continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
+
+To bound work item size for the Mattermost KV store, threads larger than 61 messages are truncated to the root post plus the most recent 60 replies. `{{.Trigger.Thread.PostCount}}` always reflects the original full thread size, and `{{.Trigger.Thread.Truncated}}` reports whether older replies were dropped. The `ai_prompt` action surfaces the truncation in its trigger-context system message so the model knows it is not seeing the full conversation.
 
 ### `schedule`
 
@@ -648,7 +650,7 @@ Action templates receive a `FlowContext` object with the following structure:
 | ID         | `{{.Trigger.Post.Id}}`        |                                                                                                                                                                  |
 | Channel ID | `{{.Trigger.Post.ChannelId}}` |                                                                                                                                                                  |
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |                                                                                                                                                                  |
-| Message    | `{{.Trigger.Post.Message}}`   | For posts inside a thread transcript, this is the post body with any slack-style attachment text appended.                                                       |
+| Message    | `{{.Trigger.Post.Message}}`   | The raw post body. Slack-style attachment text is not appended.                                                                                                  |
 | User       | `{{.Trigger.Post.User}}`      | Populated only on thread-message posts (`{{range .Trigger.Thread.Messages}}{{.User.AuthorDisplay}}{{end}}`). Nil on the top-level triggering post — use `{{.Trigger.User}}` there. |
 | Create At  | `{{.Trigger.Post.CreateAt}}`  | Unix milliseconds. Populated only on thread-message posts.                                                                                                       |
 
@@ -697,12 +699,13 @@ Action templates receive a `FlowContext` object with the following structure:
 
 **Thread** _(message_posted trigger with `include_thread_replies`, only when the firing post is a reply):_
 
-| Field             | Access                                       | Notes                                                                                                                                                          |
-| ----------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Root ID           | `{{.Trigger.Thread.RootID}}`                 | ID of the thread root post.                                                                                                                                    |
-| Post Count        | `{{.Trigger.Thread.PostCount}}`              | Number of posts in the thread (root included).                                                                                                                 |
-| Messages          | `{{range .Trigger.Thread.Messages}}…{{end}}` | Ordered oldest first. Each element is a [Post](#trigger-data-fields) with `User` and `CreateAt` populated.                                                     |
-| Transcript        | `{{.Trigger.Thread.TranscriptDisplay}}`      | Plaintext transcript with one `authorDisplay: message` line per post. Empty for a nil receiver. The `ai_prompt` action renders this automatically inside its `<user_data>` block. |
+| Field             | Access                                       | Notes                                                                                                                                                                                                                                                                                                                       |
+| ----------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root ID           | `{{.Trigger.Thread.RootID}}`                 | ID of the thread root post.                                                                                                                                                                                                                                                                                                 |
+| Post Count        | `{{.Trigger.Thread.PostCount}}`              | Number of posts in the original full thread (root included). When `Truncated` is `true`, this is larger than `len .Messages`.                                                                                                                                                                                               |
+| Truncated         | `{{.Trigger.Thread.Truncated}}`              | `true` when older replies were dropped to keep the work item under the KV-store size cap. The root post is always retained alongside the most recent 60 replies.                                                                                                                                                            |
+| Messages          | `{{range .Trigger.Thread.Messages}}…{{end}}` | Ordered oldest first. Each element is a [Post](#trigger-data-fields) with `User` and `CreateAt` populated. Capped at root + 60 most-recent replies; check `Truncated` to see if older replies were dropped.                                                                                                                 |
+| Transcript        | `{{.Trigger.Thread.TranscriptDisplay}}`      | Plaintext transcript in `authorDisplay: message` form, with each post separated by a blank line so multi-line message bodies stay readable. Empty for a nil receiver. The `ai_prompt` action renders this automatically inside its `<user_data>` block and also discloses `Truncated` in its trigger-context system message. |
 
 ### Step output fields
 
