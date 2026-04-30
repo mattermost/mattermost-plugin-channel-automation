@@ -1,5 +1,5 @@
-// Package notifier sends DM notifications to flow creators when their
-// automations fail. Notifications are rate-limited per flow and cluster-aware
+// Package notifier sends DM notifications to automation creators when their
+// automations fail. Notifications are rate-limited per automation and cluster-aware
 // via the plugin KV store.
 package notifier
 
@@ -12,7 +12,7 @@ import (
 )
 
 // NotificationCooldown is the minimum interval between failure notifications
-// for the same flow. The CooldownStore TTL enforces this window cluster-wide.
+// for the same automation. The CooldownStore TTL enforces this window cluster-wide.
 const NotificationCooldown = time.Hour
 
 // FailureDetails carries the information needed to render a failure DM.
@@ -38,8 +38,8 @@ type FailureNotifier interface {
 	NotifyFailure(d FailureDetails)
 }
 
-// CreatorNotifier sends a DM from the plugin's bot user to the flow creator
-// when a flow execution fails, applying a per-flow cooldown via CooldownStore
+// CreatorNotifier sends a DM from the plugin's bot user to the automation creator
+// when an automation execution fails, applying a per-automation cooldown via CooldownStore
 // so cluster nodes coordinate naturally.
 type CreatorNotifier struct {
 	api       plugin.API
@@ -54,8 +54,8 @@ func NewCreatorNotifier(api plugin.API, cooldown CooldownStore, botUserID string
 	return &CreatorNotifier{api: api, cooldown: cooldown, botUserID: botUserID}
 }
 
-// NotifyFailure DMs the flow creator about a failed execution. If another
-// notification for the same flow has been sent within the cooldown window
+// NotifyFailure DMs the automation creator about a failed execution. If another
+// notification for the same automation has been sent within the cooldown window
 // (on this node or any other cluster node), this call is a no-op.
 //
 // All errors are logged but not returned: notification failures must never
@@ -71,7 +71,7 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 	claimed, err := n.cooldown.Claim(d.AutomationID)
 	if err != nil {
 		// On store error, suppress the notification rather than risk spamming.
-		n.api.LogError("Failed to claim flow failure notification cooldown",
+		n.api.LogError("Failed to claim automation failure notification cooldown",
 			"automation_id", d.AutomationID,
 			"err", err.Error(),
 		)
@@ -83,7 +83,7 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 
 	channel, appErr := n.api.GetDirectChannel(d.CreatedBy, n.botUserID)
 	if appErr != nil {
-		n.api.LogError("Failed to open DM channel for flow failure notification",
+		n.api.LogError("Failed to open DM channel for automation failure notification",
 			"automation_id", d.AutomationID,
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
@@ -98,7 +98,7 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 		Message:   formatMessage(d),
 	}
 	if _, appErr := n.api.CreatePost(post); appErr != nil {
-		n.api.LogError("Failed to post flow failure DM",
+		n.api.LogError("Failed to post automation failure DM",
 			"automation_id", d.AutomationID,
 			"created_by", d.CreatedBy,
 			"err", appErr.Error(),
@@ -109,11 +109,11 @@ func (n *CreatorNotifier) NotifyFailure(d FailureDetails) {
 }
 
 // releaseAfterFailure releases a previously-claimed cooldown so the next
-// failure for the same flow can attempt a notification again. Errors are
+// failure for the same automation can attempt a notification again. Errors are
 // logged but never propagated.
 func (n *CreatorNotifier) releaseAfterFailure(automationID string) {
 	if err := n.cooldown.Release(automationID); err != nil {
-		n.api.LogError("Failed to release flow failure notification cooldown",
+		n.api.LogError("Failed to release automation failure notification cooldown",
 			"automation_id", automationID,
 			"err", err.Error(),
 		)
@@ -140,8 +140,8 @@ func formatMessage(d FailureDetails) string {
 			"- Error: %s\n"+
 			"%s"+
 			"- Execution ID: `%s`\n"+
-			"- Flow ID: `%s`\n\n"+
-			"This notification is rate-limited to once per hour per flow. "+
+			"- Automation ID: `%s`\n\n"+
+			"This notification is rate-limited to once per hour per automation. "+
 			"Check the server logs for more details.",
 		d.AutomationName, actionLine, d.ErrorMsg, channelLine, d.ExecutionID, d.AutomationID,
 	)

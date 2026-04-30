@@ -18,7 +18,7 @@ import (
 
 const maxRequestBodySize = 1 << 20 // 1 MB
 
-// APIHandler provides HTTP handlers for flow CRUD operations.
+// APIHandler provides HTTP handlers for automation CRUD operations.
 type APIHandler struct {
 	store           model.Store
 	historyStore    model.ExecutionStore
@@ -29,13 +29,13 @@ type APIHandler struct {
 	bridge          hooks.AgentToolsLister
 }
 
-// NewAPIHandler creates a new flow API handler. bridge may be nil in tests
+// NewAPIHandler creates a new automation API handler. bridge may be nil in tests
 // that do not exercise allowed_tools validation.
 func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, registry *Registry, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
 	return &APIHandler{store: store, historyStore: historyStore, api: api, registry: registry, scheduleManager: scheduleManager, config: config, bridge: bridge}
 }
 
-// RegisterRoutes registers the flow CRUD routes on the given router.
+// RegisterRoutes registers the automation CRUD routes on the given router.
 func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/automations", h.handleListAutomations).Methods(http.MethodGet)
 	r.HandleFunc("/automations", h.handleCreateAutomation).Methods(http.MethodPost)
@@ -45,8 +45,8 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 }
 
 // checkChannelAutomationLimit verifies that the channel has not reached the
-// per-channel flow limit. excludeAutomationID is used during updates so the
-// flow being modified does not count against itself.
+// per-channel automation limit. excludeAutomationID is used during updates so the
+// automation being modified does not count against itself.
 func (h *APIHandler) checkChannelAutomationLimit(channelID, excludeAutomationID string) error {
 	if channelID == "" {
 		return nil
@@ -62,13 +62,13 @@ func (h *APIHandler) checkChannelAutomationLimit(channelID, excludeAutomationID 
 
 	count, err := h.store.CountByTriggerChannel(channelID)
 	if err != nil {
-		return fmt.Errorf("failed to check channel flow count: %w", err)
+		return fmt.Errorf("failed to check channel automation count: %w", err)
 	}
 
 	if excludeAutomationID != "" {
 		existing, err := h.store.Get(excludeAutomationID)
 		if err != nil {
-			return fmt.Errorf("failed to check existing flow: %w", err)
+			return fmt.Errorf("failed to check existing automation: %w", err)
 		}
 		if existing != nil && existing.TriggerChannelID() == channelID {
 			count--
@@ -76,7 +76,7 @@ func (h *APIHandler) checkChannelAutomationLimit(channelID, excludeAutomationID 
 	}
 
 	if count >= limit {
-		return fmt.Errorf("channel has reached the maximum of %d flow(s)", limit)
+		return fmt.Errorf("channel has reached the maximum of %d automation(s)", limit)
 	}
 	return nil
 }
@@ -195,21 +195,21 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "automation_id", f.ID, "automation_name", f.Name, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
+		h.api.LogError("Failed to create automation", "user_id", f.CreatedBy, "automation_id", f.ID, "automation_name", f.Name, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create automation", err.Error())
 		return
 	}
 
 	if h.scheduleManager != nil {
 		if err := h.scheduleManager.SyncAutomation(nil, &f); err != nil {
-			h.api.LogWarn("Failed to sync schedule after flow create", "automation_id", f.ID, "error", err.Error())
+			h.api.LogWarn("Failed to sync schedule after automation create", "automation_id", f.ID, "error", err.Error())
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(&f); err != nil {
-		h.api.LogError("Failed to encode flow", "error", err.Error())
+		h.api.LogError("Failed to encode automation", "error", err.Error())
 	}
 }
 
@@ -218,12 +218,12 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 
 	f, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		h.api.LogError("Failed to get automation", "automation_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
 		return
 	}
 	if f == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
 		return
 	}
 
@@ -241,7 +241,7 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(f); err != nil {
-		h.api.LogError("Failed to encode flow", "error", err.Error())
+		h.api.LogError("Failed to encode automation", "error", err.Error())
 	}
 }
 
@@ -250,12 +250,12 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 
 	existing, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow for update", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		h.api.LogError("Failed to get automation for update", "automation_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
 		return
 	}
 	if existing == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
 		return
 	}
 
@@ -278,7 +278,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Only the creator (or a sysadmin acting on their behalf) may edit a flow.
+	// Only the creator (or a sysadmin acting on their behalf) may edit an automation.
 	// This is the security boundary that lets the downstream creator-anchored
 	// checks below validate against existing.CreatedBy without enabling
 	// privilege escalation by a non-creator editor.
@@ -312,7 +312,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// New flow configuration must remain admissible for the creator (covers
+	// New automation configuration must remain admissible for the creator (covers
 	// the sysadmin-edit case: catches references the creator cannot manage).
 	if err := permissions.CheckAutomationPermissions(h.api, existing.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
@@ -351,20 +351,20 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to update flow", "user_id", userID, "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update flow", err.Error())
+		h.api.LogError("Failed to update automation", "user_id", userID, "automation_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update automation", err.Error())
 		return
 	}
 
 	if h.scheduleManager != nil {
 		if err := h.scheduleManager.SyncAutomation(existing, &f); err != nil {
-			h.api.LogWarn("Failed to sync schedule after flow update", "automation_id", f.ID, "error", err.Error())
+			h.api.LogWarn("Failed to sync schedule after automation update", "automation_id", f.ID, "error", err.Error())
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(&f); err != nil {
-		h.api.LogError("Failed to encode flow", "error", err.Error())
+		h.api.LogError("Failed to encode automation", "error", err.Error())
 	}
 }
 
@@ -373,12 +373,12 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 
 	existing, err := h.store.Get(id)
 	if err != nil {
-		h.api.LogError("Failed to get flow for delete", "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get flow", err.Error())
+		h.api.LogError("Failed to get automation for delete", "automation_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", err.Error())
 		return
 	}
 	if existing == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "flow not found", "")
+		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
 		return
 	}
 
@@ -395,8 +395,8 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.store.Delete(id); err != nil {
-		h.api.LogError("Failed to delete flow", "user_id", userID, "automation_id", id, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete flow", err.Error())
+		h.api.LogError("Failed to delete automation", "user_id", userID, "automation_id", id, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to delete automation", err.Error())
 		return
 	}
 

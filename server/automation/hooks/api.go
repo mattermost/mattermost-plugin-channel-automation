@@ -41,7 +41,7 @@ type HookCtx struct {
 	AllowedCh  map[string]struct{}
 	// AllowedTeams is the set of team IDs the LLM is allowed to query through
 	// team tools. It contains the team of every guardrail channel plus the
-	// flow's trigger team (when resolvable).
+	// automation's trigger team (when resolvable).
 	AllowedTeams map[string]struct{}
 	API          plugin.API
 	UserID       string
@@ -53,7 +53,7 @@ func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
 }
 
 // HookURL returns the plugin-relative before-callback URL for a tool hook on
-// the given flow/action. Centralized so the route registration and the URL
+// the given automation/action. Centralized so the route registration and the URL
 // emitted to the bridge cannot drift apart.
 func HookURL(automationID, actionID string) string {
 	return fmt.Sprintf("/api/v1/hooks/tools/%s/%s/before", automationID, actionID)
@@ -121,8 +121,8 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, automationID
 }
 
 // authorizeFlowCreator returns true if the request is authenticated as the
-// flow's creator. Otherwise it writes a 403 JSON error and returns false.
-// The flow must have a non-empty CreatedBy; flows missing a creator are
+// automation's creator. Otherwise it writes a 403 JSON error and returns false.
+// The automation must have a non-empty CreatedBy; automations missing a creator are
 // treated as unauthorized to prevent accidental open access.
 func (h *APIHandler) authorizeFlowCreator(w http.ResponseWriter, r *http.Request, f *model.Automation, errResp any) bool {
 	callerID := r.Header.Get(headerMattermostUserID)
@@ -139,9 +139,9 @@ func (h *APIHandler) authorizeFlowCreator(w http.ResponseWriter, r *http.Request
 	return true
 }
 
-// loadGuardrailFlow loads the flow and the guardrails for the given action when
+// loadGuardrailAutomation loads the automation and the guardrails for the given action when
 // channel guardrails are configured.
-func (h *APIHandler) loadGuardrailFlow(automationID, actionID string) (*model.Automation, *model.Guardrails, bool) {
+func (h *APIHandler) loadGuardrailAutomation(automationID, actionID string) (*model.Automation, *model.Guardrails, bool) {
 	f, err := h.store.Get(automationID)
 	if err != nil || f == nil {
 		return nil, nil, false
@@ -153,16 +153,16 @@ func (h *APIHandler) loadGuardrailFlow(automationID, actionID string) (*model.Au
 	return f, gr, true
 }
 
-// flowAnchorTeamID returns the Mattermost team ID the flow is anchored to:
+// automationAnchorTeamID returns the Mattermost team ID the automation is anchored to:
 // the team_id of a channel_created or user_joined_team trigger, or the team
 // of the trigger channel for channel-scoped triggers. It is best-effort:
 // benign "no anchor team" cases (no trigger channel, channel_created/user_joined_team
 // without team_id, DM/GM trigger channel) return ("", nil). Only unexpected
-// failures (nil flow, GetChannel error) are returned as errors so callers can
+// failures (nil automation, GetChannel error) are returned as errors so callers can
 // log them.
-func flowAnchorTeamID(api plugin.API, f *model.Automation) (string, error) {
+func automationAnchorTeamID(api plugin.API, f *model.Automation) (string, error) {
 	if f == nil {
-		return "", fmt.Errorf("flow not loaded")
+		return "", fmt.Errorf("automation not loaded")
 	}
 	if f.Trigger.ChannelCreated != nil {
 		return f.Trigger.ChannelCreated.TeamID, nil
@@ -213,7 +213,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 	automationID := vars["automation_id"]
 	actionID := vars["action_id"]
 
-	f, gr, ok := h.loadGuardrailFlow(automationID, actionID)
+	f, gr, ok := h.loadGuardrailAutomation(automationID, actionID)
 	if !ok {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "guardrails not found"})
 		return
@@ -252,8 +252,8 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	allowedCh, allowedTeams := h.allowedSetsForGuardrails(gr, automationID, actionID)
-	if expTeam, err := flowAnchorTeamID(h.api, f); err != nil {
-		h.api.LogDebug("hooks: failed to resolve flow anchor team",
+	if expTeam, err := automationAnchorTeamID(h.api, f); err != nil {
+		h.api.LogDebug("hooks: failed to resolve automation anchor team",
 			"automation_id", automationID, "action_id", actionID, "error", err.Error())
 	} else if expTeam != "" {
 		allowedTeams[expTeam] = struct{}{}

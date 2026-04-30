@@ -11,10 +11,10 @@ import (
 // kvCooldownKeyPrefix namespaces the cooldown keys in the plugin KV store.
 const kvCooldownKeyPrefix = "flow_failure_notify_"
 
-// CooldownStore manages per-flow notification cooldown slots backed by the
+// CooldownStore manages per-automation notification cooldown slots backed by the
 // Mattermost plugin KV store. It exists so CreatorNotifier doesn't reach
 // into plugin.API for KV operations directly, matching the Store pattern
-// used by flow, execution, and workqueue.
+// used by automation, execution, and workqueue.
 type CooldownStore interface {
 	// Claim atomically reserves the cooldown slot for automationID. Returns true if
 	// this caller won the slot, false if another caller (locally or on
@@ -45,7 +45,7 @@ func (s *kvCooldownStore) Claim(automationID string) (bool, error) {
 		ExpireInSeconds: int64(s.ttl / time.Second),
 	})
 	if appErr != nil {
-		return false, fmt.Errorf("failed to claim cooldown for flow %s: %w", automationID, appErr)
+		return false, fmt.Errorf("failed to claim cooldown for automation %s: %w", automationID, appErr)
 	}
 	return ok, nil
 }
@@ -53,7 +53,7 @@ func (s *kvCooldownStore) Claim(automationID string) (bool, error) {
 func (s *kvCooldownStore) Release(automationID string) error {
 	key := kvCooldownKeyPrefix + automationID
 	if appErr := s.api.KVDelete(key); appErr != nil {
-		return fmt.Errorf("failed to release cooldown for flow %s: %w", automationID, appErr)
+		return fmt.Errorf("failed to release cooldown for automation %s: %w", automationID, appErr)
 	}
 	return nil
 }

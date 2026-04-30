@@ -21,7 +21,7 @@ func (e *ActionError) Error() string {
 
 func (e *ActionError) Unwrap() error { return e.Err }
 
-// AutomationExecutor dispatches flow actions using the registry.
+// AutomationExecutor dispatches automation actions using the registry.
 type AutomationExecutor struct {
 	registry *Registry
 }
@@ -31,7 +31,7 @@ func NewAutomationExecutor(registry *Registry) *AutomationExecutor {
 	return &AutomationExecutor{registry: registry}
 }
 
-// Execute runs all actions in the flow sequentially, building up the AutomationContext.
+// Execute runs all actions in the automation sequentially, building up the AutomationContext.
 // Returns the context (with any partial step outputs) and an error on the first
 // failure or if an action type is unknown.
 func (e *AutomationExecutor) Execute(f *model.Automation, triggerData model.TriggerData) (*model.AutomationContext, error) {

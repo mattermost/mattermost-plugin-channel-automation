@@ -8,7 +8,7 @@ import (
 )
 
 // Dispatcher resolves matching flows for an event, builds the trigger data
-// once, and enqueues a work item per matched flow. It is the single path
+// once, and enqueues a work item per matched automation. It is the single path
 // from plugin hooks to the work queue for event-driven triggers.
 type Dispatcher struct {
 	api            plugin.API
@@ -28,7 +28,7 @@ func NewDispatcher(api plugin.API, triggerService *TriggerService, enqueuer Work
 }
 
 // Dispatch finds matching flows for the event, builds TriggerData via the
-// registered handler, and enqueues a work item per matched flow. Logs and
+// registered handler, and enqueues a work item per matched automation. Logs and
 // returns silently on errors. Avoids blocking the Mattermost server.
 func (d *Dispatcher) Dispatch(event *model.Event) {
 	if event == nil {

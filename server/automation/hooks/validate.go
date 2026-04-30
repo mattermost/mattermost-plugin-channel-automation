@@ -28,7 +28,7 @@ type AgentToolsLister interface {
 // available to userID via that agent, and any embedded Mattermost MCP tool
 // must be present in the supported catalog with Allowed=true.
 //
-// The bridge is queried at most once per distinct provider_id within a flow,
+// The bridge is queried at most once per distinct provider_id within an automation,
 // so the access check and tool-name validation share a single call.
 // Returns nil for flows with no ai_prompt agent actions.
 func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsLister) error {
@@ -36,7 +36,7 @@ func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsL
 		return nil
 	}
 
-	// Cache results per agent so a flow with multiple ai_prompt actions
+	// Cache results per agent so a automation with multiple ai_prompt actions
 	// pointing at the same agent only triggers one bridge call. This also
 	// dedupes the access check against any tool-name validation below.
 	cache := make(map[string]map[string]bridgeclient.BridgeToolInfo)
