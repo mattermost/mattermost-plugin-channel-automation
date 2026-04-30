@@ -16,6 +16,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
@@ -121,7 +122,9 @@ func (p *Plugin) OnActivate() error {
 		maxWorkers = 4
 	}
 
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, p.API, maxWorkers)
+	cooldownStore := notifier.NewCooldownStore(p.API, notifier.NotificationCooldown)
+	failureNotifier := notifier.NewCreatorNotifier(p.API, cooldownStore, p.botUserID)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, failureNotifier, p.API, maxWorkers)
 	p.workerPool.Start()
 
 	p.dispatcher = flow.NewDispatcher(p.API, p.triggerService, p.workQueueStore, p.workerPool)

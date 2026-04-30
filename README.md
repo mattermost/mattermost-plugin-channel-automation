@@ -10,6 +10,7 @@ A Mattermost plugin that lets system admins build automated workflows triggered 
 - **Flow-based automation** — Create named flows with a trigger and a sequence of actions that execute in order.
 - **Go template engine** — Action fields support `text/template` syntax with access to trigger context (post, channel, user) and outputs from previous actions.
 - **Persistent work queue** — Flow executions are durably queued in the KV store with bounded concurrency and automatic crash recovery.
+- **Failure notifications** — When an action in a flow fails (e.g. an `ai_prompt` returns an error), the plugin DMs the flow's creator with the failing action ID and error message, rate-limited to once per hour per flow and coordinated cluster-wide via the KV store.
 - **Management UI** — A dedicated webapp section for listing, creating, editing, enabling/disabling, and deleting flows.
 
 ### Triggers

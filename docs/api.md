@@ -15,6 +15,10 @@ In practice, validation (`ValidateSendMessageChannel`) already requires `send_me
 
 The list endpoint filters results to only flows the user has permission to view under the rules above.
 
+### MCP tool hook endpoints
+
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{flow_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the flow's `created_by` and returns `403 Forbidden` on mismatch (or when the flow has no recorded creator). System admin status does not bypass this check.
+
 ## Endpoints
 
 ### Get client configuration
@@ -123,7 +127,13 @@ POST /flows
 
 Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For `ai_prompt` actions with `allowed_tools`, the server rejects the tool names `create_post`, `dm`, and `group_message`. Comparison is case-insensitive and ignores surrounding whitespace.
+For every `ai_prompt` action with `provider_type: "agent"`, the server confirms with the AI plugin bridge that the flow's creator has access to the chosen `provider_id`, regardless of whether `allowed_tools` is set. Inaccessible, deactivated, or non-existent agent IDs are rejected at create/update time instead of failing with an opaque 403 at execute time. The bridge is queried at most once per distinct `provider_id` per request, so the access check and the `allowed_tools` validation share a single bridge round-trip.
+
+`allowed_tools` and `guardrails` are only valid when `provider_type` is `"agent"`. The bridge rejects `allowed_tools` on service completion endpoints with HTTP 400; the server mirrors that rule at save time so the misconfiguration surfaces immediately.
+
+For `ai_prompt` actions with `allowed_tools`, every entry must be a tool the action's agent actually exposes. Embedded Mattermost MCP tools are additionally validated against an explicit catalog: any embedded tool not in the catalog is rejected, and catalog entries marked not permitted (currently `create_post`, `dm`, `group_message`, and the automation-management tools `list_automations` / `get_automation_instructions` / `create_automation` / `update_automation` / `delete_automation`) are rejected. External (non-embedded) MCP tools are not subject to the catalog check.
+
+When `guardrails` is set on an `ai_prompt` action, `allowed_tools` must be non-empty, and each `guardrails.channel_ids` entry must be a distinct 26-character Mattermost ID.
 
 **Request body** (max 1 MB):
 
@@ -162,9 +172,16 @@ The created flow object with all server-assigned fields populated.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
+| 400    | `action <i>: guardrails requires non-empty allowed_tools`                                                   |
+| 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
+| 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
+| 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
+| 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
 | 500    | `failed to create flow`                                                                                     |
+| 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
+| 502    | `action <i>: cannot verify access to agent "<id>": bridge client unavailable` (AI plugin not installed/active) |
 
 ---
 
@@ -196,7 +213,7 @@ The flow object.
 PUT /flows/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create flow](#create-flow).
+Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create flow](#create-flow); the agent access check uses the original `created_by` (not the editor), so a system admin editing on behalf of another user cannot bypass the original creator's bridge ACL.
 
 **Request body** (max 1 MB):
 
@@ -235,10 +252,17 @@ The updated flow object.
 | 400    | Action validation error (missing/invalid/duplicate ID)                                                      |
 | 400    | Trigger validation error (missing/invalid fields)                                                           |
 | 400    | `action <i>: tool "<name>" is not allowed in automations` (disallowed `allowed_tools` entry)               |
+| 400    | `action <i>: guardrails requires non-empty allowed_tools`                                                   |
+| 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
+| 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
+| 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
+| 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
 | 404    | `flow not found`                                                                                            |
 | 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
 | 500    | `failed to update flow`                                                                                     |
+| 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
+| 502    | `action <i>: cannot verify access to agent "<id>": bridge client unavailable` (AI plugin not installed/active) |
 
 ---
 
@@ -516,9 +540,28 @@ Exactly one type-specific config key should be set alongside `id`:
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
-| `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
+| `allowed_tools`    | string[]                        | _(optional, agent only)_ Allowlist of tool names the agent may use without approval. Only valid when `provider_type` is `"agent"` (services reject `allowed_tools` at the bridge). Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
+| `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
+
+#### Guardrails
+
+| Field          | Type     | Description                                                                                                                                 |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `channel_ids`  | string[] | Mattermost channel IDs (26 characters each). When non-empty (and `allowed_tools` is set), the automation registers per-tool before hooks so only these channels are exposed to the agent via supported tools. Duplicate or empty entries are rejected. |
+
+Hook handlers maintain an explicit catalog of **production** Mattermost built-in MCP tool names from the agents plugin (dev-only tools such as `create_user` / `create_post_as_user` / `create_team` / `add_user_to_team` are excluded). The bridge is told about a tool's `before` callback only when the catalog declares one. Tools not in the catalog get no callbacks at all and ride the agent's normal allowed_tools path. As defense in depth, the hook HTTP handler still rejects any callback that arrives for a tool that is not in the catalog.
+
+`allowed_tools` is also re-validated at execution time (not just on flow create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save. The validator additionally rejects `get_user_channels` whenever guardrails are configured for the same `ai_prompt` action.
+
+When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
+
+For `get_team_info` and `get_team_members`, guardrails restrict `team_id` to the **allowed-team set**: the union of (a) the automation's trigger team (the `channel_created` or `user_joined_team` trigger's `team_id`, or the team of the trigger channel for channel-scoped trigger types) and (b) the team of every channel listed in `channel_ids`. This means a guardrail set may span multiple teams and team tools work for all of them. Direct- and group-message channels in `channel_ids` contribute nothing to the allowed-team set (they have no team) but still work for channel-scoped tools. For `get_team_info`, only an explicit `team_id` is allowed under guardrails (no `team_name`-only lookup). For `get_channel_info`, only an explicit `channel_id` is allowed under guardrails (the `channel_name` + `team_id` resolution path is rejected).
+
+Channel → team lookups for the allowed-team set are memoized per-channel inside the hook handler (channel → team is immutable in Mattermost), so each unique guardrail channel triggers at most one `GetChannel` call per plugin run.
+
+Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 ---
 
@@ -581,6 +624,7 @@ These are sourced from the plugin server clock at execution time (not template-a
 Action templates receive a `FlowContext` object with the following structure:
 
 ```
+{{.FlowID}}             — id of the flow being executed
 {{.CreatedBy}}          — user ID of the flow creator
 {{.Trigger}}            — trigger event data
 {{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
