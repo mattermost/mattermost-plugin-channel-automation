@@ -63,26 +63,26 @@ func (a *testAction) getExecCount() int {
 
 // testAutomationStore is a simple in-memory implementation of model.Store.
 type testAutomationStore struct {
-	mu    sync.Mutex
-	flows map[string]*model.Automation
+	mu          sync.Mutex
+	automations map[string]*model.Automation
 }
 
 func newTestFlowStore() *testAutomationStore {
-	return &testAutomationStore{flows: make(map[string]*model.Automation)}
+	return &testAutomationStore{automations: make(map[string]*model.Automation)}
 }
 
 func (s *testAutomationStore) Get(id string) (*model.Automation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f := s.flows[id]
+	f := s.automations[id]
 	return f, nil
 }
 
 func (s *testAutomationStore) List() ([]*model.Automation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]*model.Automation, 0, len(s.flows))
-	for _, f := range s.flows {
+	result := make([]*model.Automation, 0, len(s.automations))
+	for _, f := range s.automations {
 		result = append(result, f)
 	}
 	return result, nil
@@ -91,14 +91,14 @@ func (s *testAutomationStore) List() ([]*model.Automation, error) {
 func (s *testAutomationStore) Save(f *model.Automation) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.flows[f.ID] = f
+	s.automations[f.ID] = f
 	return nil
 }
 
 func (s *testAutomationStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.flows, id)
+	delete(s.automations, id)
 	return nil
 }
 
@@ -337,7 +337,7 @@ func TestWorkerPool_DeletedFlow(t *testing.T) {
 	act := &testAction{}
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	// Don't add flow to store — it's "deleted"
+	// Don't add automation to store — it's "deleted"
 
 	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
 	require.NoError(t, store.Enqueue(item))
@@ -441,7 +441,7 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should remain enabled — this is a transient error.
+	// Automation should remain enabled — this is a transient error.
 	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
@@ -626,7 +626,7 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should remain enabled — this is a transient error.
+	// Automation should remain enabled — this is a transient error.
 	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.True(t, f.Enabled)
