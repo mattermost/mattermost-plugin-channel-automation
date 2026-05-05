@@ -156,6 +156,9 @@ func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
 
 	router, _, flowStore := setupAPIHandlerWithCustomMock(t, api)
 	flowStore.flows["f1"] = &model.Flow{

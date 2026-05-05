@@ -2,6 +2,7 @@ package flow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
@@ -21,13 +23,16 @@ type APIHandler struct {
 	store           model.Store
 	historyStore    model.ExecutionStore
 	api             plugin.API
+	registry        *Registry
 	scheduleManager *ScheduleManager
 	config          model.Configuration
+	bridge          hooks.AgentToolsLister
 }
 
-// NewAPIHandler creates a new flow API handler.
-func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, scheduleManager *ScheduleManager, config model.Configuration) *APIHandler {
-	return &APIHandler{store: store, historyStore: historyStore, api: api, scheduleManager: scheduleManager, config: config}
+// NewAPIHandler creates a new flow API handler. bridge may be nil in tests
+// that do not exercise allowed_tools validation.
+func NewAPIHandler(store model.Store, historyStore model.ExecutionStore, api plugin.API, registry *Registry, scheduleManager *ScheduleManager, config model.Configuration, bridge hooks.AgentToolsLister) *APIHandler {
+	return &APIHandler{store: store, historyStore: historyStore, api: api, registry: registry, scheduleManager: scheduleManager, config: config, bridge: bridge}
 }
 
 // RegisterRoutes registers the flow CRUD routes on the given router.
@@ -140,7 +145,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger, nil); err != nil {
+	if err := ValidateTrigger(h.registry, &f.Trigger, nil); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
@@ -161,13 +166,36 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, f.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	// Bridge-backed agent access verification runs after the local permission
+	// checks so we never call the bridge for flows the user cannot manage.
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
+		return
+	}
+
+	if err := permissions.CheckGuardrailsRequired(h.api, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
 	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
 		return
 	}
 
 	if err := h.store.Save(&f); err != nil {
-		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "flow_name", f.Name, "error", err.Error())
+		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
 		return
 	}
@@ -244,6 +272,22 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 	f.CreatedBy = existing.CreatedBy
 	f.UpdatedAt = model.NowTimestamp()
 
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
+	// Only the creator (or a sysadmin acting on their behalf) may edit a flow.
+	// This is the security boundary that lets the downstream creator-anchored
+	// checks below validate against existing.CreatedBy without enabling
+	// privilege escalation by a non-creator editor.
+	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
 	if f.Name == "" {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
 		return
@@ -263,27 +307,40 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := model.ValidateTrigger(&f.Trigger, &existing.Trigger); err != nil {
+	if err := ValidateTrigger(h.registry, &f.Trigger, &existing.Trigger); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
-
-	// Check permissions on existing flow (must have permission to modify it).
-	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+	// New flow configuration must remain admissible for the creator (covers
+	// the sysadmin-edit case: catches references the creator cannot manage).
+	if err := permissions.CheckFlowPermissions(h.api, existing.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
 
-	// Check permissions on new flow configuration (must have permission on new channels).
-	if err := permissions.CheckFlowPermissions(h.api, userID, &f); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+	if err := permissions.CheckGuardrailChannelPermissions(h.api, existing.CreatedBy, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
+		httputil.WriteErrorJSON(w, code, msg, detail)
+		return
+	}
+
+	// Bridge-backed agent access verification uses the original creator's
+	// identity (matches the runtime model where the bridge ACL is checked
+	// against created_by, not the editor) and runs after the local permission
+	// checks so we never call the bridge for inadmissible flows.
+	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
+		code := http.StatusBadRequest
+		if errors.Is(err, hooks.ErrToolDiscovery) {
+			code = http.StatusBadGateway
+		}
+		httputil.WriteErrorJSON(w, code, err.Error(), "")
+		return
+	}
+
+	if err := permissions.CheckGuardrailsRequired(h.api, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}
@@ -331,7 +388,7 @@ func (h *APIHandler) handleDeleteFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := permissions.CheckFlowPermissions(h.api, userID, existing); err != nil {
+	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

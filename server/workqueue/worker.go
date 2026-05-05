@@ -11,6 +11,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
@@ -22,6 +23,7 @@ type WorkerPool struct {
 	executor     *flow.FlowExecutor
 	flowStore    model.Store
 	historyStore model.ExecutionStore
+	notifier     notifier.FailureNotifier
 	api          plugin.API
 	maxWorkers   int
 	pollInterval time.Duration
@@ -33,12 +35,14 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
-func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, api plugin.API, maxWorkers int) *WorkerPool {
+// notifier may be nil to disable failure notifications.
+func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
 		store:        store,
 		executor:     executor,
 		flowStore:    flowStore,
 		historyStore: historyStore,
+		notifier:     failureNotifier,
 		api:          api,
 		maxWorkers:   maxWorkers,
 		pollInterval: 30 * time.Second,
@@ -183,7 +187,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Failed to verify flow creator",
 			"work_item_id", item.ID,
 			"flow_id", f.ID,
-			"flow_name", f.Name,
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
@@ -212,7 +215,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			wp.api.LogError("Failed to verify flow creator permissions",
 				"work_item_id", item.ID,
 				"flow_id", f.ID,
-				"flow_name", f.Name,
 				"created_by", f.CreatedBy,
 				"err", permErr.Error(),
 			)
@@ -238,7 +240,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogError("Flow execution failed",
 			"work_item_id", item.ID,
 			"flow_id", item.FlowID,
-			"flow_name", item.FlowName,
 			"err", execErr.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -247,6 +248,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 				"err", storeErr.Error(),
 			)
 		}
+		wp.notifyFailure(f, item, execErr)
 	} else {
 		if err := wp.store.Complete(item.ID); err != nil {
 			wp.api.LogError("Failed to complete work item",
@@ -258,7 +260,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		wp.api.LogInfo("Flow executed successfully",
 			"work_item_id", item.ID,
 			"flow_id", item.FlowID,
-			"flow_name", item.FlowName,
 		)
 	}
 
@@ -268,7 +269,6 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason string) {
 	wp.api.LogWarn("Disabling flow",
 		"flow_id", f.ID,
-		"flow_name", f.Name,
 		"created_by", f.CreatedBy,
 		"reason", reason,
 	)
@@ -289,6 +289,47 @@ func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason st
 		)
 	}
 	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), model.NowTimestamp())
+}
+
+// notifyFailure surfaces the failure to the flow creator via the configured
+// notifier (typically a DM from the plugin bot). Safe to call with a nil
+// notifier or nil flow.
+func (wp *WorkerPool) notifyFailure(f *model.Flow, item *model.WorkItem, execErr error) {
+	if wp.notifier == nil || f == nil || execErr == nil {
+		wp.api.LogWarn("Skipping failure notification due to missing inputs",
+			"work_item_id", item.ID,
+			"notifier_nil", wp.notifier == nil,
+			"flow_nil", f == nil,
+			"err_nil", execErr == nil,
+		)
+		return
+	}
+
+	details := notifier.FailureDetails{
+		FlowID:      f.ID,
+		FlowName:    f.Name,
+		CreatedBy:   f.CreatedBy,
+		ErrorMsg:    execErr.Error(),
+		ExecutionID: item.ID,
+	}
+	if ch := item.TriggerData.Channel; ch != nil {
+		details.ChannelID = ch.Id
+		// Prefer DisplayName for readability; fall back to Name (handle).
+		if ch.DisplayName != "" {
+			details.ChannelDisplayName = ch.DisplayName
+		} else {
+			details.ChannelDisplayName = ch.Name
+		}
+	}
+
+	var actionErr *flow.ActionError
+	if errors.As(execErr, &actionErr) {
+		details.ActionID = actionErr.ActionID
+		details.ActionType = actionErr.ActionType
+		details.ErrorMsg = actionErr.Err.Error()
+	}
+
+	wp.notifier.NotifyFailure(details)
 }
 
 func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.FlowContext, execErr error, completedAt int64) {

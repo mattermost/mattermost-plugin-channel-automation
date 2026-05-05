@@ -59,12 +59,17 @@ export interface SendMessageActionParams {
 
 export type AIPromptRequestAs = 'triggerer' | 'creator';
 
+export interface Guardrails {
+    channel_ids?: string[];
+}
+
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
     allowed_tools?: string[];
+    guardrails?: Guardrails;
     request_as?: AIPromptRequestAs;
 }
 

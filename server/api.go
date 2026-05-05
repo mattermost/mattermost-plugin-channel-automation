@@ -9,6 +9,7 @@ import (
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/httputil"
 )
 
@@ -31,8 +32,11 @@ func (p *Plugin) initRouter() *mux.Router {
 
 	// Management plugin API
 	apiRouter := router.PathPrefix("/api/v1").Subrouter()
-	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.scheduleManager, &configProvider{getConfig: p.getConfiguration})
+	flowAPI := flow.NewAPIHandler(p.flowStore, p.historyStore, p.API, p.registry, p.scheduleManager, &configProvider{getConfig: p.getConfiguration}, p.bridgeClient)
 	flowAPI.RegisterRoutes(apiRouter)
+
+	hooksAPI := hooks.NewAPIHandler(p.flowStore, p.API)
+	hooksAPI.RegisterRoutes(apiRouter)
 
 	execAPI := execution.NewAPIHandler(p.historyStore, p.flowStore, p.API)
 	execAPI.RegisterRoutes(apiRouter)

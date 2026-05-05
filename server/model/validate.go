@@ -4,18 +4,16 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
-)
 
-const minScheduleInterval = 1 * time.Hour
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
+)
 
 var actionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
 
-// ValidateTrigger validates a trigger configuration based on its type.
-// Exactly one trigger type must be set. An optional existing trigger can be
-// passed for update scenarios; when provided, start_at is only validated if
-// it changed from the existing value.
-func ValidateTrigger(t *Trigger, existing *Trigger) error {
+// ValidateTriggerExclusivity checks that exactly one trigger-config pointer
+// is set. Per-type field validation lives on each TriggerHandler and is
+// dispatched by the flow package's validator.
+func ValidateTriggerExclusivity(t *Trigger) error {
 	count := 0
 	if t.MessagePosted != nil {
 		count++
@@ -37,52 +35,6 @@ func ValidateTrigger(t *Trigger, existing *Trigger) error {
 	}
 	if count > 1 {
 		return fmt.Errorf("exactly one trigger type must be set, got %d", count)
-	}
-
-	switch {
-	case t.MessagePosted != nil:
-		if t.MessagePosted.ChannelID == "" {
-			return fmt.Errorf("message_posted trigger requires channel_id")
-		}
-	case t.Schedule != nil:
-		if t.Schedule.ChannelID == "" {
-			return fmt.Errorf("schedule trigger requires channel_id")
-		}
-		if t.Schedule.Interval == "" {
-			return fmt.Errorf("schedule trigger requires interval")
-		}
-		d, err := time.ParseDuration(t.Schedule.Interval)
-		if err != nil {
-			return fmt.Errorf("schedule trigger has invalid interval: %w", err)
-		}
-		if d < minScheduleInterval {
-			return fmt.Errorf("schedule trigger interval must be at least %dh", int(minScheduleInterval.Hours()))
-		}
-		startAtChanged := existing == nil || existing.Schedule == nil ||
-			TimestampToTime(existing.Schedule.StartAt).Truncate(time.Minute) != TimestampToTime(t.Schedule.StartAt).Truncate(time.Minute)
-		if startAtChanged && t.Schedule.StartAt != 0 && TimestampToTime(t.Schedule.StartAt).Before(time.Now().UTC()) {
-			return fmt.Errorf("schedule trigger start_at must be a future UTC timestamp")
-		}
-	case t.MembershipChanged != nil:
-		if t.MembershipChanged.ChannelID == "" {
-			return fmt.Errorf("membership_changed trigger requires channel_id")
-		}
-		if a := t.MembershipChanged.Action; a != "" && a != "joined" && a != "left" {
-			return fmt.Errorf("membership_changed trigger action must be \"joined\", \"left\", or empty (both)")
-		}
-	case t.ChannelCreated != nil:
-		if t.ChannelCreated.TeamID == "" {
-			return fmt.Errorf("channel_created trigger requires team_id")
-		}
-	case t.UserJoinedTeam != nil:
-		if t.UserJoinedTeam.TeamID == "" {
-			return fmt.Errorf("user_joined_team trigger requires team_id")
-		}
-		if ut := t.UserJoinedTeam.UserType; ut != "" && ut != "user" && ut != "guest" {
-			return fmt.Errorf("user_joined_team trigger user_type must be \"user\", \"guest\", or empty (both)")
-		}
-	default:
-		return fmt.Errorf("unknown trigger type: %s", t.Type())
 	}
 	return nil
 }
@@ -154,20 +106,13 @@ func isTriggerChannelTemplate(s string) bool {
 	return false
 }
 
-// disallowedTools lists tool names that may not appear in allowed_tools
-// because they would let an automation post messages outside the flow's
-// controlled output path.
-var disallowedTools = map[string]struct{}{
-	"create_post":   {},
-	"dm":            {},
-	"group_message": {},
-}
-
 // ValidateActions validates a list of actions.
 // At least one action is required. Each action must have a unique, non-empty ID
 // matching the slug pattern (lowercase alphanumeric + hyphens) and exactly one
-// action config set. For ai_prompt actions, allowed_tools entries are checked
-// against a blacklist of disallowed tool names.
+// action config set. For ai_prompt actions, guardrail consistency is checked.
+// Tool-name policy (catalog membership, embedded-server allowlist, disallowed
+// tools) is enforced at the API layer against the live bridge tool list — not
+// here — because it requires a per-user, per-agent bridge call.
 func ValidateActions(actions []Action) error {
 	if len(actions) == 0 {
 		return fmt.Errorf("at least one action is required")
@@ -198,13 +143,39 @@ func ValidateActions(actions []Action) error {
 			return fmt.Errorf("action %d: exactly one action config must be set, got %d", i, configCount)
 		}
 		if a.AIPrompt != nil {
-			for _, rawTool := range a.AIPrompt.AllowedTools {
-				tool := strings.ToLower(strings.TrimSpace(rawTool))
-				if tool == "" {
-					continue
+			// Reject unknown provider_type values up front so the
+			// agent-only / service-only branches below don't silently
+			// accept typos or future additions that haven't been wired
+			// through the rest of the stack yet.
+			if a.AIPrompt.ProviderType != AIProviderTypeAgent && a.AIPrompt.ProviderType != AIProviderTypeService {
+				return fmt.Errorf("action %d: ai_prompt provider_type must be %q or %q", i, AIProviderTypeAgent, AIProviderTypeService)
+			}
+			// Tool support is agent-only at the bridge layer (services reject
+			// allowed_tools with HTTP 400). Catch the misconfiguration at save
+			// time so the user sees a clear error instead of an opaque
+			// execute-time failure. Guardrails imply allowed_tools, so they
+			// are also agent-only.
+			if a.AIPrompt.ProviderType == AIProviderTypeService {
+				if len(a.AIPrompt.AllowedTools) > 0 {
+					return fmt.Errorf("action %d: allowed_tools is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}
-				if _, blocked := disallowedTools[tool]; blocked {
-					return fmt.Errorf("action %d: tool %q is not allowed in automations", i, tool)
+				if a.AIPrompt.Guardrails != nil {
+					return fmt.Errorf("action %d: guardrails is only supported with provider_type %q", i, AIProviderTypeAgent)
+				}
+			}
+			if a.AIPrompt.Guardrails != nil {
+				if len(a.AIPrompt.AllowedTools) == 0 {
+					return fmt.Errorf("action %d: guardrails requires non-empty allowed_tools", i)
+				}
+				seenCh := make(map[string]struct{})
+				for _, c := range a.AIPrompt.Guardrails.Channels {
+					if !mmmodel.IsValidId(c.ChannelID) {
+						return fmt.Errorf("action %d: invalid channel id %q in guardrails.channel_ids (expected 26-character Mattermost ID)", i, c.ChannelID)
+					}
+					if _, dup := seenCh[c.ChannelID]; dup {
+						return fmt.Errorf("action %d: duplicate channel id %q in guardrails.channel_ids", i, c.ChannelID)
+					}
+					seenCh[c.ChannelID] = struct{}{}
 				}
 			}
 			switch a.AIPrompt.RequestAs {

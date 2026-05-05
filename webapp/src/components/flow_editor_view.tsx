@@ -26,6 +26,9 @@ interface ActionForm {
     provider_id: string;
     allowed_tool_refs: string[];
     request_as: RequestAs;
+
+    /** Parsed guardrail channel IDs (from guardrails.channel_ids). */
+    guardrail_channel_ids: string[];
 }
 
 const styles = {
@@ -173,7 +176,31 @@ const styles = {
 const allTriggers = getAllTriggerConfigs();
 const defaultTriggerType = allTriggers[0]?.type ?? 'message_posted';
 
-// Accept string[] or legacy { name }[] from stored flows.
+// Reads guardrails.channel_ids from a stored flow as a deduped, trimmed
+// string[]. Non-string entries and empty strings are skipped.
+function normalizeGuardrailChannelIDsFromFlow(g: unknown): string[] {
+    if (!g || typeof g !== 'object') {
+        return [];
+    }
+    const raw = (g as {channel_ids?: unknown}).channel_ids;
+    if (!raw || !Array.isArray(raw)) {
+        return [];
+    }
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of raw) {
+        if (typeof item !== 'string') {
+            continue;
+        }
+        const n = item.trim();
+        if (n !== '' && !seen.has(n)) {
+            seen.add(n);
+            out.push(n);
+        }
+    }
+    return out;
+}
+
 function normalizeAllowedToolsFromFlow(raw: unknown): string[] {
     if (!raw || !Array.isArray(raw)) {
         return [];
@@ -201,7 +228,7 @@ function normalizeAllowedToolsFromFlow(raw: unknown): string[] {
 }
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: ''};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -218,6 +245,7 @@ function actionToForm(a: Action): ActionForm {
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
             request_as: a.ai_prompt.request_as ?? '',
+            guardrail_channel_ids: normalizeGuardrailChannelIDsFromFlow(a.ai_prompt.guardrails),
         };
     }
     if (a.send_message) {
@@ -233,9 +261,10 @@ function actionToForm(a: Action): ActionForm {
             provider_id: '',
             allowed_tool_refs: [],
             request_as: '',
+            guardrail_channel_ids: [],
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: ''};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -445,6 +474,13 @@ const FlowEditorView: React.FC = () => {
         }));
     }, []);
 
+    const handleGuardrailChannelsInput = useCallback((index: number, raw: string) => {
+        const parts = Array.from(new Set(
+            raw.split(/[\n,]+/).map((s) => s.trim()).filter((s) => s.length > 0),
+        ));
+        setActions((prev) => prev.map((a, i) => (i === index ? {...a, guardrail_channel_ids: parts} : a)));
+    }, []);
+
     const handleSave = useCallback(async () => {
         setSaving(true);
         setError(null);
@@ -473,6 +509,9 @@ const FlowEditorView: React.FC = () => {
                     }
                     if (a.request_as && action.ai_prompt) {
                         action.ai_prompt.request_as = a.request_as;
+                    }
+                    if (a.guardrail_channel_ids.length > 0 && action.ai_prompt) {
+                        action.ai_prompt.guardrails = {channel_ids: [...a.guardrail_channel_ids]};
                     }
                     return action;
                 }
@@ -760,6 +799,25 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                 </select>
                                 <p style={hintStyle}>{'Selects which user the AI request is attributed to. "Triggerer" uses the user who triggered the automation (falling back to the creator). "Creator" always uses the flow creator.'}</p>
                             </div>
+                            {action.allowed_tool_refs.length > 0 && (
+                                <div style={styles.formGroup}>
+                                    <label
+                                        htmlFor={`action-${index}-guardrail-channels`}
+                                        style={styles.label}
+                                    >{'Guardrail channel IDs (optional)'}</label>
+                                    <p style={hintStyle}>
+                                        {'When set, MCP tool calls from this step are limited to these channels. One 26-character Mattermost channel ID per line (or comma-separated). Requires at least one allowed tool.'}
+                                    </p>
+                                    <textarea
+                                        id={`action-${index}-guardrail-channels`}
+                                        style={styles.textarea}
+                                        rows={4}
+                                        placeholder={'e.g.\nh5wqm8kxptbztfgzpaxbsqozah'}
+                                        value={action.guardrail_channel_ids.join('\n')}
+                                        onChange={(e) => handleGuardrailChannelsInput(index, e.target.value)}
+                                    />
+                                </div>
+                            )}
                             <details style={styles.details}>
                                 <summary style={styles.summary}>{'Output of this action'}</summary>
                                 <pre style={styles.pre}>{`{
