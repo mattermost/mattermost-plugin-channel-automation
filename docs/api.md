@@ -517,6 +517,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional)_ Allowlist of tool names the agent may use without approval. May not include `create_post`, `dm`, or `group_message`. |
+| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the flow creator) or `"creator"` (always the flow creator). Any other value is rejected at create/update time. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
@@ -560,7 +561,12 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
-The completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the flow creator (`{{.CreatedBy}}`).
+By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the flow creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the flow creator unconditionally:
+
+- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
+- `"creator"` — always use the flow creator, even when a triggering user is available.
+
+The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 

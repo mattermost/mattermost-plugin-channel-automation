@@ -316,6 +316,27 @@ func TestValidateActions(t *testing.T) {
 		}})
 		require.NoError(t, err)
 	})
+
+	t.Run("request_as accepts empty, triggerer, and creator", func(t *testing.T) {
+		for _, v := range []string{"", "triggerer", "creator"} {
+			err := ValidateActions([]Action{{
+				ID:       "ask-ai",
+				AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", RequestAs: v},
+			}})
+			require.NoError(t, err, "value %q should be accepted", v)
+		}
+	})
+
+	t.Run("request_as rejects unknown values", func(t *testing.T) {
+		for _, v := range []string{"someone-else", "TRIGGERER", "admin"} {
+			err := ValidateActions([]Action{{
+				ID:       "ask-ai",
+				AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", RequestAs: v},
+			}})
+			require.Error(t, err, "value %q should be rejected", v)
+			assert.Contains(t, err.Error(), `request_as must be "triggerer" or "creator"`)
+		}
+	})
 }
 
 func TestValidateSendMessageChannel(t *testing.T) {

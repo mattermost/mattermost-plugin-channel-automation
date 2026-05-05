@@ -651,6 +651,88 @@ func TestAIPromptAction_Execute_UserIDFallbackToCreatedBy(t *testing.T) {
 	}
 }
 
+func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
+	tests := []struct {
+		name      string
+		requestAs string
+		ctx       *model.FlowContext
+		want      string
+	}{
+		{
+			name:      "creator forces flow creator over trigger user",
+			requestAs: "creator",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "creator with no trigger user still uses creator",
+			requestAs: "creator",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "triggerer prefers trigger user",
+			requestAs: "triggerer",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "triggering-user-id",
+		},
+		{
+			name:      "triggerer falls back to creator when no trigger user",
+			requestAs: "triggerer",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "empty defaults to triggerer behavior",
+			requestAs: "",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "triggering-user-id",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newTestAPI()
+			bc := &mockBridgeClient{agentResponse: "ok"}
+			a := NewAIPromptAction(api, bc)
+
+			act := &model.Action{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "hello",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
+					RequestAs:    tc.requestAs,
+				},
+			}
+
+			_, err := a.Execute(act, tc.ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, bc.lastReq.UserID)
+		})
+	}
+}
+
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}

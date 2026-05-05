@@ -72,4 +72,9 @@ type AIPromptActionConfig struct {
 	ProviderType string   `json:"provider_type"`
 	ProviderID   string   `json:"provider_id"`
 	AllowedTools []string `json:"allowed_tools,omitempty"`
+	// RequestAs selects which user the AI completion request is attributed to.
+	// Allowed values: "" or "triggerer" (default — the user who triggered the
+	// automation, falling back to the flow creator when the trigger has no
+	// associated user) or "creator" (always the flow creator).
+	RequestAs string `json:"request_as,omitempty"`
 }

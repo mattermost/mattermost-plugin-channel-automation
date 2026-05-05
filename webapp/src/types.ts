@@ -57,12 +57,15 @@ export interface SendMessageActionParams {
     body: string;
 }
 
+export type AIPromptRequestAs = 'triggerer' | 'creator';
+
 export interface AIPromptActionParams {
     system_prompt?: string;
     prompt: string;
     provider_type: string;
     provider_id: string;
     allowed_tools?: string[];
+    request_as?: AIPromptRequestAs;
 }
 
 export interface Action {

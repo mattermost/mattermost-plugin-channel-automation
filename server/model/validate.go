@@ -207,6 +207,11 @@ func ValidateActions(actions []Action) error {
 					return fmt.Errorf("action %d: tool %q is not allowed in automations", i, tool)
 				}
 			}
+			switch a.AIPrompt.RequestAs {
+			case "", AIPromptRequestAsTriggerer, AIPromptRequestAsCreator:
+			default:
+				return fmt.Errorf("action %d: request_as must be %q or %q", i, AIPromptRequestAsTriggerer, AIPromptRequestAsCreator)
+			}
 		}
 	}
 	return nil

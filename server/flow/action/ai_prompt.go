@@ -83,10 +83,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 
 	userID := ctx.CreatedBy
-	userIDSource := "created_by"
-	if ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
+	userIDSource := model.AIPromptRequestAsCreator
+	if cfg.RequestAs != model.AIPromptRequestAsCreator && ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
 		userID = ctx.Trigger.User.Id
-		userIDSource = "trigger"
+		userIDSource = model.AIPromptRequestAsTriggerer
 	}
 
 	a.api.LogDebug("AI prompt action: rendered prompt",
