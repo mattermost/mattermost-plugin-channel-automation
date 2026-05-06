@@ -134,6 +134,7 @@ func TestMessagePostedTrigger_BuildTriggerData(t *testing.T) {
 		assert.Equal(t, "post1", td.Post.Id)
 		assert.Equal(t, "town-square", td.Channel.Name)
 		assert.Equal(t, "alice", td.User.Username)
+		assert.Equal(t, *td.User, td.Post.User)
 	})
 
 	t.Run("nil post errors", func(t *testing.T) {
@@ -203,19 +204,16 @@ func TestMessagePostedTrigger_BuildTriggerData(t *testing.T) {
 
 		// Sorted by CreateAt: root1 (100), reply1 (200), reply2 (300).
 		assert.Equal(t, "root1", td.Thread.Messages[0].Id)
-		require.NotNil(t, td.Thread.Messages[0].User)
 		assert.Equal(t, "alice", td.Thread.Messages[0].User.Username)
 		assert.Equal(t, "hello", td.Thread.Messages[0].Message)
 		assert.Equal(t, int64(100), td.Thread.Messages[0].CreateAt)
 		assert.Equal(t, "root1", td.Thread.Messages[0].ThreadId)
 
 		assert.Equal(t, "reply1", td.Thread.Messages[1].Id)
-		require.NotNil(t, td.Thread.Messages[1].User)
 		assert.Equal(t, "bob", td.Thread.Messages[1].User.Username)
 		assert.Equal(t, "world", td.Thread.Messages[1].Message)
 
 		assert.Equal(t, "reply2", td.Thread.Messages[2].Id)
-		require.NotNil(t, td.Thread.Messages[2].User)
 		assert.Equal(t, "alice", td.Thread.Messages[2].User.Username)
 	})
 
@@ -256,9 +254,7 @@ func TestMessagePostedTrigger_BuildTriggerData(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, td.Thread)
 		require.Len(t, td.Thread.Messages, 2)
-		require.NotNil(t, td.Thread.Messages[0].User)
 		assert.Equal(t, "alice", td.Thread.Messages[0].User.Username)
-		require.NotNil(t, td.Thread.Messages[1].User)
 		// Failed lookup → SafeUser carries only the user ID; AuthorDisplay() falls back to it.
 		assert.Equal(t, "u-missing", td.Thread.Messages[1].User.Id)
 		assert.Empty(t, td.Thread.Messages[1].User.Username)

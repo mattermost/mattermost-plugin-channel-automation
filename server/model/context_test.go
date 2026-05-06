@@ -10,21 +10,36 @@ import (
 )
 
 func TestNewSafePost_NilInput(t *testing.T) {
-	assert.Nil(t, NewSafePost(nil))
+	assert.Nil(t, NewSafePost(nil, nil))
 }
 
 func TestNewSafePost_SetsThreadId(t *testing.T) {
 	post := &mmmodel.Post{Id: "post1", ChannelId: "ch1", Message: "hello"}
-	safe := NewSafePost(post)
+	safe := NewSafePost(post, nil)
 	require.NotNil(t, safe)
 	assert.Equal(t, "post1", safe.ThreadId, "ThreadId should equal post Id when RootId is empty")
 }
 
 func TestNewSafePost_PreservesRootId(t *testing.T) {
 	post := &mmmodel.Post{Id: "post1", RootId: "root1", ChannelId: "ch1", Message: "hello"}
-	safe := NewSafePost(post)
+	safe := NewSafePost(post, nil)
 	require.NotNil(t, safe)
 	assert.Equal(t, "root1", safe.ThreadId, "ThreadId should equal RootId when set")
+}
+
+func TestNewSafePost_PopulatesFallbackAuthorAndCreateAt(t *testing.T) {
+	post := &mmmodel.Post{Id: "post1", UserId: "user1", CreateAt: 1234}
+	safe := NewSafePost(post, nil)
+	require.NotNil(t, safe)
+	assert.Equal(t, "user1", safe.User.Id)
+	assert.Equal(t, int64(1234), safe.CreateAt)
+}
+
+func TestNewSafePost_PopulatesResolvedAuthor(t *testing.T) {
+	post := &mmmodel.Post{Id: "post1", UserId: "user1"}
+	safe := NewSafePost(post, &SafeUser{Id: "user1", Username: "alice"})
+	require.NotNil(t, safe)
+	assert.Equal(t, SafeUser{Id: "user1", Username: "alice"}, safe.User)
 }
 
 func TestNewSafeThread_NilInput(t *testing.T) {
@@ -63,7 +78,6 @@ func TestNewSafeThread_SortsOldestFirstAndDedupesUserLookups(t *testing.T) {
 	assert.Equal(t, "p1", st.Messages[0].Id)
 	assert.Equal(t, "p2", st.Messages[1].Id)
 	assert.Equal(t, "p3", st.Messages[2].Id)
-	require.NotNil(t, st.Messages[0].User)
 	assert.Equal(t, "name-u1", st.Messages[0].User.Username)
 	assert.Equal(t, "name-u2", st.Messages[1].User.Username)
 	assert.Equal(t, "name-u1", st.Messages[2].User.Username)
@@ -98,7 +112,6 @@ func TestNewSafeThread_NilUsernameResolverKeepsUserIdFallback(t *testing.T) {
 	st := NewSafeThread(list, "p1", nil)
 	require.NotNil(t, st)
 	require.Len(t, st.Messages, 1)
-	require.NotNil(t, st.Messages[0].User)
 	assert.Equal(t, "u1", st.Messages[0].User.Id)
 	assert.Empty(t, st.Messages[0].User.Username)
 }
@@ -167,7 +180,6 @@ func TestNewSafeThread_FailedUserLookupKeepsUserIdFallback(t *testing.T) {
 	st := NewSafeThread(list, "p1", func(_ string) *SafeUser { return nil })
 	require.NotNil(t, st)
 	require.Len(t, st.Messages, 1)
-	require.NotNil(t, st.Messages[0].User)
 	assert.Equal(t, "u1", st.Messages[0].User.Id)
 }
 
@@ -203,8 +215,8 @@ func TestSafeThread_TranscriptDisplay(t *testing.T) {
 	})
 	t.Run("renders posts separated by blank lines", func(t *testing.T) {
 		st := &SafeThread{Messages: []SafePost{
-			{User: &SafeUser{Username: "alice", FirstName: "Alice", LastName: "Smith"}, Message: "hi"},
-			{User: &SafeUser{Id: "u2"}, Message: "fallback id"},
+			{User: SafeUser{Username: "alice", FirstName: "Alice", LastName: "Smith"}, Message: "hi"},
+			{User: SafeUser{Id: "u2"}, Message: "fallback id"},
 		}}
 		assert.Equal(t, "@alice (Alice Smith): hi\n\nu2: fallback id", st.TranscriptDisplay())
 	})
@@ -212,8 +224,8 @@ func TestSafeThread_TranscriptDisplay(t *testing.T) {
 		// The blank-line separator means a multi-line post stays as one
 		// readable block rather than blurring into the next post.
 		st := &SafeThread{Messages: []SafePost{
-			{User: &SafeUser{Username: "alice"}, Message: "line 1\nline 2\nline 3"},
-			{User: &SafeUser{Username: "bob"}, Message: "reply"},
+			{User: SafeUser{Username: "alice"}, Message: "line 1\nline 2\nline 3"},
+			{User: SafeUser{Username: "bob"}, Message: "reply"},
 		}}
 		assert.Equal(t, "@alice: line 1\nline 2\nline 3\n\n@bob: reply", st.TranscriptDisplay())
 	})
@@ -221,7 +233,7 @@ func TestSafeThread_TranscriptDisplay(t *testing.T) {
 		// TrimSuffix removes only the loop-appended "\n\n" delimiter, so a
 		// final message that legitimately ends in "\n" keeps that newline.
 		st := &SafeThread{Messages: []SafePost{
-			{User: &SafeUser{Username: "alice"}, Message: "ends with newline\n"},
+			{User: SafeUser{Username: "alice"}, Message: "ends with newline\n"},
 		}}
 		assert.Equal(t, "@alice: ends with newline\n", st.TranscriptDisplay())
 	})

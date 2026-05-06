@@ -83,17 +83,16 @@ type SafeTeam struct {
 }
 
 // SafePost contains only the post fields needed for template rendering.
-// User and CreateAt are populated when the SafePost represents a post
-// inside a thread transcript (built by NewSafeThread). For the top-level
-// triggering post, User is left nil — the triggering user is exposed
-// separately at TriggerData.User.
+// User is populated from the post author when available. Callers that have
+// already resolved the full user may replace the ID-only fallback with a
+// richer SafeUser.
 type SafePost struct {
-	Id        string    `json:"id"`
-	ChannelId string    `json:"channel_id"`
-	ThreadId  string    `json:"thread_id"`
-	Message   string    `json:"message"`
-	User      *SafeUser `json:"user,omitempty"`
-	CreateAt  int64     `json:"create_at,omitempty"`
+	Id        string   `json:"id"`
+	ChannelId string   `json:"channel_id"`
+	ThreadId  string   `json:"thread_id"`
+	Message   string   `json:"message"`
+	User      SafeUser `json:"user"`
+	CreateAt  int64    `json:"create_at,omitempty"`
 }
 
 // SafeChannel contains only the channel fields needed for template rendering.
@@ -144,7 +143,7 @@ func (u *SafeUser) AuthorDisplay() string {
 }
 
 // NewSafePost creates a SafePost from a Mattermost Post.
-func NewSafePost(p *mmmodel.Post) *SafePost {
+func NewSafePost(p *mmmodel.Post, user *SafeUser) *SafePost {
 	if p == nil {
 		return nil
 	}
@@ -157,7 +156,16 @@ func NewSafePost(p *mmmodel.Post) *SafePost {
 		ChannelId: p.ChannelId,
 		ThreadId:  threadId,
 		Message:   p.Message,
+		User:      safePostUser(p.UserId, user),
+		CreateAt:  p.CreateAt,
 	}
+}
+
+func safePostUser(userID string, user *SafeUser) SafeUser {
+	if user != nil {
+		return *user
+	}
+	return SafeUser{Id: userID}
 }
 
 // NewSafeThread builds a SafeThread from a Mattermost PostList. Messages
@@ -217,18 +225,11 @@ func NewSafeThread(list *mmmodel.PostList, rootID string, userFor func(userID st
 
 	messages := make([]SafePost, 0, len(sorted))
 	for _, p := range sorted {
-		sp := *NewSafePost(p)
+		sp := *NewSafePost(p, resolveUser(p.UserId))
 		// Override ThreadId with the resolved root for consistency across
 		// all messages in the thread (NewSafePost would otherwise set the
 		// root post's ThreadId to its own Id).
 		sp.ThreadId = rootID
-		sp.CreateAt = p.CreateAt
-		sp.User = resolveUser(p.UserId)
-		// Retain at least the user ID so AuthorDisplay() has a fallback
-		// when the lookup failed or no resolver was supplied.
-		if sp.User == nil && p.UserId != "" {
-			sp.User = &SafeUser{Id: p.UserId}
-		}
 		messages = append(messages, sp)
 	}
 	st.Messages = messages

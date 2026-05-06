@@ -729,8 +729,8 @@ func TestAIPromptAction_Execute_ThreadContext_InjectsTranscriptAndMetadata(t *te
 				RootID:    "rootp",
 				PostCount: 2,
 				Messages: []model.SafePost{
-					{Id: "rootp", User: &model.SafeUser{Username: "alice", FirstName: "Alice", LastName: "A."}, Message: "hello", CreateAt: 100},
-					{Id: "replyp", User: &model.SafeUser{Username: "bob", FirstName: "Bob", LastName: "B."}, Message: "world", CreateAt: 200},
+					{Id: "rootp", User: model.SafeUser{Username: "alice", FirstName: "Alice", LastName: "A."}, Message: "hello", CreateAt: 100},
+					{Id: "replyp", User: model.SafeUser{Username: "bob", FirstName: "Bob", LastName: "B."}, Message: "world", CreateAt: 200},
 				},
 			},
 		},
@@ -786,8 +786,8 @@ func TestAIPromptAction_Execute_ThreadContext_DisclosesTruncationToModel(t *test
 				PostCount: 250,
 				Truncated: true,
 				Messages: []model.SafePost{
-					{Id: "rootp", User: &model.SafeUser{Username: "alice"}, Message: "topic", CreateAt: 0},
-					{Id: "replyp", User: &model.SafeUser{Username: "bob"}, Message: "latest", CreateAt: 250},
+					{Id: "rootp", User: model.SafeUser{Username: "alice"}, Message: "topic", CreateAt: 0},
+					{Id: "replyp", User: model.SafeUser{Username: "bob"}, Message: "latest", CreateAt: 250},
 				},
 			},
 		},

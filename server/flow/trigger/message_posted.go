@@ -58,10 +58,11 @@ func (t *MessagePostedTrigger) BuildTriggerData(api model.TriggerAPI, event *mod
 		return model.TriggerData{}, fmt.Errorf("get user %s: %w", event.Post.UserId, appErr)
 	}
 
+	safeUser := model.NewSafeUser(user)
 	data := model.TriggerData{
-		Post:    model.NewSafePost(event.Post),
+		Post:    model.NewSafePost(event.Post, safeUser),
 		Channel: model.NewSafeChannel(channel),
-		User:    model.NewSafeUser(user),
+		User:    safeUser,
 	}
 
 	// This branch is only reachable when MessagePostedConfig
