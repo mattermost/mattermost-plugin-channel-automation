@@ -25,7 +25,7 @@ var (
 	teamAutomation = mmmodel.NewId() // automation anchor team id
 )
 
-// creatorUserID is the default flow CreatedBy used by test helpers; the
+// creatorUserID is the default automation CreatedBy used by test helpers; the
 // hook handlers require the Mattermost-User-ID header to match it.
 const creatorUserID = "user1"
 
@@ -561,10 +561,10 @@ func flowChannelCreatedTeam(teamID string) *model.Automation {
 	}
 }
 
-// flowUserJoinedTeam returns a guardrail flow whose trigger is user_joined_team
+// automationUserJoinedTeam returns a guardrail automation whose trigger is user_joined_team
 // on teamID. Used to verify the anchor-team resolution path includes the
 // user_joined_team trigger.
-func flowUserJoinedTeam(teamID string) *model.Automation {
+func automationUserJoinedTeam(teamID string) *model.Automation {
 	return &model.Automation{
 		ID:        "flow1",
 		CreatedBy: creatorUserID,
@@ -587,7 +587,7 @@ func flowUserJoinedTeam(teamID string) *model.Automation {
 
 func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": flowUserJoinedTeam(team1)}}
+	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": automationUserJoinedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 

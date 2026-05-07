@@ -19,6 +19,7 @@ type TriggerAPI interface {
 	GetChannelByName(teamID, name string, includeDeleted bool) (*mmmodel.Channel, *mmmodel.AppError)
 	GetUser(userID string) (*mmmodel.User, *mmmodel.AppError)
 	GetTeam(teamID string) (*mmmodel.Team, *mmmodel.AppError)
+	GetPostThread(postID string) (*mmmodel.PostList, *mmmodel.AppError)
 	LogWarn(msg string, keyValuePairs ...any)
 }
 

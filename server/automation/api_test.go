@@ -472,7 +472,7 @@ func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, mod
 	return router, store
 }
 
-// setupAPIWithLimit creates an API handler with a per-channel flow limit.
+// setupAPIWithLimit creates an API handler with a per-channel automation limit.
 func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 	t.Helper()
 
@@ -613,11 +613,11 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	// Allow existing flow's channel.
+	// Allow existing automation's channel.
 	api.On("GetChannelMember", "ch1", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	)
-	// Deny new flow's channel.
+	// Deny new automation's channel.
 	api.On("GetChannelMember", "ch-new", "user1").Return(
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
@@ -899,13 +899,13 @@ func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 
 	router, store := setupAPIWithCustomMock(t, api)
 
-	// A normal flow the user can see.
+	// A normal automation the user can see.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Name:    "Normal Flow",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
-	// A channel_created flow — should be hidden from non-team-admin.
+	// A channel_created automation — should be hidden from non-team-admin.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
 		Name:    "Team Flow",
@@ -969,7 +969,7 @@ func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
 func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// Save one flow on ch1 — fills the limit.
+	// Save one automation on ch1 — fills the limit.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -1019,7 +1019,7 @@ func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
 func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has one flow — at the limit.
+	// ch1 has one automation — at the limit.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:        "f1",
 		Name:      "Original",
@@ -1027,7 +1027,7 @@ func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
-	// Updating the same flow on the same channel should succeed (self-exclusion).
+	// Updating the same automation on the same channel should succeed (self-exclusion).
 	body := `{
 		"name": "Updated",
 		"enabled": true,
@@ -1046,7 +1046,7 @@ func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has a flow, ch2 has a flow.
+	// ch1 has an automation, ch2 has a flow.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:        "f1",
 		CreatedBy: "user1",
