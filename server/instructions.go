@@ -103,8 +103,9 @@ when granting them.
 Mutating tools that act on the user's behalf (create_post, dm, group_message) and the
 automation-management tools (list_automations, get_automation_instructions, create_automation,
 update_automation, delete_automation) are rejected from allowed_tools entirely — guardrails
-do not unlock them. Use a send_message or send_dm action instead of granting the posting
-tools; never include the automation-management tools.
+do not unlock them. Use a send_message action instead of granting create_post; there is no
+built-in action for posting DMs or group messages, so configure the trigger to fire in the
+target DM/GM channel and use send_message there. Never include the automation-management tools.
 
 External MCP tools (anything not in the lists above) are unaffected by channel guardrails and
 pass through unchanged. You may freely mix external tools with Mattermost tools in a single
@@ -118,9 +119,9 @@ summary item 3 to say "Not applicable — no guardrail-constrained Mattermost MC
 this automation."
 
 ACTION SELECTION: For each step in the automation, choose the right action type:
-- send_message / send_dm: for posting text to channels or users.
+- send_message: for posting text to channels.
 - ai_prompt with allowed_tools: for anything else — any step that needs to read data, modify state, or interact with Mattermost beyond posting text. Discover tools via the AI bridge GET .../agents/{id}/tools (or list_tools); each allowed_tools entry is the tool name string from discovery (e.g. "search_posts").
-If a step cannot be accomplished with send_message or send_dm, it MUST be an ai_prompt action with the appropriate tools.
+If a step cannot be accomplished with send_message, it MUST be an ai_prompt action with the appropriate tools.
 
 TOOL SUFFICIENCY CHECK (THIS IS VERY IMPORTANT): Before presenting the summary, think through the automation's task
 step-by-step and verify the granted tools cover every step the agent will need to perform.
@@ -147,7 +148,7 @@ Action types:
 1. "send_message": Posts a message as a bot.
    {"id": "post", "send_message": {"channel_id": "<ch>", "body": "Hello!", "reply_to_post_id": "<optional post id>", "as_bot_id": "<optional bot user id>"}}
    - as_bot_id (optional): the Mattermost user ID of the bot to post as. Must be a bot account. If omitted, the message is posted as the default automation bot. Use list_agents to find bot IDs. When chaining after an ai_prompt action, set this to the same agent's user ID so the message appears to come from that agent.
-2. "ai_prompt": Runs an AI agent with a prompt and optional tools. With tools, the agent can perform actions (e.g. modify channels, manage members, search) — not just generate text. Does NOT post a message — chain a send_message or send_dm action after to post the response.
+2. "ai_prompt": Runs an AI agent with a prompt and optional tools. With tools, the agent can perform actions (e.g. modify channels, manage members, search) — not just generate text. Does NOT post a message — chain a send_message action after to post the response.
    {"id": "ask", "ai_prompt": {"prompt": "...", "provider_type": "agent", "provider_id": "<agent-user-id>", "system_prompt": "...", "allowed_tools": ["<tool name from discovery>", "..."], "guardrails": {"channel_ids": ["<26-char channel id>", "..."]}, "request_as": "triggerer"}}
    - provider_type: "agent" (a bot) or "service" (a raw LLM service)
    - provider_id: the agent's Mattermost user ID (26-char ID). Call list_agents to discover available agents and their IDs.
@@ -179,14 +180,8 @@ Action types:
    TOOL SELECTION: Use bridge agent tools discovery or list_tools; copy each tool's name from the response.
    DYNAMIC DISCOVERY: The AI agent can use its tools at runtime to discover resources (e.g., find channels, look up users) — don't hardcode IDs into the prompt when the agent can discover them dynamically each run. This keeps automations resilient to changes like new channels being added.
    NOTE: "web_search" is NOT a valid tool name in allowed_tools. Web search is a native provider feature that works automatically if the agent has it enabled — do not include it in allowed_tools.
-3. "send_dm": Sends a direct message to a user as a bot. Creates the DM channel automatically if it doesn't exist.
-   {"id": "welcome", "send_dm": {"user_id": "{{.Trigger.User.Id}}", "body": "Welcome!", "as_bot_id": "<bot-user-id>"}}
-   - user_id (required): the Mattermost user ID to DM. Supports template syntax.
-   - body (required): the message content. Supports template syntax.
-   - as_bot_id (required): the bot user ID to send the DM as. Use list_agents to find bot IDs.
-
 TEMPLATE SYNTAX: body, channel_id, reply_to_post_id, prompt, and system_prompt support Go text/template with this context.
-For send_message channel_id, always use {{.Trigger.Channel.Id}}.
+For send_message channel_id, use one of: {{.Trigger.Channel.Id}}, {{.Trigger.Team.DefaultChannelId}}, or {{.Trigger.Post.ChannelId}}. Channel-bound triggers (message_posted, schedule, membership_changed) should use {{.Trigger.Channel.Id}}. Team-scoped triggers (channel_created, user_joined_team) have no bound channel — use {{.Trigger.Team.DefaultChannelId}} or an explicit channel ID literal instead.
 - {{.Trigger.Post.Message}}, {{.Trigger.Post.Id}}, {{.Trigger.Post.ChannelId}}
 - {{.Trigger.Channel.Id}}, {{.Trigger.Channel.Name}}, {{.Trigger.Channel.DisplayName}}
 - {{.Trigger.User.Id}}, {{.Trigger.User.Username}}, {{.Trigger.User.FirstName}}, {{.Trigger.User.LastName}}
