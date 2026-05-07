@@ -307,7 +307,7 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 		},
 	}
 	ctx := &model.AutomationContext{
-		AutomationID: "flow-99",
+		AutomationID: "automation-99",
 		CreatedBy:    "creator1",
 		Trigger:      model.TriggerData{},
 		Steps:        make(map[string]model.StepOutput),
@@ -320,11 +320,11 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	require.Len(t, bc.lastReq.ToolHooks, 2)
 
 	sp := bc.lastReq.ToolHooks["search_posts"]
-	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", sp.BeforeCallback)
+	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", sp.BeforeCallback)
 	assert.Empty(t, sp.AfterCallback)
 
 	auc := bc.lastReq.ToolHooks["add_user_to_channel"]
-	assert.Equal(t, "/api/v1/hooks/tools/flow-99/ai-step/before", auc.BeforeCallback)
+	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", auc.BeforeCallback)
 	assert.Empty(t, auc.AfterCallback)
 
 	_, hasExternal := bc.lastReq.ToolHooks["external_search"]
@@ -837,7 +837,7 @@ func TestAIPromptAction_Execute_UserIDFromTrigger(t *testing.T) {
 		name      string
 		createdBy string
 	}{
-		{name: "both set, trigger wins", createdBy: "flow-creator-id"},
+		{name: "both set, trigger wins", createdBy: "automation-creator-id"},
 		{name: "empty CreatedBy, trigger still wins", createdBy: ""},
 	}
 
@@ -900,14 +900,14 @@ func TestAIPromptAction_Execute_UserIDFallbackToCreatedBy(t *testing.T) {
 				},
 			}
 			ctx := &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   tc.trigger,
 				Steps:     make(map[string]model.StepOutput),
 			}
 
 			_, err := a.Execute(act, ctx)
 			require.NoError(t, err)
-			assert.Equal(t, "flow-creator-id", bc.lastReq.UserID)
+			assert.Equal(t, "automation-creator-id", bc.lastReq.UserID)
 		})
 	}
 }
@@ -923,27 +923,27 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 			name:      "creator forces automation creator over trigger user",
 			requestAs: "creator",
 			ctx: &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
 				Steps:     make(map[string]model.StepOutput),
 			},
-			want: "flow-creator-id",
+			want: "automation-creator-id",
 		},
 		{
 			name:      "creator with no trigger user still uses creator",
 			requestAs: "creator",
 			ctx: &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
 				Steps:     make(map[string]model.StepOutput),
 			},
-			want: "flow-creator-id",
+			want: "automation-creator-id",
 		},
 		{
 			name:      "triggerer prefers trigger user",
 			requestAs: "triggerer",
 			ctx: &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
 				Steps:     make(map[string]model.StepOutput),
 			},
@@ -953,17 +953,17 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 			name:      "triggerer falls back to creator when no trigger user",
 			requestAs: "triggerer",
 			ctx: &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
 				Steps:     make(map[string]model.StepOutput),
 			},
-			want: "flow-creator-id",
+			want: "automation-creator-id",
 		},
 		{
 			name:      "empty defaults to triggerer behavior",
 			requestAs: "",
 			ctx: &model.AutomationContext{
-				CreatedBy: "flow-creator-id",
+				CreatedBy: "automation-creator-id",
 				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
 				Steps:     make(map[string]model.StepOutput),
 			},

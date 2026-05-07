@@ -74,7 +74,7 @@ func makeItem(id, automationID, automationName string) *model.WorkItem {
 func TestStore_EnqueueAndClaimNext(t *testing.T) {
 	store, _ := setupStore(t)
 
-	item := makeItem("w1", "f1", "Flow 1")
+	item := makeItem("w1", "f1", "Automation 1")
 	require.NoError(t, store.Enqueue(item))
 
 	claimed, err := store.ClaimNext()
@@ -82,7 +82,7 @@ func TestStore_EnqueueAndClaimNext(t *testing.T) {
 	require.NotNil(t, claimed)
 	assert.Equal(t, "w1", claimed.ID)
 	assert.Equal(t, "f1", claimed.AutomationID)
-	assert.Equal(t, "Flow 1", claimed.AutomationName)
+	assert.Equal(t, "Automation 1", claimed.AutomationName)
 	assert.Equal(t, model.WorkItemStatusRunning, claimed.Status)
 	assert.NotZero(t, claimed.CreatedAt)
 	assert.NotZero(t, claimed.StartedAt)
@@ -99,9 +99,9 @@ func TestStore_ClaimNextEmptyQueue(t *testing.T) {
 func TestStore_ClaimNextOrdering(t *testing.T) {
 	store, _ := setupStore(t)
 
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
-	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Flow 2")))
-	require.NoError(t, store.Enqueue(makeItem("w3", "f3", "Flow 3")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
+	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Automation 2")))
+	require.NoError(t, store.Enqueue(makeItem("w3", "f3", "Automation 3")))
 
 	claimed, err := store.ClaimNext()
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestStore_ClaimNextOrdering(t *testing.T) {
 func TestStore_Complete(t *testing.T) {
 	store, kv := setupStore(t)
 
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
 
 	claimed, err := store.ClaimNext()
 	require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestStore_Complete(t *testing.T) {
 func TestStore_Fail(t *testing.T) {
 	store, kv := setupStore(t)
 
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
 
 	claimed, err := store.ClaimNext()
 	require.NoError(t, err)
@@ -172,8 +172,8 @@ func TestStore_Fail(t *testing.T) {
 func TestStore_ResetRunningToPending(t *testing.T) {
 	store, _ := setupStore(t)
 
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
-	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Flow 2")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
+	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Automation 2")))
 
 	// Claim both items (move to running).
 	_, err := store.ClaimNext()
@@ -207,8 +207,8 @@ func TestStore_StaleIndexEntry(t *testing.T) {
 	store, kv := setupStore(t)
 
 	// Enqueue two items.
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
-	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Flow 2")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
+	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Automation 2")))
 
 	// Simulate stale index by deleting w1's data directly from KV.
 	kv.mu.Lock()
@@ -225,8 +225,8 @@ func TestStore_StaleIndexEntry(t *testing.T) {
 func TestStore_ResetRunningToPending_StaleEntry(t *testing.T) {
 	store, kv := setupStore(t)
 
-	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Flow 1")))
-	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Flow 2")))
+	require.NoError(t, store.Enqueue(makeItem("w1", "f1", "Automation 1")))
+	require.NoError(t, store.Enqueue(makeItem("w2", "f2", "Automation 2")))
 
 	_, err := store.ClaimNext()
 	require.NoError(t, err)

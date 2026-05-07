@@ -494,7 +494,7 @@ func TestCanEditAutomation_MissingCreatedByDenied(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
-func TestCanEditAutomation_NilFlowDenied(t *testing.T) {
+func TestCanEditAutomation_NilAutomationDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 

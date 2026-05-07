@@ -114,7 +114,7 @@ func postBeforeAs(t *testing.T, r *mux.Router, automationID, actionID, callerUse
 
 func guardrailAutomation() *model.Automation {
 	return &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			MessagePosted: &model.MessagePostedConfig{ChannelID: chAllow},
@@ -134,11 +134,11 @@ func guardrailAutomation() *model.Automation {
 }
 
 func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hello"}),
 		UserID:   "user1",
@@ -150,11 +150,11 @@ func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_SearchPostsChannelNotAllowed(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hello", "channel_id": chDeny}),
 		UserID:   "user1",
@@ -167,11 +167,11 @@ func TestHooks_Before_SearchPostsChannelNotAllowed(t *testing.T) {
 }
 
 func TestHooks_Before_SearchPostsOK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hello", "channel_id": chAllow}),
 		UserID:   "user1",
@@ -181,11 +181,11 @@ func TestHooks_Before_SearchPostsOK(t *testing.T) {
 }
 
 func TestHooks_Before_ReadChannelOK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_channel",
 		Args:     argsJSON(t, map[string]any{"channel_id": chAllow}),
 		UserID:   "user1",
@@ -195,11 +195,11 @@ func TestHooks_Before_ReadChannelOK(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_members",
 		Args:     argsJSON(t, map[string]any{"channel_id": chDeny}),
 		UserID:   "user1",
@@ -209,11 +209,11 @@ func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
 		Args:     argsJSON(t, map[string]any{"user_id": "user1"}),
 		UserID:   "user1",
@@ -224,11 +224,11 @@ func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
 		Args:     argsJSON(t, map[string]any{"channel_id": chDeny, "user_id": "user1"}),
 		UserID:   "user1",
@@ -239,11 +239,11 @@ func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "add_user_to_channel",
 		Args:     argsJSON(t, map[string]any{"channel_id": chAllow, "user_id": "user1"}),
 		UserID:   "user1",
@@ -253,11 +253,11 @@ func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
 		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O"}),
 		UserID:   "user1",
@@ -268,12 +268,12 @@ func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
 	wrongTeam := mmmodel.NewId()
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
 		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": wrongTeam}),
 		UserID:   "user1",
@@ -285,11 +285,11 @@ func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_OK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "create_channel",
 		Args:     argsJSON(t, map[string]any{"name": "x", "display_name": "X", "type": "O", "team_id": teamAutomation}),
 		UserID:   "user1",
@@ -299,11 +299,11 @@ func TestHooks_Before_CreateChannel_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_RequiresChannelID(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_info",
 		Args:     argsJSON(t, map[string]any{"channel_name": "town-square", "team_id": "team1"}),
 		UserID:   "user1",
@@ -314,11 +314,11 @@ func TestHooks_Before_GetChannelInfo_RequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_RejectsForeignChannel(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_info",
 		Args:     argsJSON(t, map[string]any{"channel_id": chDeny}),
 		UserID:   "user1",
@@ -329,11 +329,11 @@ func TestHooks_Before_GetChannelInfo_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_OK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_channel_info",
 		Args:     argsJSON(t, map[string]any{"channel_id": chAllow}),
 		UserID:   "user1",
@@ -343,11 +343,11 @@ func TestHooks_Before_GetChannelInfo_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetUserChannels_RejectedWhenGuardrailsActive(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_user_channels",
 		Args:     argsJSON(t, map[string]any{}),
 		UserID:   "user1",
@@ -357,11 +357,11 @@ func TestHooks_Before_GetUserChannels_RejectedWhenGuardrailsActive(t *testing.T)
 }
 
 func TestHooks_Before_ReadPost_RequiresPostID(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_post",
 		Args:     argsJSON(t, map[string]any{}),
 		UserID:   "user1",
@@ -372,13 +372,13 @@ func TestHooks_Before_ReadPost_RequiresPostID(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_RejectsForeignChannel(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return(&mmmodel.Post{Id: pid, ChannelId: chDeny}, (*mmmodel.AppError)(nil))
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_post",
 		Args:     argsJSON(t, map[string]any{"post_id": pid}),
 		UserID:   "user1",
@@ -389,13 +389,13 @@ func TestHooks_Before_ReadPost_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_OK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return(&mmmodel.Post{Id: pid, ChannelId: chAllow}, (*mmmodel.AppError)(nil))
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_post",
 		Args:     argsJSON(t, map[string]any{"post_id": pid}),
 		UserID:   "user1",
@@ -405,13 +405,13 @@ func TestHooks_Before_ReadPost_OK(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_GetPostError(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return((*mmmodel.Post)(nil), &mmmodel.AppError{Message: "not found"})
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "read_post",
 		Args:     argsJSON(t, map[string]any{"post_id": pid}),
 		UserID:   "user1",
@@ -421,11 +421,11 @@ func TestHooks_Before_ReadPost_GetPostError(t *testing.T) {
 }
 
 func TestHooks_Before_MattermostToolNotSupportedByGuardrails(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_users",
 		Args:     argsJSON(t, map[string]any{"term": "x"}),
 		UserID:   "user1",
@@ -436,11 +436,11 @@ func TestHooks_Before_MattermostToolNotSupportedByGuardrails(t *testing.T) {
 }
 
 func TestHooks_Before_UnrecognizedToolRejected(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "some_external_or_typo_tool",
 		Args:     argsJSON(t, map[string]any{}),
 		UserID:   "user1",
@@ -455,7 +455,7 @@ func TestHooks_GuardrailsNotFound_MissingAutomation(t *testing.T) {
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
@@ -466,11 +466,11 @@ func TestHooks_GuardrailsNotFound_MissingAutomation(t *testing.T) {
 }
 
 func TestHooks_GuardrailsNotFound_WrongAction(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "other", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "other", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
@@ -481,7 +481,7 @@ func TestHooks_GuardrailsNotFound_WrongAction(t *testing.T) {
 
 func TestHooks_GuardrailsNotFound_NilGuardrailsOnAction(t *testing.T) {
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Actions: []model.Action{
 			{ID: "ai1", AIPrompt: &model.AIPromptActionConfig{
@@ -489,11 +489,11 @@ func TestHooks_GuardrailsNotFound_NilGuardrailsOnAction(t *testing.T) {
 			}},
 		},
 	}
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "x", "channel_id": chAllow}),
 		UserID:   "user1",
@@ -512,7 +512,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 		channels = append(channels, model.GuardrailChannel{ChannelID: id, TeamID: teamAutomation})
 	}
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			MessagePosted: &model.MessagePostedConfig{ChannelID: ids[0]},
@@ -527,12 +527,12 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 			},
 		},
 	}
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
 	api := &plugintest.API{}
 	api.On("GetChannel", ids[0]).Return(&mmmodel.Channel{Id: ids[0], TeamId: teamAutomation}, (*mmmodel.AppError)(nil))
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chDeny}),
 		UserID:   "user1",
@@ -544,7 +544,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 
 func automationChannelCreatedTeam(teamID string) *model.Automation {
 	return &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			ChannelCreated: &model.ChannelCreatedConfig{TeamID: teamID},
@@ -568,7 +568,7 @@ func automationChannelCreatedTeam(teamID string) *model.Automation {
 // user_joined_team trigger.
 func automationUserJoinedTeam(teamID string) *model.Automation {
 	return &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
 			UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: teamID},
@@ -589,11 +589,11 @@ func automationUserJoinedTeam(teamID string) *model.Automation {
 
 func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationUserJoinedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationUserJoinedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
 		Args:     argsJSON(t, map[string]any{"team_id": team1}),
 		UserID:   "user1",
@@ -604,11 +604,11 @@ func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
 		Args:     argsJSON(t, map[string]any{"team_id": team1}),
 		UserID:   "user1",
@@ -620,11 +620,11 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 	team1 := mmmodel.NewId()
 	team2 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
 		Args:     argsJSON(t, map[string]any{"team_id": team2}),
 		UserID:   "user1",
@@ -637,11 +637,11 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_info",
 		Args:     argsJSON(t, map[string]any{"team_name": "Engineering"}),
 		UserID:   "user1",
@@ -661,11 +661,11 @@ func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 		{ChannelID: chOther, TeamID: teamOther},
 	}}
 	f.Actions[0].AIPrompt.AllowedTools = []string{"get_team_members"}
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
 		Args:     argsJSON(t, map[string]any{"team_id": teamOther}),
 		UserID:   "user1",
@@ -675,11 +675,11 @@ func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamMembers_MessagePosted_OK(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
 		Args:     argsJSON(t, map[string]any{"team_id": teamAutomation}),
 		UserID:   "user1",
@@ -689,12 +689,12 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
 	wrongTeam := mmmodel.NewId()
-	code, resp := postBefore(t, r, "flow1", "ai1", mcptool.BeforeHookRequest{
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
 		ToolName: "get_team_members",
 		Args:     argsJSON(t, map[string]any{"team_id": wrongTeam}),
 		UserID:   "user1",
@@ -704,11 +704,11 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
 }
 
 func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBeforeAs(t, r, "flow1", "ai1", "someone-else", mcptool.BeforeHookRequest{
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", "someone-else", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
@@ -718,11 +718,11 @@ func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
 }
 
 func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, resp := postBeforeAs(t, r, "flow1", "ai1", "", mcptool.BeforeHookRequest{
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", "", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
@@ -734,11 +734,11 @@ func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
 func TestHooks_RejectsAutomationMissingCreator(t *testing.T) {
 	f := guardrailAutomation()
 	f.CreatedBy = ""
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
-	code, _ := postBeforeAs(t, r, "flow1", "ai1", creatorUserID, mcptool.BeforeHookRequest{
+	code, _ := postBeforeAs(t, r, "auto1", "ai1", creatorUserID, mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,

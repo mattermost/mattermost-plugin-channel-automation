@@ -67,8 +67,8 @@ func TestStore_SaveAndGet(t *testing.T) {
 	store, _ := setupStore(t)
 
 	f := &model.Automation{
-		ID:      "flow1",
-		Name:    "Test Flow",
+		ID:      "auto1",
+		Name:    "Test Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{
@@ -78,11 +78,11 @@ func TestStore_SaveAndGet(t *testing.T) {
 
 	require.NoError(t, store.Save(f))
 
-	got, err := store.Get("flow1")
+	got, err := store.Get("auto1")
 	require.NoError(t, err)
 	require.NotNil(t, got)
-	assert.Equal(t, "flow1", got.ID)
-	assert.Equal(t, "Test Flow", got.Name)
+	assert.Equal(t, "auto1", got.ID)
+	assert.Equal(t, "Test Automation", got.Name)
 	assert.True(t, got.Enabled)
 	assert.Equal(t, model.TriggerTypeMessagePosted, got.Trigger.Type())
 	require.NotNil(t, got.Trigger.MessagePosted)
@@ -107,8 +107,8 @@ func TestStore_List(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, automations)
 
-	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
-	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Automation 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Automation 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	automations, err = store.List()
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestStore_List(t *testing.T) {
 func TestStore_Delete(t *testing.T) {
 	store, _ := setupStore(t)
 
-	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Automation 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	got, err := store.Get("f1")
 	require.NoError(t, err)

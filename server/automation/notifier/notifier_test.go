@@ -29,8 +29,8 @@ func (f *fakeCooldownStore) Release(automationID string) error {
 
 func sampleDetails() FailureDetails {
 	return FailureDetails{
-		AutomationID:   "flow1",
-		AutomationName: "My Flow",
+		AutomationID:   "auto1",
+		AutomationName: "My Automation",
 		CreatedBy:      "creator1",
 		ActionID:       "ai_step",
 		ActionType:     "ai_prompt",
@@ -42,12 +42,12 @@ func sampleDetails() FailureDetails {
 func TestNotifyFailure_SendsDMOnFirstClaim(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(true, nil)
+	cooldown.On("Claim", "auto1").Return(true, nil)
 	api.On("GetDirectChannel", "creator1", "bot1").Return(&mmmodel.Channel{Id: "dm1"}, nil)
 	api.On("CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
 		return p.UserId == "bot1" &&
 			p.ChannelId == "dm1" &&
-			strings.Contains(p.Message, "My Flow") &&
+			strings.Contains(p.Message, "My Automation") &&
 			strings.Contains(p.Message, "ai_step") &&
 			strings.Contains(p.Message, "ai_prompt") &&
 			strings.Contains(p.Message, "AI completion failed: tool not allowed") &&
@@ -65,7 +65,7 @@ func TestNotifyFailure_SendsDMOnFirstClaim(t *testing.T) {
 func TestNotifyFailure_SkipsWhenCooldownActive(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(false, nil)
+	cooldown.On("Claim", "auto1").Return(false, nil)
 
 	n := NewCreatorNotifier(api, cooldown, "bot1")
 	n.NotifyFailure(sampleDetails())
@@ -79,7 +79,7 @@ func TestNotifyFailure_SkipsWhenCooldownActive(t *testing.T) {
 func TestNotifyFailure_SkipsOnClaimError(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(false, errors.New("kv boom"))
+	cooldown.On("Claim", "auto1").Return(false, errors.New("kv boom"))
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 	n := NewCreatorNotifier(api, cooldown, "bot1")
@@ -109,8 +109,8 @@ func TestNotifyFailure_NoOpOnMissingFields(t *testing.T) {
 func TestNotifyFailure_ReleasesCooldownOnDMOpenFailure(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(true, nil)
-	cooldown.On("Release", "flow1").Return(nil)
+	cooldown.On("Claim", "auto1").Return(true, nil)
+	cooldown.On("Release", "auto1").Return(nil)
 	api.On("GetDirectChannel", "creator1", "bot1").
 		Return((*mmmodel.Channel)(nil), mmmodel.NewAppError("GetDirectChannel", "dm.fail", nil, "boom", 500))
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
@@ -126,8 +126,8 @@ func TestNotifyFailure_ReleasesCooldownOnDMOpenFailure(t *testing.T) {
 func TestNotifyFailure_ReleasesCooldownOnCreatePostFailure(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(true, nil)
-	cooldown.On("Release", "flow1").Return(nil)
+	cooldown.On("Claim", "auto1").Return(true, nil)
+	cooldown.On("Release", "auto1").Return(nil)
 	api.On("GetDirectChannel", "creator1", "bot1").Return(&mmmodel.Channel{Id: "dm1"}, nil)
 	api.On("CreatePost", mock.Anything).
 		Return((*mmmodel.Post)(nil), mmmodel.NewAppError("CreatePost", "post.fail", nil, "boom", 500))
@@ -143,8 +143,8 @@ func TestNotifyFailure_ReleasesCooldownOnCreatePostFailure(t *testing.T) {
 func TestNotifyFailure_LogsWhenReleaseFails(t *testing.T) {
 	api := &plugintest.API{}
 	cooldown := &fakeCooldownStore{}
-	cooldown.On("Claim", "flow1").Return(true, nil)
-	cooldown.On("Release", "flow1").Return(errors.New("kv del boom"))
+	cooldown.On("Claim", "auto1").Return(true, nil)
+	cooldown.On("Release", "auto1").Return(errors.New("kv del boom"))
 	api.On("GetDirectChannel", "creator1", "bot1").
 		Return((*mmmodel.Channel)(nil), mmmodel.NewAppError("GetDirectChannel", "dm.fail", nil, "boom", 500))
 	// Two LogError calls: one for the DM-open failure, one for the release failure.

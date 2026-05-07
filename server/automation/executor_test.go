@@ -50,7 +50,7 @@ func TestAutomationExecutor_SingleAction(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
@@ -66,7 +66,7 @@ func TestAutomationExecutor_SingleAction(t *testing.T) {
 	ctx, err := executor.Execute(f, triggerData)
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
-	assert.Equal(t, "flow1", ctx.AutomationID)
+	assert.Equal(t, "auto1", ctx.AutomationID)
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
 
@@ -90,7 +90,7 @@ func TestAutomationExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
@@ -119,7 +119,7 @@ func TestAutomationExecutor_FirstFailureStops(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
@@ -166,7 +166,7 @@ func TestAutomationExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Chained AI Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
@@ -214,7 +214,7 @@ func TestAutomationExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{
@@ -238,7 +238,7 @@ func TestAutomationExecutor_UnknownActionType(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:   "flow1",
+		ID:   "auto1",
 		Name: "Test",
 		Actions: []model.Action{
 			{ID: "act1"},
@@ -263,7 +263,7 @@ func TestAutomationExecutor_PermissionDenied(t *testing.T) {
 	executor := NewAutomationExecutor(registry)
 
 	f := &model.Automation{
-		ID:        "flow1",
+		ID:        "auto1",
 		Name:      "Test",
 		CreatedBy: "creator1",
 		Actions: []model.Action{

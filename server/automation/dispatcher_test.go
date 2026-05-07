@@ -104,13 +104,13 @@ func TestDispatcher_EnqueuesOnePerMatchingAutomation(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
-		Name:    "Flow 2",
+		Name:    "Automation 2",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -151,7 +151,7 @@ func TestDispatcher_BuildTriggerDataErrorAborts(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -176,7 +176,7 @@ func TestDispatcher_EnqueueFailureSkipsItemButNotifies(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))

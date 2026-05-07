@@ -76,7 +76,7 @@ func makeRecord(id, automationID string) *model.ExecutionRecord {
 	return &model.ExecutionRecord{
 		ID:             id,
 		AutomationID:   automationID,
-		AutomationName: "Test Flow",
+		AutomationName: "Test Automation",
 		Status:         "success",
 		Steps: map[string]model.StepOutput{
 			"step1": {Message: "done"},
@@ -98,7 +98,7 @@ func TestExecutionStore_SaveAndGet(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, "x1", got.ID)
 	assert.Equal(t, "f1", got.AutomationID)
-	assert.Equal(t, "Test Flow", got.AutomationName)
+	assert.Equal(t, "Test Automation", got.AutomationName)
 	assert.Equal(t, "success", got.Status)
 	assert.Equal(t, "done", got.Steps["step1"].Message)
 }

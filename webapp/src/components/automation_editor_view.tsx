@@ -316,7 +316,7 @@ const AutomationEditorView: React.FC = () => {
     const history = useHistory();
     const {url} = useRouteMatch();
 
-    // Derive the workflows list URL by stripping the current route suffix
+    // Derive the automations list URL by stripping the current route suffix
     const automationsUrl = url.replace(/\/automations\/.*$/, '/automations');
 
     const [name, setName] = useState('');

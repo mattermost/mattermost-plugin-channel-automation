@@ -265,15 +265,15 @@ func TestScheduleManager_FireSchedule(t *testing.T) {
 
 	sm := NewScheduleManager(api, store, enq, notif)
 
-	sm.fireSchedule("flow1", "Test Flow", "1h", "ch1")
+	sm.fireSchedule("auto1", "Test Automation", "1h", "ch1")
 
 	enq.mu.Lock()
 	require.Len(t, enq.items, 1)
 	item := enq.items[0]
 	enq.mu.Unlock()
 
-	assert.Equal(t, "flow1", item.AutomationID)
-	assert.Equal(t, "Test Flow", item.AutomationName)
+	assert.Equal(t, "auto1", item.AutomationID)
+	assert.Equal(t, "Test Automation", item.AutomationName)
 	require.NotNil(t, item.TriggerData.Schedule)
 	assert.Equal(t, "1h", item.TriggerData.Schedule.Interval)
 	assert.NotZero(t, item.TriggerData.Schedule.FiredAt)

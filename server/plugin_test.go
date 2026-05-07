@@ -490,7 +490,7 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 	// Save an automation triggered by messages in ch1.
 	f := &model.Automation{
 		ID:      "f1",
-		Name:    "Test Flow",
+		Name:    "Test Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
@@ -512,7 +512,7 @@ func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 
 	f := &model.Automation{
 		ID:      "f1",
-		Name:    "Test Flow",
+		Name:    "Test Automation",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
@@ -533,7 +533,7 @@ func TestHandleMembershipChange_ProcessesNormalUser(t *testing.T) {
 
 	f := &model.Automation{
 		ID:      "f1",
-		Name:    "Test Flow",
+		Name:    "Test Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MembershipChanged: &model.MembershipChangedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
@@ -579,7 +579,7 @@ func TestUserHasJoinedTeam_ProcessesNormalUser(t *testing.T) {
 
 	f := &model.Automation{
 		ID:      "f1",
-		Name:    "Team Join Flow",
+		Name:    "Team Join Automation",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "welcome"}}},
@@ -666,7 +666,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 
 	f := &model.Automation{
 		ID:      "f1",
-		Name:    "Team Join Flow",
+		Name:    "Team Join Automation",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "{{.Trigger.Team.DefaultChannelId}}", Body: "welcome"}}},

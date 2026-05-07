@@ -62,7 +62,7 @@ func TestTriggerService_FindMatchingAutomations_ReturnsHandler(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow",
+		Name:    "Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -79,7 +79,7 @@ func TestTriggerService_FindMatchingAutomations_ReturnsEnabledAutomations(t *tes
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Enabled Flow",
+		Name:    "Enabled Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
@@ -148,13 +148,13 @@ func TestTriggerService_FindMatchingAutomations_DifferentChannels(t *testing.T) 
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Channel 1 Flow",
+		Name:    "Channel 1 Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
-		Name:    "Channel 2 Flow",
+		Name:    "Channel 2 Automation",
 		Enabled: true,
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
 	}))
@@ -308,13 +308,13 @@ func TestTriggerService_FindMatchingAutomations_ChannelCreated_MultipleAutomatio
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
-		Name:    "Flow 2",
+		Name:    "Automation 2",
 		Enabled: true,
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
@@ -395,13 +395,13 @@ func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_MultipleAutomatio
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
-		Name:    "Flow 2",
+		Name:    "Automation 2",
 		Enabled: true,
 		Trigger: model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 	}))

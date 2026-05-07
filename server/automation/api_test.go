@@ -69,7 +69,7 @@ func TestAPI_CreateAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -86,7 +86,7 @@ func TestAPI_CreateAutomation(t *testing.T) {
 	var created model.Automation
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&created))
 	assert.NotEmpty(t, created.ID)
-	assert.Equal(t, "Test Flow", created.Name)
+	assert.Equal(t, "Test Automation", created.Name)
 	assert.True(t, created.Enabled)
 	assert.Equal(t, "user1", created.CreatedBy)
 	assert.NotZero(t, created.CreatedAt)
@@ -118,7 +118,7 @@ func TestAPI_CreateAutomation_InvalidActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "BAD ID", "send_message": {"channel_id": "ch2", "body": "hello"}}]
@@ -137,7 +137,7 @@ func TestAPI_CreateAutomation_MissingActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"send_message": {"channel_id": "ch2", "body": "hello"}}]
@@ -156,7 +156,7 @@ func TestAPI_CreateAutomation_DuplicateActionIDs(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [
@@ -179,7 +179,7 @@ func TestAPI_GetAutomation(t *testing.T) {
 
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Flow 1",
+		Name:    "Automation 1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 
@@ -194,7 +194,7 @@ func TestAPI_GetAutomation(t *testing.T) {
 	var got model.Automation
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&got))
 	assert.Equal(t, "f1", got.ID)
-	assert.Equal(t, "Flow 1", got.Name)
+	assert.Equal(t, "Automation 1", got.Name)
 }
 
 func TestAPI_GetAutomation_NotFound(t *testing.T) {
@@ -211,8 +211,8 @@ func TestAPI_GetAutomation_NotFound(t *testing.T) {
 func TestAPI_ListAutomations(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
-	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Automation 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Automation 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/automations", nil)
@@ -312,7 +312,7 @@ func TestAPI_CreateAutomation_ScheduleTrigger_MissingInterval(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Schedule Flow",
+		"name": "Schedule Automation",
 		"enabled": true,
 		"trigger": {"schedule": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
@@ -331,7 +331,7 @@ func TestAPI_CreateAutomation_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Schedule Flow",
+		"name": "Schedule Automation",
 		"enabled": true,
 		"trigger": {"schedule": {"channel_id": "ch1", "interval": "30m"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch2", "body": "hello"}}]
@@ -539,7 +539,7 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -568,7 +568,7 @@ func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -594,7 +594,7 @@ func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -690,7 +690,7 @@ func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Admin Flow",
+		"name": "Admin Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -753,7 +753,7 @@ func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "reply-echo", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "echo"}}]
@@ -780,7 +780,7 @@ func TestAPI_CreateAutomation_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Flow",
+		"name": "Team Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
@@ -828,7 +828,7 @@ func TestAPI_CreateAutomation_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Flow",
+		"name": "Team Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
@@ -852,7 +852,7 @@ func TestAPI_CreateAutomation_ChannelCreated_TeamAdminAllowed(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Flow",
+		"name": "Team Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
@@ -872,7 +872,7 @@ func TestAPI_CreateAutomation_ChannelCreated_LiteralChannelRejected(t *testing.T
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Team Flow",
+		"name": "Team Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "ch-other", "body": "hello"}}]
@@ -902,13 +902,13 @@ func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T)
 	// A normal automation the user can see.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
-		Name:    "Normal Flow",
+		Name:    "Normal Automation",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}))
 	// A channel_created automation — should be hidden from non-team-admin.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f2",
-		Name:    "Team Flow",
+		Name:    "Team Automation",
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}))
 
@@ -929,9 +929,9 @@ func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T)
 func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
-	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Flow 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
-	require.NoError(t, store.Save(&model.Automation{ID: "f3", Name: "Flow 3", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Automation 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f2", Name: "Automation 2", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f3", Name: "Automation 3", Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1", Interval: "1h"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/automations?channel_id=ch1", nil)
@@ -951,7 +951,7 @@ func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
 func TestAPI_ListAutomations_FilterByChannel_NoMatch(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
-	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
+	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Automation 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/automations?channel_id=ch-nonexistent", nil)
@@ -976,7 +976,7 @@ func TestAPI_CreateAutomation_ChannelLimitReached(t *testing.T) {
 	}))
 
 	body := `{
-		"name": "Second Flow",
+		"name": "Second Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -1002,7 +1002,7 @@ func TestAPI_CreateAutomation_DifferentChannelSucceeds(t *testing.T) {
 
 	// Creating on ch2 should succeed.
 	body := `{
-		"name": "Other Channel Flow",
+		"name": "Other Channel Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch2"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch2", "body": "hello"}}]
@@ -1089,7 +1089,7 @@ func TestAPI_CreateAutomation_UnlimitedAllowsAny(t *testing.T) {
 	}))
 
 	body := `{
-		"name": "Third Flow",
+		"name": "Third Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -1116,7 +1116,7 @@ func TestAPI_CreateAutomation_ChannelCreatedBypassesLimit(t *testing.T) {
 
 	// channel_created automations have no trigger channel, so they bypass the limit.
 	body := `{
-		"name": "Team Flow",
+		"name": "Team Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "announce", "send_message": {"channel_id": "{{.Trigger.Channel.Id}}", "body": "hello"}}]
@@ -1226,7 +1226,7 @@ func TestAPI_CreateAutomation_EmptyActions(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}},
 		"actions": []
@@ -1245,7 +1245,7 @@ func TestAPI_CreateAutomation_MultipleTriggerTypes(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
-		"name": "Test Flow",
+		"name": "Test Automation",
 		"enabled": true,
 		"trigger": {"message_posted": {"channel_id": "ch1"}, "schedule": {"channel_id": "ch1", "interval": "2h"}},
 		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hello"}}]
@@ -1270,7 +1270,7 @@ func TestAPI_CreateAutomation_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Join Flow",
+		"name": "Team Join Automation",
 		"enabled": true,
 		"trigger": {"user_joined_team": {"team_id": "team1"}},
 		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
@@ -1294,7 +1294,7 @@ func TestAPI_CreateAutomation_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Join Flow",
+		"name": "Team Join Automation",
 		"enabled": true,
 		"trigger": {"user_joined_team": {"team_id": "team1"}},
 		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
@@ -1320,7 +1320,7 @@ func TestAPI_CreateAutomation_UserJoinedTeam_GetTeam500(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api)
 
 	body := `{
-		"name": "Team Join Flow",
+		"name": "Team Join Automation",
 		"enabled": true,
 		"trigger": {"user_joined_team": {"team_id": "team1"}},
 		"actions": [{"id": "greet", "send_message": {"channel_id": "{{.Trigger.Team.DefaultChannelId}}", "body": "welcome"}}]
@@ -1347,7 +1347,7 @@ func adminAPIWithBridge(t *testing.T, userID string, bridge *stubAgentToolsListe
 }
 
 const aiAgentAutomationBody = `{
-	"name": "AI Flow",
+	"name": "AI Automation",
 	"enabled": true,
 	"trigger": {"channel_created": {"team_id": "team1"}},
 	"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "agent", "provider_id": "bot1"}}]
@@ -1412,7 +1412,7 @@ func TestAPI_CreateAutomation_AIPromptService_SkipsBridge(t *testing.T) {
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
 	body := `{
-		"name": "Service Flow",
+		"name": "Service Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "service", "provider_id": "openai"}}]
@@ -1442,7 +1442,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.
 	api.On("HasPermissionToChannel", "admin1", guardrailChannelID, mmmodel.PermissionReadChannel).Return(true)
 
 	body := fmt.Sprintf(`{
-		"name": "AI Flow",
+		"name": "AI Automation",
 		"enabled": true,
 		"trigger": {"channel_created": {"team_id": "team1"}},
 		"actions": [

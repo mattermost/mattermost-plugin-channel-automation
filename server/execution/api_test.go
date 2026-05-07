@@ -17,29 +17,31 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// mockFlowStore implements model.Store for testing.
-type mockFlowStore struct {
+// mockAutomationStore implements model.Store for testing.
+type mockAutomationStore struct {
 	automations map[string]*model.Automation
 }
 
-func (m *mockFlowStore) Get(id string) (*model.Automation, error) { return m.automations[id], nil }
-func (m *mockFlowStore) List() ([]*model.Automation, error)       { return nil, nil }
-func (m *mockFlowStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
+func (m *mockAutomationStore) Get(id string) (*model.Automation, error) {
+	return m.automations[id], nil
+}
+func (m *mockAutomationStore) List() ([]*model.Automation, error) { return nil, nil }
+func (m *mockAutomationStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
 	return nil, nil
 }
-func (m *mockFlowStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
-func (m *mockFlowStore) Save(_ *model.Automation) error              { return nil }
-func (m *mockFlowStore) Delete(_ string) error                       { return nil }
-func (m *mockFlowStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
-func (m *mockFlowStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
+func (m *mockAutomationStore) Save(_ *model.Automation) error              { return nil }
+func (m *mockAutomationStore) Delete(_ string) error                       { return nil }
+func (m *mockAutomationStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
+func (m *mockAutomationStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockFlowStore) GetChannelCreatedAutomationIDs() ([]string, error) { return nil, nil }
-func (m *mockFlowStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetChannelCreatedAutomationIDs() ([]string, error) { return nil, nil }
+func (m *mockAutomationStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
 	return nil, nil
 }
 
@@ -59,11 +61,11 @@ func expectLogCalls(api *plugintest.API) {
 	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 }
 
-func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugintest.API) {
+func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockAutomationStore, *plugintest.API) {
 	t.Helper()
 
 	execStore, _ := setupStore(t)
-	automationStore := &mockFlowStore{automations: make(map[string]*model.Automation)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
 	api := &plugintest.API{}
 	expectLogCalls(api)
@@ -79,11 +81,11 @@ func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugin
 	return router, execStore, automationStore, api
 }
 
-func setupAPIHandlerWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, *Store, *mockFlowStore) {
+func setupAPIHandlerWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, *Store, *mockAutomationStore) {
 	t.Helper()
 
 	execStore, _ := setupStore(t)
-	automationStore := &mockFlowStore{automations: make(map[string]*model.Automation)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
 	handler := NewAPIHandler(execStore, automationStore, api)
 	router := mux.NewRouter()
@@ -372,7 +374,7 @@ func TestExecutionAPI_ListRecent_Success(t *testing.T) {
 	expectLogCalls(kvAPI)
 
 	execStore := NewStore(kvAPI, &sync.Mutex{})
-	automationStore := &mockFlowStore{automations: make(map[string]*model.Automation)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
 	require.NoError(t, execStore.Save(makeRecord("x1", "f1")))
 	require.NoError(t, execStore.Save(makeRecord("x2", "f2")))

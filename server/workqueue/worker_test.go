@@ -67,7 +67,7 @@ type testAutomationStore struct {
 	automations map[string]*model.Automation
 }
 
-func newTestFlowStore() *testAutomationStore {
+func newTestAutomationStore() *testAutomationStore {
 	return &testAutomationStore{automations: make(map[string]*model.Automation)}
 }
 
@@ -146,7 +146,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
 
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, maxWorkers)
 	wp.pollInterval = 50 * time.Millisecond // speed up tests
@@ -158,13 +158,13 @@ func TestWorkerPool_ProcessesItems(t *testing.T) {
 	act := &testAction{}
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 3 {
 		item := &model.WorkItem{
 			ID:             fmt.Sprintf("w%d", i),
 			AutomationID:   "f1",
-			AutomationName: "Flow 1",
+			AutomationName: "Automation 1",
 		}
 		require.NoError(t, store.Enqueue(item))
 	}
@@ -199,13 +199,13 @@ func TestWorkerPool_ConcurrencyLimit(t *testing.T) {
 
 	wp, store, automationStore := setupWorkerPool(t, 2, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	for i := range 5 {
 		item := &model.WorkItem{
 			ID:             fmt.Sprintf("w%d", i),
 			AutomationID:   "f1",
-			AutomationName: "Flow 1",
+			AutomationName: "Automation 1",
 		}
 		require.NoError(t, store.Enqueue(item))
 	}
@@ -247,9 +247,9 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -288,12 +288,12 @@ func TestWorkerPool_NotifyWakesDispatcher(t *testing.T) {
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 	wp.pollInterval = 10 * time.Minute // very long poll interval
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	wp.Start()
 	defer wp.Stop()
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	// Without Notify, the dispatcher won't process until the long poll interval.
@@ -313,9 +313,9 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -339,7 +339,7 @@ func TestWorkerPool_DeletedAutomation(t *testing.T) {
 
 	// Don't add automation to store — it's "deleted"
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -374,10 +374,10 @@ func TestWorkerPool_PanicRecovery(t *testing.T) {
 
 	wp, store, automationStore := setupWorkerPool(t, 1, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
 	// Enqueue an item that will panic.
-	item1 := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item1 := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item1))
 
 	wp.Start()
@@ -390,7 +390,7 @@ func TestWorkerPool_PanicRecovery(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Enqueue a second item that should succeed, proving the pool survived.
-	item2 := &model.WorkItem{ID: "w2", AutomationID: "f1", AutomationName: "Flow 1"}
+	item2 := &model.WorkItem{ID: "w2", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item2))
 	wp.Notify()
 
@@ -418,14 +418,14 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "some-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -460,14 +460,14 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "deleted-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -502,14 +502,14 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "deactivated-user", Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -549,18 +549,18 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = automationStore.Save(&model.Automation{
-		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "demoted-user",
+		ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "demoted-user",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 	})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -599,18 +599,18 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = automationStore.Save(&model.Automation{
-		ID: "f1", Name: "Flow 1", Enabled: true, CreatedBy: "some-user",
+		ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "some-user",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
 	})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -666,18 +666,18 @@ func TestWorkerPool_NotifierInvokedOnActionFailure(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(failingAct)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 	notifier := &fakeFailureNotifier{}
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, notifier, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
 	_ = automationStore.Save(&model.Automation{
-		ID: "f1", Name: "My Flow", Enabled: true, CreatedBy: "creator1",
+		ID: "f1", Name: "My Automation", Enabled: true, CreatedBy: "creator1",
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}},
 	})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "My Flow"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "My Automation"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -694,7 +694,7 @@ func TestWorkerPool_NotifierInvokedOnActionFailure(t *testing.T) {
 	require.Len(t, calls, 1, "expected one failure notification")
 	d := calls[0]
 	assert.Equal(t, "f1", d.AutomationID)
-	assert.Equal(t, "My Flow", d.AutomationName)
+	assert.Equal(t, "My Automation", d.AutomationName)
 	assert.Equal(t, "creator1", d.CreatedBy)
 	assert.Equal(t, "a1", d.ActionID)
 	assert.Equal(t, "send_message", d.ActionType)
@@ -717,14 +717,14 @@ func TestWorkerPool_NotifierNotInvokedOnSuccess(t *testing.T) {
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
 	executor := automation.NewAutomationExecutor(registry)
-	automationStore := newTestFlowStore()
+	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, notifier, api, 4)
 	wp.pollInterval = 50 * time.Millisecond
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: true, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
@@ -744,9 +744,9 @@ func TestWorkerPool_DisabledAutomation(t *testing.T) {
 	act := &testAction{}
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
-	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Flow 1", Enabled: false, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
+	_ = automationStore.Save(&model.Automation{ID: "f1", Name: "Automation 1", Enabled: false, Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{}}}})
 
-	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Flow 1"}
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
 	require.NoError(t, store.Enqueue(item))
 
 	wp.Start()
