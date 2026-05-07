@@ -205,13 +205,13 @@ func TestDispatcher_EnqueueFailureSkipsItemButNotifies(t *testing.T) {
 
 	assert.Empty(t, enqueuer.items)
 	// Notify is still called so the pool wakes for any items that were persisted
-	// by concurrent producers; enqueue failure is logged per-flow but does not
+	// by concurrent producers; enqueue failure is logged per-automation but does not
 	// abort the batch.
 	assert.Equal(t, 1, notifier.called)
 }
 
-// TestDispatcher_PartialEnqueueFailure verifies the per-flow loop's continue
-// semantics: a failure on one flow must not abort the batch.
+// TestDispatcher_PartialEnqueueFailure verifies the per-automation loop's continue
+// semantics: a failure on one automation must not abort the batch.
 func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 	_, store, _, _, api := setupDispatcher(t)
 

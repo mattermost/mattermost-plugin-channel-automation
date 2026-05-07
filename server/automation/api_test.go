@@ -711,7 +711,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
-	// The flow's creator is also a sysadmin so the creator-anchored config
+	// The automation's creator is also a sysadmin so the creator-anchored config
 	// validity check skips channel admin lookups too.
 	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(true)
 

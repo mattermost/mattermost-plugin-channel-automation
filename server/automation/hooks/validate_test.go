@@ -106,7 +106,7 @@ func TestValidateAllowedTools_AgentEmptyAllowedTools_AccessDenied(t *testing.T) 
 }
 
 // TestValidateAllowedTools_BridgeNil_AgentEmptyAllowedTools rejects when the
-// agents plugin (and therefore the bridge) is unavailable but the flow has
+// agents plugin (and therefore the bridge) is unavailable but the automation has
 // an ai_prompt agent action. Mirrors the pre-existing nil-bridge behavior
 // when allowed_tools was set.
 func TestValidateAllowedTools_BridgeNil_AgentEmptyAllowedTools(t *testing.T) {
@@ -158,7 +158,7 @@ func TestValidateAllowedTools_ServiceProvider_NoBridgeCall(t *testing.T) {
 	assert.Empty(t, bridge.calls)
 }
 
-// TestValidateAllowedTools_DedupesAcrossActions ensures a flow with multiple
+// TestValidateAllowedTools_DedupesAcrossActions ensures an automation with multiple
 // ai_prompt actions sharing one agent triggers exactly one bridge call.
 // This is the property that prevents the access check from being made twice
 // when one action has allowed_tools set and another does not.

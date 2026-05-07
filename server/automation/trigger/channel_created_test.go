@@ -147,7 +147,7 @@ func TestChannelCreatedTrigger_CandidateAutomationIDs(t *testing.T) {
 		assert.Nil(t, ids)
 	})
 
-	t.Run("returns global channel_created flow ids", func(t *testing.T) {
+	t.Run("returns global channel_created automation ids", func(t *testing.T) {
 		st := &stubStore{channelCreatedAutomationIDs: []string{"f1", "f2"}}
 		event := &model.Event{Type: model.TriggerTypeChannelCreated, Channel: &mmmodel.Channel{Id: "ch1", TeamId: "team1"}}
 		ids, err := tr.CandidateAutomationIDs(st, event)

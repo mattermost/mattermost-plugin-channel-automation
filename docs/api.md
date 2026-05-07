@@ -542,6 +542,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional, agent only)_ Allowlist of tool names the agent may use without approval. Only valid when `provider_type` is `"agent"` (services reject `allowed_tools` at the bridge). Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
+| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
@@ -602,6 +603,13 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 ### `ai_prompt`
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
+
+By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
+
+- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
+- `"creator"` — always use the automation creator, even when a triggering user is available.
+
+The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 

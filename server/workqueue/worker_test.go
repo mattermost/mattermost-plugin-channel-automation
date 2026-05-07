@@ -483,7 +483,7 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled — creator is permanently gone.
+	// Automation should be disabled — creator is permanently gone.
 	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
@@ -525,7 +525,7 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled.
+	// Automation should be disabled.
 	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)
@@ -576,7 +576,7 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	// Action should never have been called.
 	assert.Equal(t, 0, act.getExecCount())
 
-	// Flow should be disabled — creator lost permissions.
+	// Automation should be disabled — creator lost permissions.
 	f, _ := automationStore.Get("f1")
 	require.NotNil(t, f)
 	assert.False(t, f.Enabled)

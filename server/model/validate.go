@@ -178,6 +178,11 @@ func ValidateActions(actions []Action) error {
 					seenCh[c.ChannelID] = struct{}{}
 				}
 			}
+			switch a.AIPrompt.RequestAs {
+			case "", AIPromptRequestAsTriggerer, AIPromptRequestAsCreator:
+			default:
+				return fmt.Errorf("action %d: request_as must be %q or %q", i, AIPromptRequestAsTriggerer, AIPromptRequestAsCreator)
+			}
 		}
 	}
 	return nil
