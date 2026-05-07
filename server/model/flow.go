@@ -126,7 +126,18 @@ type AIPromptActionConfig struct {
 	ProviderID   string      `json:"provider_id"`
 	AllowedTools []string    `json:"allowed_tools,omitempty"`
 	Guardrails   *Guardrails `json:"guardrails,omitempty"`
+	// RequestAs selects which user the AI completion request is attributed to.
+	// Allowed values: "" or "triggerer" (default — the user who triggered the
+	// automation, falling back to the flow creator when the trigger has no
+	// associated user) or "creator" (always the flow creator).
+	RequestAs string `json:"request_as,omitempty"`
 }
+
+// AI prompt request_as values.
+const (
+	AIPromptRequestAsTriggerer = "triggerer"
+	AIPromptRequestAsCreator   = "creator"
+)
 
 // Action defines a single step in a flow. Exactly one config pointer should be set.
 type Action struct {

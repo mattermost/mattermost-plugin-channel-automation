@@ -12,6 +12,8 @@ import 'triggers/user_joined_team';
 import type {AIBotInfo, AIToolInfo, Action} from 'types';
 import {getTriggerType} from 'types';
 
+type RequestAs = '' | 'triggerer' | 'creator';
+
 interface ActionForm {
     id: string;
     type: string;
@@ -23,6 +25,7 @@ interface ActionForm {
     prompt: string;
     provider_id: string;
     allowed_tool_refs: string[];
+    request_as: RequestAs;
 
     /** Parsed guardrail channel IDs (from guardrails.channel_ids). */
     guardrail_channel_ids: string[];
@@ -225,7 +228,7 @@ function normalizeAllowedToolsFromFlow(raw: unknown): string[] {
 }
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], guardrail_channel_ids: []};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -241,6 +244,7 @@ function actionToForm(a: Action): ActionForm {
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tool_refs: normalizeAllowedToolsFromFlow(a.ai_prompt.allowed_tools),
+            request_as: a.ai_prompt.request_as ?? '',
             guardrail_channel_ids: normalizeGuardrailChannelIDsFromFlow(a.ai_prompt.guardrails),
         };
     }
@@ -256,10 +260,11 @@ function actionToForm(a: Action): ActionForm {
             prompt: '',
             provider_id: '',
             allowed_tool_refs: [],
+            request_as: '',
             guardrail_channel_ids: [],
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], guardrail_channel_ids: []};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -501,6 +506,9 @@ const FlowEditorView: React.FC = () => {
                     }
                     if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = a.allowed_tool_refs;
+                    }
+                    if (a.request_as && action.ai_prompt) {
+                        action.ai_prompt.request_as = a.request_as;
                     }
                     if (a.guardrail_channel_ids.length > 0 && action.ai_prompt) {
                         action.ai_prompt.guardrails = {channel_ids: [...a.guardrail_channel_ids]};
@@ -773,6 +781,23 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                     tools={agentTools.get(index)}
                                     onToggle={handleToolToggle}
                                 />
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label
+                                    htmlFor={`action-${index}-request-as`}
+                                    style={styles.label}
+                                >{'Request as'}</label>
+                                <select
+                                    id={`action-${index}-request-as`}
+                                    style={styles.select}
+                                    value={action.request_as}
+                                    onChange={(e) => handleActionChange(index, 'request_as', e.target.value)}
+                                >
+                                    <option value=''>{'Triggerer (default)'}</option>
+                                    <option value='triggerer'>{'Triggerer'}</option>
+                                    <option value='creator'>{'Creator'}</option>
+                                </select>
+                                <p style={hintStyle}>{'Selects which user the AI request is attributed to. "Triggerer" uses the user who triggered the automation (falling back to the creator). "Creator" always uses the flow creator.'}</p>
                             </div>
                             {action.allowed_tool_refs.length > 0 && (
                                 <div style={styles.formGroup}>

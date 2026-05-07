@@ -39,6 +39,18 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, "Channel automations are trigger-action workflows")
 		assert.NotContains(t, out.Instructions, "refer the user to:")
 	})
+
+	t.Run("documents the ai_prompt request_as field", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		// Field is named, both bounded enum values are listed, and the
+		// permission-inheritance caveat for "creator" in shared channels
+		// is preserved so agents surface it in the user-confirmation
+		// summary instead of silently picking "creator".
+		assert.Contains(t, out.Instructions, "request_as")
+		assert.Contains(t, out.Instructions, `"triggerer"`)
+		assert.Contains(t, out.Instructions, `"creator"`)
+		assert.Contains(t, out.Instructions, "creator's permissions")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {
