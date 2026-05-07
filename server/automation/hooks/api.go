@@ -120,11 +120,11 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, automationID
 	return chs, teams
 }
 
-// authorizeFlowCreator returns true if the request is authenticated as the
+// authorizeAutomationCreator returns true if the request is authenticated as the
 // automation's creator. Otherwise it writes a 403 JSON error and returns false.
 // The automation must have a non-empty CreatedBy; automations missing a creator are
 // treated as unauthorized to prevent accidental open access.
-func (h *APIHandler) authorizeFlowCreator(w http.ResponseWriter, r *http.Request, f *model.Automation, errResp any) bool {
+func (h *APIHandler) authorizeAutomationCreator(w http.ResponseWriter, r *http.Request, f *model.Automation, errResp any) bool {
 	callerID := r.Header.Get(headerMattermostUserID)
 	if callerID == "" || f.CreatedBy == "" || callerID != f.CreatedBy {
 		h.api.LogWarn("hooks: unauthorized hook caller",
@@ -219,7 +219,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authorizeFlowCreator(w, r, f, mcptool.BeforeHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
+	if !h.authorizeAutomationCreator(w, r, f, mcptool.BeforeHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
 		return
 	}
 

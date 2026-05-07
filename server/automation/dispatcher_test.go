@@ -129,7 +129,7 @@ func TestDispatcher_EnqueuesOnePerMatchingAutomation(t *testing.T) {
 	})
 
 	require.Len(t, enqueuer.items, 2)
-	assert.ElementsMatch(t, []string{"f1", "f2"}, flowIDs(enqueuer.items))
+	assert.ElementsMatch(t, []string{"f1", "f2"}, automationIDs(enqueuer.items))
 	for _, item := range enqueuer.items {
 		require.NotNil(t, item.TriggerData.Post)
 		require.NotNil(t, item.TriggerData.Channel)
@@ -138,7 +138,7 @@ func TestDispatcher_EnqueuesOnePerMatchingAutomation(t *testing.T) {
 	assert.Equal(t, 1, notifier.called)
 }
 
-func flowIDs(items []*model.WorkItem) []string {
+func automationIDs(items []*model.WorkItem) []string {
 	ids := make([]string, 0, len(items))
 	for _, it := range items {
 		ids = append(ids, it.AutomationID)
@@ -259,7 +259,7 @@ func TestDispatcher_PartialEnqueueFailure(t *testing.T) {
 	})
 
 	require.Len(t, enqueuer.items, 2, "f1 and f3 should still enqueue despite f2 failure")
-	assert.ElementsMatch(t, []string{"f1", "f3"}, flowIDs(enqueuer.items))
+	assert.ElementsMatch(t, []string{"f1", "f3"}, automationIDs(enqueuer.items))
 	assert.Equal(t, 3, enqueuer.calls)
 	assert.Equal(t, 1, notifier.called)
 }

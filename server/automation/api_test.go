@@ -1046,7 +1046,7 @@ func TestAPI_UpdateAutomation_SameChannelSelfExclusion(t *testing.T) {
 func TestAPI_UpdateAutomation_MoveToFullChannel(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has an automation, ch2 has an automation.
+	// Each of ch1 and ch2 already has one automation; with limit=1, ch2 is full.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:        "f1",
 		CreatedBy: "user1",
@@ -1346,7 +1346,7 @@ func adminAPIWithBridge(t *testing.T, userID string, bridge *stubAgentToolsListe
 	return router, store, api
 }
 
-const aiAgentFlowBody = `{
+const aiAgentAutomationBody = `{
 	"name": "AI Flow",
 	"enabled": true,
 	"trigger": {"channel_created": {"team_id": "team1"}},
@@ -1361,7 +1361,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testi
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentFlowBody))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentAutomationBody))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 	router.ServeHTTP(w, r)
 
@@ -1378,7 +1378,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentFlowBody))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentAutomationBody))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 	router.ServeHTTP(w, r)
 
@@ -1397,7 +1397,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_BridgeUnavailable(t *testing.T) {
 	router, _ := setupAPIWithCustomMock(t, api) // bridge is nil
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentFlowBody))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentAutomationBody))
 	r.Header.Set("Mattermost-User-ID", "admin1")
 	router.ServeHTTP(w, r)
 
@@ -1473,7 +1473,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_PermissionFailureSkipsBridge(t *test
 	router, _ := setupAPIWithBridge(t, api, bridge)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentFlowBody))
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(aiAgentAutomationBody))
 	r.Header.Set("Mattermost-User-ID", "user1")
 	router.ServeHTTP(w, r)
 
@@ -1506,7 +1506,7 @@ func TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	}))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(aiAgentFlowBody))
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(aiAgentAutomationBody))
 	r.Header.Set("Mattermost-User-ID", "creator1")
 	router.ServeHTTP(w, r)
 

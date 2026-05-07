@@ -36,7 +36,7 @@ func mmEmbeddedTool(name string) bridgeclient.BridgeToolInfo {
 	return bridgeclient.BridgeToolInfo{Name: name, ServerOrigin: EmbeddedMattermostMCPOrigin}
 }
 
-func flowWithTools(tools []string, guardrails *model.Guardrails) *model.Automation {
+func automationWithTools(tools []string, guardrails *model.Guardrails) *model.Automation {
 	return &model.Automation{
 		Actions: []model.Action{
 			{
@@ -54,14 +54,14 @@ func flowWithTools(tools []string, guardrails *model.Guardrails) *model.Automati
 
 func TestValidateAllowedTools_GetUserChannels_AllowedWithoutGuardrails(t *testing.T) {
 	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmEmbeddedTool("get_user_channels")}}
-	f := flowWithTools([]string{"get_user_channels"}, nil)
+	f := automationWithTools([]string{"get_user_channels"}, nil)
 
 	require.NoError(t, ValidateAllowedTools(f, "user1", bridge))
 }
 
 func TestValidateAllowedTools_GetUserChannels_AllowedWithEmptyGuardrails(t *testing.T) {
 	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmEmbeddedTool("get_user_channels")}}
-	f := flowWithTools([]string{"get_user_channels"}, &model.Guardrails{Channels: nil})
+	f := automationWithTools([]string{"get_user_channels"}, &model.Guardrails{Channels: nil})
 
 	require.NoError(t, ValidateAllowedTools(f, "user1", bridge))
 }
@@ -71,7 +71,7 @@ func TestValidateAllowedTools_GetUserChannels_RejectedWithGuardrails(t *testing.
 	guardrails := &model.Guardrails{Channels: []model.GuardrailChannel{
 		{ChannelID: mmmodel.NewId(), TeamID: mmmodel.NewId()},
 	}}
-	f := flowWithTools([]string{"get_user_channels"}, guardrails)
+	f := automationWithTools([]string{"get_user_channels"}, guardrails)
 
 	err := ValidateAllowedTools(f, "user1", bridge)
 	require.Error(t, err)
@@ -84,7 +84,7 @@ func TestValidateAllowedTools_GetUserChannels_RejectedWithGuardrails(t *testing.
 // verified at save time. An empty (200) tools response means access OK.
 func TestValidateAllowedTools_AgentNoTools_VerifiesAccess(t *testing.T) {
 	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{}}
-	f := flowWithTools(nil, nil)
+	f := automationWithTools(nil, nil)
 
 	require.NoError(t, ValidateAllowedTools(f, "user1", bridge))
 	require.Len(t, bridge.calls, 1)
@@ -96,7 +96,7 @@ func TestValidateAllowedTools_AgentNoTools_VerifiesAccess(t *testing.T) {
 // bridge denial as ErrToolDiscovery so callers map it to a 5xx response.
 func TestValidateAllowedTools_AgentEmptyAllowedTools_AccessDenied(t *testing.T) {
 	bridge := &stubLister{err: fmt.Errorf("request failed with status 403: permission denied")}
-	f := flowWithTools(nil, nil)
+	f := automationWithTools(nil, nil)
 
 	err := ValidateAllowedTools(f, "user1", bridge)
 	require.Error(t, err)
@@ -110,7 +110,7 @@ func TestValidateAllowedTools_AgentEmptyAllowedTools_AccessDenied(t *testing.T) 
 // an ai_prompt agent action. Mirrors the pre-existing nil-bridge behavior
 // when allowed_tools was set.
 func TestValidateAllowedTools_BridgeNil_AgentEmptyAllowedTools(t *testing.T) {
-	f := flowWithTools(nil, nil)
+	f := automationWithTools(nil, nil)
 
 	err := ValidateAllowedTools(f, "user1", nil)
 	require.Error(t, err)
@@ -222,7 +222,7 @@ func TestValidateAllowedTools_DistinctAgents_OneCallPerAgent(t *testing.T) {
 // programmer-error precondition before any bridge round-trip.
 func TestValidateAllowedTools_AgentEmptyAllowedTools_MissingUserID(t *testing.T) {
 	bridge := &stubLister{}
-	f := flowWithTools(nil, nil)
+	f := automationWithTools(nil, nil)
 
 	err := ValidateAllowedTools(f, "", bridge)
 	require.Error(t, err)

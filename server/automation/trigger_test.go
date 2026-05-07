@@ -302,7 +302,7 @@ func TestTriggerService_FindMatchingAutomations_ChannelCreated_NilChannel(t *tes
 	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingAutomations_ChannelCreated_MultipleFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_ChannelCreated_MultipleAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 
@@ -389,7 +389,7 @@ func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_NilTeam(t *testin
 	assert.Nil(t, automations)
 }
 
-func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_MultipleFlows(t *testing.T) {
+func TestTriggerService_FindMatchingAutomations_UserJoinedTeam_MultipleAutomations(t *testing.T) {
 	store, _ := setupStore(t)
 	svc := NewTriggerService(store, newTestRegistry())
 

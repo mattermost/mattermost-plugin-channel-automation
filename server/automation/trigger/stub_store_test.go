@@ -9,7 +9,7 @@ type stubStore struct {
 	automationIDsByChannel           map[string][]string
 	automationIDsByMembershipChannel map[string][]string
 	channelCreatedAutomationIDs      []string
-	flowIDsByTeam                    map[string][]string
+	automationIDsByTeam              map[string][]string
 
 	err error
 }
@@ -39,7 +39,7 @@ func (s *stubStore) GetAutomationIDsForUserJoinedTeam(teamID string) ([]string, 
 	if s.err != nil {
 		return nil, s.err
 	}
-	return s.flowIDsByTeam[teamID], nil
+	return s.automationIDsByTeam[teamID], nil
 }
 
 // Remaining Store methods are unused by the trigger candidate-resolution

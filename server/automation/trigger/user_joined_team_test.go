@@ -216,7 +216,7 @@ func TestUserJoinedTeamTrigger_CandidateAutomationIDs(t *testing.T) {
 	})
 
 	t.Run("delegates to store.GetAutomationIDsForUserJoinedTeam", func(t *testing.T) {
-		st := &stubStore{flowIDsByTeam: map[string][]string{"team1": {"f1"}}}
+		st := &stubStore{automationIDsByTeam: map[string][]string{"team1": {"f1"}}}
 		event := &model.Event{Type: model.TriggerTypeUserJoinedTeam, Team: &mmmodel.Team{Id: "team1"}}
 		ids, err := tr.CandidateAutomationIDs(st, event)
 		require.NoError(t, err)

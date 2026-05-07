@@ -71,7 +71,7 @@ func testRouter(t *testing.T, store *mockAutomationStore, api *plugintest.API) *
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything,
 	).Return().Maybe()
-	// authorizeFlowCreator emits a warning when a non-creator caller is rejected.
+	// authorizeAutomationCreator emits a warning when a non-creator caller is rejected.
 	api.On("LogWarn",
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
@@ -450,7 +450,7 @@ func TestHooks_Before_UnrecognizedToolRejected(t *testing.T) {
 	assert.Contains(t, resp.Error, "not a known Mattermost MCP server tool")
 }
 
-func TestHooks_GuardrailsNotFound_MissingFlow(t *testing.T) {
+func TestHooks_GuardrailsNotFound_MissingAutomation(t *testing.T) {
 	store := &mockAutomationStore{automations: map[string]*model.Automation{}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
@@ -542,7 +542,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 	assert.NotContains(t, resp.Error, ids[maxAllowedChannelsInError], "should not include channels past the cap")
 }
 
-func flowChannelCreatedTeam(teamID string) *model.Automation {
+func automationChannelCreatedTeam(teamID string) *model.Automation {
 	return &model.Automation{
 		ID:        "flow1",
 		CreatedBy: creatorUserID,
@@ -604,7 +604,7 @@ func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -620,7 +620,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 	team1 := mmmodel.NewId()
 	team2 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -637,7 +637,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -731,7 +731,7 @@ func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
 	assert.Contains(t, resp.Error, "forbidden")
 }
 
-func TestHooks_RejectsFlowMissingCreator(t *testing.T) {
+func TestHooks_RejectsAutomationMissingCreator(t *testing.T) {
 	f := guardrailAutomation()
 	f.CreatedBy = ""
 	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
