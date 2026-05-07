@@ -9,7 +9,7 @@ import (
 )
 
 // kvCooldownKeyPrefix namespaces the cooldown keys in the plugin KV store.
-const kvCooldownKeyPrefix = "flow_failure_notify_"
+const kvCooldownKeyPrefix = "automation_failure_notify_"
 
 // CooldownStore manages per-automation notification cooldown slots backed by the
 // Mattermost plugin KV store. It exists so CreatorNotifier doesn't reach

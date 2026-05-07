@@ -17,7 +17,7 @@ func TestKVCooldownStore_ClaimSucceedsOnFirstWriter(t *testing.T) {
 		OldValue:        nil,
 		ExpireInSeconds: 3600,
 	}
-	api.On("KVSetWithOptions", "flow_failure_notify_flow1", []byte{1}, expectedOpts).
+	api.On("KVSetWithOptions", "automation_failure_notify_flow1", []byte{1}, expectedOpts).
 		Return(true, nil)
 
 	s := NewCooldownStore(api, time.Hour)
@@ -30,7 +30,7 @@ func TestKVCooldownStore_ClaimSucceedsOnFirstWriter(t *testing.T) {
 
 func TestKVCooldownStore_ClaimReturnsFalseWhenSlotHeld(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("KVSetWithOptions", "flow_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
+	api.On("KVSetWithOptions", "automation_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
 		Atomic:          true,
 		OldValue:        nil,
 		ExpireInSeconds: 3600,
@@ -47,7 +47,7 @@ func TestKVCooldownStore_ClaimReturnsFalseWhenSlotHeld(t *testing.T) {
 func TestKVCooldownStore_ClaimWrapsKVError(t *testing.T) {
 	api := &plugintest.API{}
 	appErr := mmmodel.NewAppError("KVSetWithOptions", "kv.fail", nil, "boom", 500)
-	api.On("KVSetWithOptions", "flow_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
+	api.On("KVSetWithOptions", "automation_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
 		Atomic:          true,
 		OldValue:        nil,
 		ExpireInSeconds: 3600,
@@ -64,7 +64,7 @@ func TestKVCooldownStore_ClaimWrapsKVError(t *testing.T) {
 
 func TestKVCooldownStore_ReleaseDeletesNamespacedKey(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("KVDelete", "flow_failure_notify_flow1").Return(nil)
+	api.On("KVDelete", "automation_failure_notify_flow1").Return(nil)
 
 	s := NewCooldownStore(api, time.Hour)
 	require.NoError(t, s.Release("flow1"))
@@ -75,7 +75,7 @@ func TestKVCooldownStore_ReleaseDeletesNamespacedKey(t *testing.T) {
 func TestKVCooldownStore_ReleaseWrapsKVError(t *testing.T) {
 	api := &plugintest.API{}
 	appErr := mmmodel.NewAppError("KVDelete", "kv.fail", nil, "boom", 500)
-	api.On("KVDelete", "flow_failure_notify_flow1").Return(appErr)
+	api.On("KVDelete", "automation_failure_notify_flow1").Return(appErr)
 
 	s := NewCooldownStore(api, time.Hour)
 	err := s.Release("flow1")
@@ -87,7 +87,7 @@ func TestKVCooldownStore_ReleaseWrapsKVError(t *testing.T) {
 
 func TestKVCooldownStore_ClaimUsesConfiguredTTL(t *testing.T) {
 	api := &plugintest.API{}
-	api.On("KVSetWithOptions", "flow_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
+	api.On("KVSetWithOptions", "automation_failure_notify_flow1", []byte{1}, mmmodel.PluginKVSetOptions{
 		Atomic:          true,
 		OldValue:        nil,
 		ExpireInSeconds: 30,
