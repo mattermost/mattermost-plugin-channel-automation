@@ -35,7 +35,7 @@ func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeTool
 	return nil, nil
 }
 
-func TestAutomationExecutor_SingleAction(t *testing.T) {
+func TestExecutor_SingleAction(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
@@ -47,7 +47,7 @@ func TestAutomationExecutor_SingleAction(t *testing.T) {
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",
@@ -70,7 +70,7 @@ func TestAutomationExecutor_SingleAction(t *testing.T) {
 	api.AssertCalled(t, "CreatePost", mock.Anything)
 }
 
-func TestAutomationExecutor_MultiAction_CumulativeContext(t *testing.T) {
+func TestExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(&mmmodel.Post{
@@ -87,7 +87,7 @@ func TestAutomationExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",
@@ -108,7 +108,7 @@ func TestAutomationExecutor_MultiAction_CumulativeContext(t *testing.T) {
 	api.AssertNumberOfCalls(t, "CreatePost", 2)
 }
 
-func TestAutomationExecutor_FirstFailureStops(t *testing.T) {
+func TestExecutor_FirstFailureStops(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", mock.Anything, mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.Anything).Return(nil, mmmodel.NewAppError("CreatePost", "error", nil, "", 500)).Once()
@@ -116,7 +116,7 @@ func TestAutomationExecutor_FirstFailureStops(t *testing.T) {
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",
@@ -143,7 +143,7 @@ func TestAutomationExecutor_FirstFailureStops(t *testing.T) {
 	api.AssertNumberOfCalls(t, "CreatePost", 1)
 }
 
-func TestAutomationExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
+func TestExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", "ch1", mmmodel.PermissionCreatePost).Return(true)
 	api.On("CreatePost", mock.MatchedBy(func(p *mmmodel.Post) bool {
@@ -163,7 +163,7 @@ func TestAutomationExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 	registry.RegisterAction(action.NewAIPromptAction(api, bc))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",
@@ -205,13 +205,13 @@ func TestAutomationExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 	assert.Equal(t, "Summarize: some text", bc.lastReq.Posts[2].Message)
 }
 
-func TestAutomationExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T) {
+func TestExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T) {
 	api := &plugintest.API{}
 
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",
@@ -233,9 +233,9 @@ func TestAutomationExecutor_ChannelGuardrail_BlocksDifferentChannel(t *testing.T
 	api.AssertNotCalled(t, "CreatePost", mock.Anything)
 }
 
-func TestAutomationExecutor_UnknownActionType(t *testing.T) {
+func TestExecutor_UnknownActionType(t *testing.T) {
 	registry := NewRegistry()
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:   "auto1",
@@ -253,14 +253,14 @@ func TestAutomationExecutor_UnknownActionType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown action type")
 }
 
-func TestAutomationExecutor_PermissionDenied(t *testing.T) {
+func TestExecutor_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionToChannel", "creator1", "ch2", mmmodel.PermissionCreatePost).Return(false)
 
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
 
-	executor := NewAutomationExecutor(registry)
+	executor := NewExecutor(registry)
 
 	f := &model.Automation{
 		ID:        "auto1",

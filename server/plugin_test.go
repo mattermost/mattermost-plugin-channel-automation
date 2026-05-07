@@ -467,7 +467,7 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
 
 	// Create a WorkerPool but don't start it — we just need Notify() to not block.
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, nil, api, 1)
 
 	p := &Plugin{
@@ -650,7 +650,7 @@ func TestUserHasJoinedTeam_UsesPlaceholdersWhenTeamLookupFails(t *testing.T) {
 	automationStore := automation.NewStore(api, &sync.Mutex{})
 	triggerService := automation.NewTriggerService(automationStore, registry)
 	wqStore := workqueue.NewStore(api, &sync.Mutex{})
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	wp := workqueue.NewWorkerPool(wqStore, executor, automationStore, nil, nil, api, 1)
 
 	p := &Plugin{

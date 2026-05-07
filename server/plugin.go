@@ -45,7 +45,7 @@ type Plugin struct {
 	automationStore    model.Store
 	historyStore       model.ExecutionStore
 	triggerService     *automation.TriggerService
-	automationExecutor *automation.AutomationExecutor
+	automationExecutor *automation.Executor
 	scheduleManager    *automation.ScheduleManager
 	dispatcher         *automation.Dispatcher
 
@@ -95,7 +95,7 @@ func (p *Plugin) OnActivate() error {
 	}
 	p.automationStore = automation.NewStore(p.API, automationIndexMu)
 	p.triggerService = automation.NewTriggerService(p.automationStore, p.registry)
-	p.automationExecutor = automation.NewAutomationExecutor(p.registry)
+	p.automationExecutor = automation.NewExecutor(p.registry)
 
 	// Set up persistent work queue.
 	indexMu, err := cluster.NewMutex(p.API, "wq_index_mutex")

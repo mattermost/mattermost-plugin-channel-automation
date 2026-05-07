@@ -6,7 +6,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// ActionError is returned by AutomationExecutor.Execute when a specific action
+// ActionError is returned by Executor.Execute when a specific action
 // fails. It carries the failing action's ID and type so callers can surface
 // targeted error notifications without parsing the wrapped error string.
 type ActionError struct {
@@ -21,20 +21,20 @@ func (e *ActionError) Error() string {
 
 func (e *ActionError) Unwrap() error { return e.Err }
 
-// AutomationExecutor dispatches automation actions using the registry.
-type AutomationExecutor struct {
+// Executor dispatches automation actions using the registry.
+type Executor struct {
 	registry *Registry
 }
 
-// NewAutomationExecutor creates a AutomationExecutor with the given registry.
-func NewAutomationExecutor(registry *Registry) *AutomationExecutor {
-	return &AutomationExecutor{registry: registry}
+// NewExecutor creates an Executor with the given registry.
+func NewExecutor(registry *Registry) *Executor {
+	return &Executor{registry: registry}
 }
 
 // Execute runs all actions in the automation sequentially, building up the AutomationContext.
 // Returns the context (with any partial step outputs) and an error on the first
 // failure or if an action type is unknown.
-func (e *AutomationExecutor) Execute(f *model.Automation, triggerData model.TriggerData) (*model.AutomationContext, error) {
+func (e *Executor) Execute(f *model.Automation, triggerData model.TriggerData) (*model.AutomationContext, error) {
 	ctx := &model.AutomationContext{
 		AutomationID: f.ID,
 		CreatedBy:    f.CreatedBy,

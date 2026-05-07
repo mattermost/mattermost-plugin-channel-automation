@@ -144,7 +144,7 @@ func setupWorkerPool(t *testing.T, maxWorkers int, act *testAction) (*WorkerPool
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 
 	automationStore := newTestAutomationStore()
 
@@ -417,7 +417,7 @@ func TestWorkerPool_CreatorLookupError(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
@@ -459,7 +459,7 @@ func TestWorkerPool_CreatorPermanentlyDeleted(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
@@ -501,7 +501,7 @@ func TestWorkerPool_CreatorDeactivated(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
@@ -548,7 +548,7 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
@@ -598,7 +598,7 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
@@ -665,7 +665,7 @@ func TestWorkerPool_NotifierInvokedOnActionFailure(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(failingAct)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 	notifier := &fakeFailureNotifier{}
 
@@ -716,7 +716,7 @@ func TestWorkerPool_NotifierNotInvokedOnSuccess(t *testing.T) {
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
-	executor := automation.NewAutomationExecutor(registry)
+	executor := automation.NewExecutor(registry)
 	automationStore := newTestAutomationStore()
 
 	wp := NewWorkerPool(store, executor, automationStore, nil, notifier, api, 4)

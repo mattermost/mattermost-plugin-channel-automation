@@ -20,7 +20,7 @@ import (
 // of concurrent goroutines.
 type WorkerPool struct {
 	store           *Store
-	executor        *automation.AutomationExecutor
+	executor        *automation.Executor
 	automationStore model.Store
 	historyStore    model.ExecutionStore
 	notifier        notifier.FailureNotifier
@@ -36,7 +36,7 @@ type WorkerPool struct {
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
 // notifier may be nil to disable failure notifications.
-func NewWorkerPool(store *Store, executor *automation.AutomationExecutor, automationStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
+func NewWorkerPool(store *Store, executor *automation.Executor, automationStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
 		store:           store,
 		executor:        executor,
