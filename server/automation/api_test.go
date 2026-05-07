@@ -23,11 +23,11 @@ import (
 
 // testConfig is a simple Configuration implementation for tests.
 type testConfig struct {
-	maxFlowsPerChannel int
+	maxAutomationsPerChannel int
 }
 
 func (c *testConfig) MaxAutomationsPerChannel() int {
-	return c.maxFlowsPerChannel
+	return c.maxAutomationsPerChannel
 }
 
 // expectLogCalls registers permissive LogError and LogWarn expectations that
@@ -65,7 +65,7 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	return router, store, api
 }
 
-func TestAPI_CreateFlow(t *testing.T) {
+func TestAPI_CreateAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	body := `{
@@ -103,7 +103,7 @@ func TestAPI_CreateFlow(t *testing.T) {
 	assert.Equal(t, created.Name, got.Name)
 }
 
-func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
+func TestAPI_CreateAutomation_InvalidBody(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
@@ -114,7 +114,7 @@ func TestAPI_CreateFlow_InvalidBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
+func TestAPI_CreateAutomation_InvalidActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -133,7 +133,7 @@ func TestAPI_CreateFlow_InvalidActionID(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "invalid")
 }
 
-func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
+func TestAPI_CreateAutomation_MissingActionID(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -152,7 +152,7 @@ func TestAPI_CreateFlow_MissingActionID(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "id is required")
 }
 
-func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
+func TestAPI_CreateAutomation_DuplicateActionIDs(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -174,7 +174,7 @@ func TestAPI_CreateFlow_DuplicateActionIDs(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "duplicate")
 }
 
-func TestAPI_GetFlow(t *testing.T) {
+func TestAPI_GetAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{
@@ -197,7 +197,7 @@ func TestAPI_GetFlow(t *testing.T) {
 	assert.Equal(t, "Flow 1", got.Name)
 }
 
-func TestAPI_GetFlow_NotFound(t *testing.T) {
+func TestAPI_GetAutomation_NotFound(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
@@ -208,7 +208,7 @@ func TestAPI_GetFlow_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestAPI_ListFlows(t *testing.T) {
+func TestAPI_ListAutomations(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -228,7 +228,7 @@ func TestAPI_ListFlows(t *testing.T) {
 	assert.Len(t, flows, 2)
 }
 
-func TestAPI_ListFlows_Empty(t *testing.T) {
+func TestAPI_ListAutomations_Empty(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
@@ -244,7 +244,7 @@ func TestAPI_ListFlows_Empty(t *testing.T) {
 	assert.Empty(t, flows)
 }
 
-func TestAPI_UpdateFlow(t *testing.T) {
+func TestAPI_UpdateAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	original := &model.Automation{
@@ -284,7 +284,7 @@ func TestAPI_UpdateFlow(t *testing.T) {
 	assert.Equal(t, "new-action", updated.Actions[0].ID)
 }
 
-func TestAPI_UpdateFlow_NotFound(t *testing.T) {
+func TestAPI_UpdateAutomation_NotFound(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	w := httptest.NewRecorder()
@@ -295,7 +295,7 @@ func TestAPI_UpdateFlow_NotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
+func TestAPI_UpdateAutomation_InvalidBody(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -308,7 +308,7 @@ func TestAPI_UpdateFlow_InvalidBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
+func TestAPI_CreateAutomation_ScheduleTrigger_MissingInterval(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -327,7 +327,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_MissingInterval(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "interval")
 }
 
-func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
+func TestAPI_CreateAutomation_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -346,7 +346,7 @@ func TestAPI_CreateFlow_ScheduleTrigger_IntervalTooSmall(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
-func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
+func TestAPI_CreateAutomation_UnknownTriggerType(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -364,7 +364,7 @@ func TestAPI_CreateFlow_UnknownTriggerType(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
+func TestAPI_UpdateAutomation_ScheduleValidation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{
@@ -389,7 +389,7 @@ func TestAPI_UpdateFlow_ScheduleValidation(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least 1h")
 }
 
-func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
+func TestAPI_UpdateAutomation_UnchangedPastStartAt(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	pastStartAt := model.TimeToTimestamp(time.Now().Add(-1 * time.Hour))
@@ -414,7 +414,7 @@ func TestAPI_UpdateFlow_UnchangedPastStartAt(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestAPI_DeleteFlow(t *testing.T) {
+func TestAPI_DeleteAutomation(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", CreatedBy: "user1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -432,7 +432,7 @@ func TestAPI_DeleteFlow(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestAPI_DeleteFlow_Unauthorized(t *testing.T) {
+func TestAPI_DeleteAutomation_Unauthorized(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -445,7 +445,7 @@ func TestAPI_DeleteFlow_Unauthorized(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestAPI_UpdateFlow_Unauthorized(t *testing.T) {
+func TestAPI_UpdateAutomation_Unauthorized(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -485,7 +485,7 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxFlowsPerChannel: limit}, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxAutomationsPerChannel: limit}, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -525,7 +525,7 @@ func setupAPIWithBridge(t *testing.T, api *plugintest.API, bridge *stubAgentTool
 	return router, store
 }
 
-func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
+func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -554,7 +554,7 @@ func TestAPI_CreateFlow_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -583,7 +583,7 @@ func TestAPI_CreateFlow_ActionPermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
+func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -609,7 +609,7 @@ func TestAPI_CreateFlow_NotChannelMember(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
+func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -650,7 +650,7 @@ func TestAPI_UpdateFlow_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
-func TestAPI_UpdateFlow_NonCreatorRejected(t *testing.T) {
+func TestAPI_UpdateAutomation_NonCreatorRejected(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user2", mmmodel.PermissionManageSystem).Return(false)
@@ -681,7 +681,7 @@ func TestAPI_UpdateFlow_NonCreatorRejected(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
-func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
+func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -707,7 +707,7 @@ func TestAPI_CreateFlow_SystemAdminBypass(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
-func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
+func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -741,7 +741,7 @@ func TestAPI_UpdateFlow_SystemAdminBypass(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
 }
 
-func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
+func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -770,7 +770,7 @@ func TestAPI_CreateFlow_TemplatedChannelSkipped(t *testing.T) {
 	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -795,7 +795,7 @@ func TestAPI_CreateFlow_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -820,7 +820,7 @@ func TestAPI_CreateFlow_ChannelCreated_AIPromptOnly_NonTeamAdminDenied(t *testin
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -842,7 +842,7 @@ func TestAPI_CreateFlow_ChannelCreated_SystemAdminAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_TeamAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -866,7 +866,7 @@ func TestAPI_CreateFlow_ChannelCreated_TeamAdminAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 	// With the temporary channel guardrail, channel_created triggers must use
 	// the template expression for send_message channel_id.
 	router, _, _ := setupAPI(t)
@@ -887,7 +887,7 @@ func TestAPI_CreateFlow_ChannelCreated_LiteralChannelRejected(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "must use a template expression")
 }
 
-func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
+func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -926,7 +926,7 @@ func TestAPI_ListFlows_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T) {
 	assert.Equal(t, "f1", flows[0].ID)
 }
 
-func TestAPI_ListFlows_FilterByChannel(t *testing.T) {
+func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -948,7 +948,7 @@ func TestAPI_ListFlows_FilterByChannel(t *testing.T) {
 	assert.ElementsMatch(t, []string{"f1", "f3"}, ids)
 }
 
-func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
+func TestAPI_ListAutomations_FilterByChannel_NoMatch(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{ID: "f1", Name: "Flow 1", Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}}))
@@ -966,7 +966,7 @@ func TestAPI_ListFlows_FilterByChannel_NoMatch(t *testing.T) {
 	assert.Empty(t, flows)
 }
 
-func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelLimitReached(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
 	// Save one automation on ch1 — fills the limit.
@@ -991,7 +991,7 @@ func TestAPI_CreateFlow_ChannelLimitReached(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "maximum")
 }
 
-func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
+func TestAPI_CreateAutomation_DifferentChannelSucceeds(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
 	// ch1 is full.
@@ -1016,7 +1016,7 @@ func TestAPI_CreateFlow_DifferentChannelSucceeds(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
+func TestAPI_UpdateAutomation_SameChannelSelfExclusion(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
 	// ch1 has one automation — at the limit.
@@ -1043,7 +1043,7 @@ func TestAPI_UpdateFlow_SameChannelSelfExclusion(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
+func TestAPI_UpdateAutomation_MoveToFullChannel(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
 	// ch1 has an automation, ch2 has a flow.
@@ -1075,7 +1075,7 @@ func TestAPI_UpdateFlow_MoveToFullChannel(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "maximum")
 }
 
-func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
+func TestAPI_CreateAutomation_UnlimitedAllowsAny(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 0)
 
 	// Even with many flows, limit=0 means unlimited.
@@ -1103,14 +1103,14 @@ func TestAPI_CreateFlow_UnlimitedAllowsAny(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
+func TestAPI_CreateAutomation_ChannelCreatedBypassesLimit(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	store, _ := setupStore(t)
 
-	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxFlowsPerChannel: 1}, nil)
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxAutomationsPerChannel: 1}, nil)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
@@ -1130,7 +1130,7 @@ func TestAPI_CreateFlow_ChannelCreatedBypassesLimit(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_EmptyName(t *testing.T) {
+func TestAPI_CreateAutomation_EmptyName(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1149,7 +1149,7 @@ func TestAPI_CreateFlow_EmptyName(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "name is required")
 }
 
-func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
+func TestAPI_CreateAutomation_NameTooLong(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	longName := strings.Repeat("a", 101)
@@ -1169,7 +1169,7 @@ func TestAPI_CreateFlow_NameTooLong(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "100 characters")
 }
 
-func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
+func TestAPI_UpdateAutomation_EmptyName(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{
@@ -1195,7 +1195,7 @@ func TestAPI_UpdateFlow_EmptyName(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "name is required")
 }
 
-func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
+func TestAPI_UpdateAutomation_NameTooLong(t *testing.T) {
 	router, store, _ := setupAPI(t)
 
 	require.NoError(t, store.Save(&model.Automation{
@@ -1222,7 +1222,7 @@ func TestAPI_UpdateFlow_NameTooLong(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "100 characters")
 }
 
-func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
+func TestAPI_CreateAutomation_EmptyActions(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1241,7 +1241,7 @@ func TestAPI_CreateFlow_EmptyActions(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "at least one action")
 }
 
-func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
+func TestAPI_CreateAutomation_MultipleTriggerTypes(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
 	body := `{
@@ -1260,7 +1260,7 @@ func TestAPI_CreateFlow_MultipleTriggerTypes(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "exactly one trigger type")
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1284,7 +1284,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_TeamAdminAllowed(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1309,7 +1309,7 @@ func TestAPI_CreateFlow_UserJoinedTeam_NotTeamAdminDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "team admin")
 }
 
-func TestAPI_CreateFlow_UserJoinedTeam_GetTeam500(t *testing.T) {
+func TestAPI_CreateAutomation_UserJoinedTeam_GetTeam500(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1353,10 +1353,10 @@ const aiAgentFlowBody = `{
 	"actions": [{"id": "ai-task", "ai_prompt": {"prompt": "summarize", "provider_type": "agent", "provider_id": "bot1"}}]
 }`
 
-// TestAPI_CreateFlow_AIPromptAgent_NoAllowedTools_ChecksBridge is the core
+// TestAPI_CreateAutomation_AIPromptAgent_NoAllowedTools_ChecksBridge is the core
 // regression guard: a flow with provider_type "agent" and empty allowed_tools
 // must trigger a bridge call to verify the creator has access to the agent.
-func TestAPI_CreateFlow_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testing.T) {
 	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{}}
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
@@ -1371,9 +1371,9 @@ func TestAPI_CreateFlow_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testing.T) 
 	assert.Equal(t, "admin1", bridge.calls[0].userID)
 }
 
-// TestAPI_CreateFlow_AIPromptAgent_AccessDenied surfaces a bridge denial as
+// TestAPI_CreateAutomation_AIPromptAgent_AccessDenied surfaces a bridge denial as
 // 502 (ErrToolDiscovery -> http.StatusBadGateway in the handler).
-func TestAPI_CreateFlow_AIPromptAgent_AccessDenied(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	bridge := &stubAgentToolsLister{err: fmt.Errorf("request failed with status 403: permission denied")}
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
@@ -1387,9 +1387,9 @@ func TestAPI_CreateFlow_AIPromptAgent_AccessDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "status 403")
 }
 
-// TestAPI_CreateFlow_AIPromptAgent_BridgeUnavailable rejects when the bridge
+// TestAPI_CreateAutomation_AIPromptAgent_BridgeUnavailable rejects when the bridge
 // is nil and the flow has an ai_prompt agent action.
-func TestAPI_CreateFlow_AIPromptAgent_BridgeUnavailable(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptAgent_BridgeUnavailable(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
@@ -1405,9 +1405,9 @@ func TestAPI_CreateFlow_AIPromptAgent_BridgeUnavailable(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "bridge client unavailable")
 }
 
-// TestAPI_CreateFlow_AIPromptService_SkipsBridge confirms service providers
+// TestAPI_CreateAutomation_AIPromptService_SkipsBridge confirms service providers
 // do not trigger any bridge call (out of scope for the agent ACL).
-func TestAPI_CreateFlow_AIPromptService_SkipsBridge(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptService_SkipsBridge(t *testing.T) {
 	bridge := &stubAgentToolsLister{}
 	router, _, _ := adminAPIWithBridge(t, "admin1", bridge)
 
@@ -1426,10 +1426,10 @@ func TestAPI_CreateFlow_AIPromptService_SkipsBridge(t *testing.T) {
 	assert.Empty(t, bridge.calls)
 }
 
-// TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls is the property
+// TestAPI_CreateAutomation_AIPromptAgent_DuplicateID_DedupesCalls is the property
 // that prevents a "two requests" regression: two ai_prompt actions sharing
 // one agent ID must result in exactly one bridge call.
-func TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.T) {
 	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{
 		{Name: "search", ServerOrigin: "external-mcp"},
 	}}
@@ -1460,9 +1460,9 @@ func TestAPI_CreateFlow_AIPromptAgent_DuplicateID_DedupesCalls(t *testing.T) {
 	assert.Equal(t, "bot1", bridge.calls[0].agentID)
 }
 
-// TestAPI_CreateFlow_AIPromptAgent_PermissionFailureSkipsBridge verifies the
+// TestAPI_CreateAutomation_AIPromptAgent_PermissionFailureSkipsBridge verifies the
 // permission check still short-circuits before the bridge round-trip.
-func TestAPI_CreateFlow_AIPromptAgent_PermissionFailureSkipsBridge(t *testing.T) {
+func TestAPI_CreateAutomation_AIPromptAgent_PermissionFailureSkipsBridge(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -1482,10 +1482,10 @@ func TestAPI_CreateFlow_AIPromptAgent_PermissionFailureSkipsBridge(t *testing.T)
 	assert.Empty(t, bridge.calls, "bridge must not be called when the user cannot manage the flow")
 }
 
-// TestAPI_UpdateFlow_AIPromptAgent_AccessDenied mirrors the create path for
+// TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied mirrors the create path for
 // the PUT handler. The check uses the existing flow's CreatedBy (matching
 // the runtime model where the bridge ACL is checked against created_by).
-func TestAPI_UpdateFlow_AIPromptAgent_AccessDenied(t *testing.T) {
+func TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	bridge := &stubAgentToolsLister{err: fmt.Errorf("request failed with status 403: permission denied")}
 
 	api := &plugintest.API{}

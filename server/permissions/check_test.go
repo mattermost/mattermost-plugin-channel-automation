@@ -454,51 +454,51 @@ func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
-func TestCanEditFlow_CreatorAllowed(t *testing.T) {
+func TestCanEditAutomation_CreatorAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(false)
 
 	f := &model.Automation{CreatedBy: "creator1"}
-	require.NoError(t, CanEditFlow(api, "creator1", f))
+	require.NoError(t, CanEditAutomation(api, "creator1", f))
 	api.AssertExpectations(t)
 }
 
-func TestCanEditFlow_SystemAdminAllowed(t *testing.T) {
+func TestCanEditAutomation_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	f := &model.Automation{CreatedBy: "creator1"}
-	require.NoError(t, CanEditFlow(api, "admin1", f))
+	require.NoError(t, CanEditAutomation(api, "admin1", f))
 	api.AssertExpectations(t)
 }
 
-func TestCanEditFlow_NonCreatorDenied(t *testing.T) {
+func TestCanEditAutomation_NonCreatorDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user2", mmmodel.PermissionManageSystem).Return(false)
 
 	f := &model.Automation{CreatedBy: "creator1"}
-	err := CanEditFlow(api, "user2", f)
+	err := CanEditAutomation(api, "user2", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
 	api.AssertExpectations(t)
 }
 
-func TestCanEditFlow_MissingCreatedByDenied(t *testing.T) {
+func TestCanEditAutomation_MissingCreatedByDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
 	f := &model.Automation{}
-	err := CanEditFlow(api, "user1", f)
+	err := CanEditAutomation(api, "user1", f)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
 	api.AssertExpectations(t)
 }
 
-func TestCanEditFlow_NilFlowDenied(t *testing.T) {
+func TestCanEditAutomation_NilFlowDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
-	err := CanEditFlow(api, "user1", nil)
+	err := CanEditAutomation(api, "user1", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "automation creator or a system admin")
 	api.AssertExpectations(t)

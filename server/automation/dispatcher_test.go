@@ -87,7 +87,7 @@ func TestDispatcher_UnknownTriggerType_IsSilent(t *testing.T) {
 	assert.Zero(t, notifier.called)
 }
 
-func TestDispatcher_NoMatchingFlows_IsSilent(t *testing.T) {
+func TestDispatcher_NoMatchingAutomations_IsSilent(t *testing.T) {
 	d, _, enqueuer, notifier, _ := setupDispatcher(t)
 
 	d.Dispatch(&model.Event{
@@ -99,7 +99,7 @@ func TestDispatcher_NoMatchingFlows_IsSilent(t *testing.T) {
 	assert.Zero(t, notifier.called)
 }
 
-func TestDispatcher_EnqueuesOnePerMatchingFlow(t *testing.T) {
+func TestDispatcher_EnqueuesOnePerMatchingAutomation(t *testing.T) {
 	d, store, enqueuer, notifier, api := setupDispatcher(t)
 
 	require.NoError(t, store.Save(&model.Automation{

@@ -333,7 +333,7 @@ func TestWorkerPool_FailedExecution(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestWorkerPool_DeletedFlow(t *testing.T) {
+func TestWorkerPool_DeletedAutomation(t *testing.T) {
 	act := &testAction{}
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 
@@ -740,7 +740,7 @@ func TestWorkerPool_NotifierNotInvokedOnSuccess(t *testing.T) {
 	assert.Empty(t, notifier.snapshot(), "expected no failure notifications on success")
 }
 
-func TestWorkerPool_DisabledFlow(t *testing.T) {
+func TestWorkerPool_DisabledAutomation(t *testing.T) {
 	act := &testAction{}
 	wp, store, automationStore := setupWorkerPool(t, 4, act)
 

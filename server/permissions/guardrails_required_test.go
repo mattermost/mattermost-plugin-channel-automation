@@ -177,7 +177,7 @@ func TestCheckGuardrailsRequired_NoAllowedToolsAllowed(t *testing.T) {
 	api.AssertNotCalled(t, "GetChannel", "ch-pub")
 }
 
-func TestCheckGuardrailsRequired_SendMessageOnlyFlowAllowed(t *testing.T) {
+func TestCheckGuardrailsRequired_SendMessageOnlyAutomationAllowed(t *testing.T) {
 	api := &plugintest.API{}
 
 	f := &model.Automation{

@@ -107,7 +107,7 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 	return nil
 }
 
-// CanEditFlow returns nil when userID is permitted to modify or delete the
+// CanEditAutomation returns nil when userID is permitted to modify or delete the
 // given automation. Editors are restricted to the automation's creator or a system admin.
 //
 // Limiting edits to creator-or-sysadmin is the security boundary that lets
@@ -116,7 +116,7 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 // non-creator editors are sysadmins (already maximally privileged), and the
 // agent always runs with the creator's identity at execute time, so there is
 // no privilege-escalation path through editor-supplied configuration.
-func CanEditFlow(api plugin.API, userID string, f *model.Automation) error {
+func CanEditAutomation(api plugin.API, userID string, f *model.Automation) error {
 	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
 		return nil
 	}
@@ -131,7 +131,7 @@ func CanEditFlow(api plugin.API, userID string, f *model.Automation) error {
 // automation's creator (CreatedBy): the AI agent runs with the creator's identity at
 // execute time, so a guardrail channel the creator cannot read would silently
 // break the automation. Authorization to edit the automation is enforced separately
-// by CanEditFlow. There is no sysadmin shortcut here: sysadmins implicitly
+// by CanEditAutomation. There is no sysadmin shortcut here: sysadmins implicitly
 // satisfy PermissionReadChannel on every channel, so the same uniform
 // per-channel check is correct for everyone.
 func CheckGuardrailChannelPermissions(api plugin.API, userID string, f *model.Automation) error {

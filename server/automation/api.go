@@ -282,7 +282,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	// This is the security boundary that lets the downstream creator-anchored
 	// checks below validate against existing.CreatedBy without enabling
 	// privilege escalation by a non-creator editor.
-	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
+	if err := permissions.CanEditAutomation(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
@@ -388,7 +388,7 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := permissions.CanEditFlow(h.api, userID, existing); err != nil {
+	if err := permissions.CanEditAutomation(h.api, userID, existing); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
