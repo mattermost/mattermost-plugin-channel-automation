@@ -103,8 +103,9 @@ when granting them.
 Mutating tools that act on the user's behalf (create_post, dm, group_message) and the
 automation-management tools (list_automations, get_automation_instructions, create_automation,
 update_automation, delete_automation) are rejected from allowed_tools entirely — guardrails
-do not unlock them. Use a send_message action instead of granting create_post; never include
-the automation-management tools.
+do not unlock them. Use a send_message action instead of granting create_post; there is no
+built-in action for posting DMs or group messages, so configure the trigger to fire in the
+target DM/GM channel and use send_message there. Never include the automation-management tools.
 
 External MCP tools (anything not in the lists above) are unaffected by channel guardrails and
 pass through unchanged. You may freely mix external tools with Mattermost tools in a single
@@ -180,7 +181,7 @@ Action types:
    DYNAMIC DISCOVERY: The AI agent can use its tools at runtime to discover resources (e.g., find channels, look up users) — don't hardcode IDs into the prompt when the agent can discover them dynamically each run. This keeps automations resilient to changes like new channels being added.
    NOTE: "web_search" is NOT a valid tool name in allowed_tools. Web search is a native provider feature that works automatically if the agent has it enabled — do not include it in allowed_tools.
 TEMPLATE SYNTAX: body, channel_id, reply_to_post_id, prompt, and system_prompt support Go text/template with this context.
-For send_message channel_id, always use {{.Trigger.Channel.Id}}.
+For send_message channel_id, use one of: {{.Trigger.Channel.Id}}, {{.Trigger.Team.DefaultChannelId}}, or {{.Trigger.Post.ChannelId}}. Channel-bound triggers (message_posted, schedule, membership_changed) should use {{.Trigger.Channel.Id}}. Team-scoped triggers (channel_created, user_joined_team) have no bound channel — use {{.Trigger.Team.DefaultChannelId}} or an explicit channel ID literal instead.
 - {{.Trigger.Post.Message}}, {{.Trigger.Post.Id}}, {{.Trigger.Post.ChannelId}}
 - {{.Trigger.Channel.Id}}, {{.Trigger.Channel.Name}}, {{.Trigger.Channel.DisplayName}}
 - {{.Trigger.User.Id}}, {{.Trigger.User.Username}}, {{.Trigger.User.FirstName}}, {{.Trigger.User.LastName}}
