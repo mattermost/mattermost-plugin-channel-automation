@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -181,6 +182,25 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 		}
 		if p.Message != "" {
 			user.WriteString("Post Message:\n" + p.Message + "\n")
+		}
+	}
+
+	if trigger.Thread != nil {
+		th := trigger.Thread
+		// Thread metadata (counts, IDs, truncation flag) is trusted system
+		// context — channel-automation generates these values, not users.
+		meta.WriteString("Thread Post Count: " + strconv.Itoa(th.PostCount) + "\n")
+		if th.RootID != "" {
+			meta.WriteString("Thread Root ID: " + th.RootID + "\n")
+		}
+		if th.Truncated {
+			meta.WriteString("Thread Truncated: true (transcript shows the root post plus the most recent " +
+				strconv.Itoa(len(th.Messages)-1) + " replies; older replies were dropped to bound work item size)\n")
+		}
+		// The transcript is user-generated content and must live in the
+		// user_data block where prompt-injection guardrails apply.
+		if transcript := th.TranscriptDisplay(); transcript != "" {
+			user.WriteString("Thread Transcript (oldest first):\n" + transcript + "\n")
 		}
 	}
 
