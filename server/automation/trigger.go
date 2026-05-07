@@ -6,7 +6,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// TriggerService evaluates incoming events against stored flows.
+// TriggerService evaluates incoming events against stored automations.
 type TriggerService struct {
 	store    model.Store
 	registry *Registry
@@ -18,7 +18,7 @@ func NewTriggerService(store model.Store, registry *Registry) *TriggerService {
 }
 
 // FindMatchingAutomations returns the registered handler for the event type along
-// with all enabled flows whose trigger matches the event. The handler is
+// with all enabled automations whose trigger matches the event. The handler is
 // returned so callers can drive the rest of the trigger lifecycle (e.g.
 // BuildTriggerData) without a second registry lookup, which would risk a
 // silent divergence if the registry mutated between calls.
@@ -40,7 +40,7 @@ func (t *TriggerService) FindMatchingAutomations(event *model.Event) (model.Trig
 		return handler, nil, nil
 	}
 
-	var flows []*model.Automation
+	var automations []*model.Automation
 	for _, id := range candidateIDs {
 		f, err := t.store.Get(id)
 		if err != nil {
@@ -55,7 +55,7 @@ func (t *TriggerService) FindMatchingAutomations(event *model.Event) (model.Trig
 		if !handler.Matches(&f.Trigger, event) {
 			continue
 		}
-		flows = append(flows, f)
+		automations = append(automations, f)
 	}
-	return handler, flows, nil
+	return handler, automations, nil
 }

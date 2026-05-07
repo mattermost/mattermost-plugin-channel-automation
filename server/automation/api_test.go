@@ -223,9 +223,9 @@ func TestAPI_ListAutomations(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-	var flows []*model.Automation
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Len(t, flows, 2)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Len(t, automations, 2)
 }
 
 func TestAPI_ListAutomations_Empty(t *testing.T) {
@@ -239,9 +239,9 @@ func TestAPI_ListAutomations_Empty(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Automation
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Empty(t, flows)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Empty(t, automations)
 }
 
 func TestAPI_UpdateAutomation(t *testing.T) {
@@ -920,10 +920,10 @@ func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T)
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Automation
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	require.Len(t, flows, 1)
-	assert.Equal(t, "f1", flows[0].ID)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	require.Len(t, automations, 1)
+	assert.Equal(t, "f1", automations[0].ID)
 }
 
 func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
@@ -941,10 +941,10 @@ func TestAPI_ListAutomations_FilterByChannel(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Automation
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	require.Len(t, flows, 2)
-	ids := []string{flows[0].ID, flows[1].ID}
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	require.Len(t, automations, 2)
+	ids := []string{automations[0].ID, automations[1].ID}
 	assert.ElementsMatch(t, []string{"f1", "f3"}, ids)
 }
 
@@ -961,9 +961,9 @@ func TestAPI_ListAutomations_FilterByChannel_NoMatch(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var flows []*model.Automation
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&flows))
-	assert.Empty(t, flows)
+	var automations []*model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&automations))
+	assert.Empty(t, automations)
 }
 
 func TestAPI_CreateAutomation_ChannelLimitReached(t *testing.T) {
@@ -1046,7 +1046,7 @@ func TestAPI_UpdateAutomation_SameChannelSelfExclusion(t *testing.T) {
 func TestAPI_UpdateAutomation_MoveToFullChannel(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 1)
 
-	// ch1 has an automation, ch2 has a flow.
+	// ch1 has an automation, ch2 has an automation.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:        "f1",
 		CreatedBy: "user1",
@@ -1078,7 +1078,7 @@ func TestAPI_UpdateAutomation_MoveToFullChannel(t *testing.T) {
 func TestAPI_CreateAutomation_UnlimitedAllowsAny(t *testing.T) {
 	router, store := setupAPIWithLimit(t, 0)
 
-	// Even with many flows, limit=0 means unlimited.
+	// Even with many automations, limit=0 means unlimited.
 	require.NoError(t, store.Save(&model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
@@ -1114,7 +1114,7 @@ func TestAPI_CreateAutomation_ChannelCreatedBypassesLimit(t *testing.T) {
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
-	// channel_created flows have no trigger channel, so they bypass the limit.
+	// channel_created automations have no trigger channel, so they bypass the limit.
 	body := `{
 		"name": "Team Flow",
 		"enabled": true,
@@ -1354,7 +1354,7 @@ const aiAgentFlowBody = `{
 }`
 
 // TestAPI_CreateAutomation_AIPromptAgent_NoAllowedTools_ChecksBridge is the core
-// regression guard: a flow with provider_type "agent" and empty allowed_tools
+// regression guard: an automation with provider_type "agent" and empty allowed_tools
 // must trigger a bridge call to verify the creator has access to the agent.
 func TestAPI_CreateAutomation_AIPromptAgent_NoAllowedTools_ChecksBridge(t *testing.T) {
 	bridge := &stubAgentToolsLister{tools: []bridgeclient.BridgeToolInfo{}}
@@ -1388,7 +1388,7 @@ func TestAPI_CreateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 }
 
 // TestAPI_CreateAutomation_AIPromptAgent_BridgeUnavailable rejects when the bridge
-// is nil and the flow has an ai_prompt agent action.
+// is nil and the automation has an ai_prompt agent action.
 func TestAPI_CreateAutomation_AIPromptAgent_BridgeUnavailable(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
@@ -1479,11 +1479,11 @@ func TestAPI_CreateAutomation_AIPromptAgent_PermissionFailureSkipsBridge(t *test
 
 	require.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "team admin")
-	assert.Empty(t, bridge.calls, "bridge must not be called when the user cannot manage the flow")
+	assert.Empty(t, bridge.calls, "bridge must not be called when the user cannot manage the automation")
 }
 
 // TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied mirrors the create path for
-// the PUT handler. The check uses the existing flow's CreatedBy (matching
+// the PUT handler. The check uses the existing automation's CreatedBy (matching
 // the runtime model where the bridge ACL is checked against created_by).
 func TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	bridge := &stubAgentToolsLister{err: fmt.Errorf("request failed with status 403: permission denied")}

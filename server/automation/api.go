@@ -88,34 +88,34 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var flows []*model.Automation
+	var automations []*model.Automation
 	var err error
 	if channelID := r.URL.Query().Get("channel_id"); channelID != "" {
-		flows, err = h.store.ListByTriggerChannel(channelID)
+		automations, err = h.store.ListByTriggerChannel(channelID)
 	} else {
-		flows, err = h.store.List()
+		automations, err = h.store.List()
 	}
 	if err != nil {
-		h.api.LogError("Failed to list flows", "user_id", userID, "error", err.Error())
-		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list flows", err.Error())
+		h.api.LogError("Failed to list automations", "user_id", userID, "error", err.Error())
+		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to list automations", err.Error())
 		return
 	}
 
-	// Filter flows to only those the user has permission to view.
+	// Filter automations to only those the user has permission to view.
 	isAdmin := h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem)
 	if !isAdmin {
-		visible := make([]*model.Automation, 0, len(flows))
-		for _, f := range flows {
-			if permissions.CheckAutomationPermissions(h.api, userID, f) == nil {
-				visible = append(visible, f)
+		visible := make([]*model.Automation, 0, len(automations))
+		for _, a := range automations {
+			if permissions.CheckAutomationPermissions(h.api, userID, a) == nil {
+				visible = append(visible, a)
 			}
 		}
-		flows = visible
+		automations = visible
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(flows); err != nil {
-		h.api.LogError("Failed to encode flows", "error", err.Error())
+	if err := json.NewEncoder(w).Encode(automations); err != nil {
+		h.api.LogError("Failed to encode automations", "error", err.Error())
 	}
 }
 
@@ -173,7 +173,7 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Bridge-backed agent access verification runs after the local permission
-	// checks so we never call the bridge for flows the user cannot manage.
+	// checks so we never call the bridge for automations the user cannot manage.
 	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
 		code := http.StatusBadRequest
 		if errors.Is(err, hooks.ErrToolDiscovery) {
@@ -329,7 +329,7 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	// Bridge-backed agent access verification uses the original creator's
 	// identity (matches the runtime model where the bridge ACL is checked
 	// against created_by, not the editor) and runs after the local permission
-	// checks so we never call the bridge for inadmissible flows.
+	// checks so we never call the bridge for inadmissible automations.
 	if err := hooks.ValidateAllowedTools(&f, f.CreatedBy, h.bridge); err != nil {
 		code := http.StatusBadRequest
 		if errors.Is(err, hooks.ErrToolDiscovery) {

@@ -30,7 +30,7 @@ type AgentToolsLister interface {
 //
 // The bridge is queried at most once per distinct provider_id within an automation,
 // so the access check and tool-name validation share a single call.
-// Returns nil for flows with no ai_prompt agent actions.
+// Returns nil for automations with no ai_prompt agent actions.
 func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsLister) error {
 	if f == nil {
 		return nil

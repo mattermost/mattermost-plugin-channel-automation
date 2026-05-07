@@ -52,7 +52,7 @@ func (t *ScheduleTrigger) Validate(trigger *model.Trigger, existing *model.Trigg
 	return nil
 }
 
-// CandidateAutomationIDs returns nil — schedule flows are not resolved via the
+// CandidateAutomationIDs returns nil — schedule automations are not resolved via the
 // event-matching path.
 func (t *ScheduleTrigger) CandidateAutomationIDs(_ model.Store, _ *model.Event) ([]string, error) {
 	return nil, nil

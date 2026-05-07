@@ -56,7 +56,7 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 	if f.Trigger.UserJoinedTeam != nil {
 		teamIDs := model.CollectTeamIDs(f)
 		if len(teamIDs) == 0 {
-			return fmt.Errorf("system admin permission is required for flows without explicit team references")
+			return fmt.Errorf("system admin permission is required for automations without explicit team references")
 		}
 		for _, teamID := range teamIDs {
 			if _, appErr := api.GetTeam(teamID); appErr != nil {
@@ -74,7 +74,7 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 
 	channelIDs := model.CollectChannelIDs(f)
 	if len(channelIDs) == 0 {
-		return fmt.Errorf("system admin permission is required for flows without explicit channel references")
+		return fmt.Errorf("system admin permission is required for automations without explicit channel references")
 	}
 	for _, chID := range channelIDs {
 		member, appErr := api.GetChannelMember(chID, userID)

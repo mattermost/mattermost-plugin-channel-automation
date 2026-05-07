@@ -29,38 +29,40 @@ var (
 // hook handlers require the Mattermost-User-ID header to match it.
 const creatorUserID = "user1"
 
-// mockFlowStore implements model.Store for hook tests.
-type mockFlowStore struct {
-	flows map[string]*model.Automation
+// mockAutomationStore implements model.Store for hook tests.
+type mockAutomationStore struct {
+	automations map[string]*model.Automation
 }
 
-func (m *mockFlowStore) Get(id string) (*model.Automation, error) { return m.flows[id], nil }
-func (m *mockFlowStore) List() ([]*model.Automation, error)       { return nil, nil }
+func (m *mockAutomationStore) Get(id string) (*model.Automation, error) {
+	return m.automations[id], nil
+}
+func (m *mockAutomationStore) List() ([]*model.Automation, error) { return nil, nil }
 
-func (m *mockFlowStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
+func (m *mockAutomationStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
-func (m *mockFlowStore) Save(_ *model.Automation) error              { return nil }
-func (m *mockFlowStore) Delete(_ string) error                       { return nil }
-func (m *mockFlowStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
+func (m *mockAutomationStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
+func (m *mockAutomationStore) Save(_ *model.Automation) error              { return nil }
+func (m *mockAutomationStore) Delete(_ string) error                       { return nil }
+func (m *mockAutomationStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
 
-func (m *mockFlowStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) GetChannelCreatedAutomationIDs() ([]string, error) { return nil, nil }
+func (m *mockAutomationStore) GetChannelCreatedAutomationIDs() ([]string, error) { return nil, nil }
 
-func (m *mockFlowStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func testRouter(t *testing.T, store *mockFlowStore, api *plugintest.API) *mux.Router {
+func testRouter(t *testing.T, store *mockAutomationStore, api *plugintest.API) *mux.Router {
 	t.Helper()
 	// Hook handlers emit a debug log at entry that includes per-call key/value
 	// pairs for tool_name and args (11 total args).
@@ -110,7 +112,7 @@ func postBeforeAs(t *testing.T, r *mux.Router, automationID, actionID, callerUse
 	return rec.Code, resp
 }
 
-func guardrailFlow() *model.Automation {
+func guardrailAutomation() *model.Automation {
 	return &model.Automation{
 		ID:        "flow1",
 		CreatedBy: creatorUserID,
@@ -132,7 +134,7 @@ func guardrailFlow() *model.Automation {
 }
 
 func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -148,7 +150,7 @@ func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_SearchPostsChannelNotAllowed(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -165,7 +167,7 @@ func TestHooks_Before_SearchPostsChannelNotAllowed(t *testing.T) {
 }
 
 func TestHooks_Before_SearchPostsOK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -179,7 +181,7 @@ func TestHooks_Before_SearchPostsOK(t *testing.T) {
 }
 
 func TestHooks_Before_ReadChannelOK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -193,7 +195,7 @@ func TestHooks_Before_ReadChannelOK(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -207,7 +209,7 @@ func TestHooks_Before_GetChannelMembersDenied(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -222,7 +224,7 @@ func TestHooks_Before_AddUserToChannel_RequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -237,7 +239,7 @@ func TestHooks_Before_AddUserToChannel_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -251,7 +253,7 @@ func TestHooks_Before_AddUserToChannel_OK(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -266,7 +268,7 @@ func TestHooks_Before_CreateChannel_RequiresTeamID(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -283,7 +285,7 @@ func TestHooks_Before_CreateChannel_RejectsForeignTeam(t *testing.T) {
 }
 
 func TestHooks_Before_CreateChannel_OK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -297,7 +299,7 @@ func TestHooks_Before_CreateChannel_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_RequiresChannelID(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -312,7 +314,7 @@ func TestHooks_Before_GetChannelInfo_RequiresChannelID(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_RejectsForeignChannel(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -327,7 +329,7 @@ func TestHooks_Before_GetChannelInfo_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_GetChannelInfo_OK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -341,7 +343,7 @@ func TestHooks_Before_GetChannelInfo_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetUserChannels_RejectedWhenGuardrailsActive(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -355,7 +357,7 @@ func TestHooks_Before_GetUserChannels_RejectedWhenGuardrailsActive(t *testing.T)
 }
 
 func TestHooks_Before_ReadPost_RequiresPostID(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -370,7 +372,7 @@ func TestHooks_Before_ReadPost_RequiresPostID(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_RejectsForeignChannel(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return(&mmmodel.Post{Id: pid, ChannelId: chDeny}, (*mmmodel.AppError)(nil))
@@ -387,7 +389,7 @@ func TestHooks_Before_ReadPost_RejectsForeignChannel(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_OK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return(&mmmodel.Post{Id: pid, ChannelId: chAllow}, (*mmmodel.AppError)(nil))
@@ -403,7 +405,7 @@ func TestHooks_Before_ReadPost_OK(t *testing.T) {
 }
 
 func TestHooks_Before_ReadPost_GetPostError(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	pid := strings.Repeat("p", 26)
 	api.On("GetPost", pid).Return((*mmmodel.Post)(nil), &mmmodel.AppError{Message: "not found"})
@@ -419,7 +421,7 @@ func TestHooks_Before_ReadPost_GetPostError(t *testing.T) {
 }
 
 func TestHooks_Before_MattermostToolNotSupportedByGuardrails(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -434,7 +436,7 @@ func TestHooks_Before_MattermostToolNotSupportedByGuardrails(t *testing.T) {
 }
 
 func TestHooks_Before_UnrecognizedToolRejected(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -449,7 +451,7 @@ func TestHooks_Before_UnrecognizedToolRejected(t *testing.T) {
 }
 
 func TestHooks_GuardrailsNotFound_MissingFlow(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -464,7 +466,7 @@ func TestHooks_GuardrailsNotFound_MissingFlow(t *testing.T) {
 }
 
 func TestHooks_GuardrailsNotFound_WrongAction(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -487,7 +489,7 @@ func TestHooks_GuardrailsNotFound_NilGuardrailsOnAction(t *testing.T) {
 			}},
 		},
 	}
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -525,7 +527,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 			},
 		},
 	}
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
 	api := &plugintest.API{}
 	api.On("GetChannel", ids[0]).Return(&mmmodel.Channel{Id: ids[0], TeamId: teamAutomation}, (*mmmodel.AppError)(nil))
 	r := testRouter(t, store, api)
@@ -587,7 +589,7 @@ func automationUserJoinedTeam(teamID string) *model.Automation {
 
 func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": automationUserJoinedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": automationUserJoinedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -602,7 +604,7 @@ func TestHooks_Before_GetTeamInfo_UserJoinedTeam_OK(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -618,7 +620,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_OK(t *testing.T) {
 func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 	team1 := mmmodel.NewId()
 	team2 := mmmodel.NewId()
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -635,7 +637,7 @@ func TestHooks_Before_GetTeamInfo_ChannelCreated_WrongTeam(t *testing.T) {
 
 func TestHooks_Before_GetTeamInfo_RequiresTeamID(t *testing.T) {
 	team1 := mmmodel.NewId()
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": flowChannelCreatedTeam(team1)}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -653,13 +655,13 @@ func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 	// Guardrail spans two teams: chAllow in teamAutomation and chOther in teamOther.
 	chOther := mmmodel.NewId()
 	teamOther := mmmodel.NewId()
-	f := guardrailFlow()
+	f := guardrailAutomation()
 	f.Actions[0].AIPrompt.Guardrails = &model.Guardrails{Channels: []model.GuardrailChannel{
 		{ChannelID: chAllow, TeamID: teamAutomation},
 		{ChannelID: chOther, TeamID: teamOther},
 	}}
 	f.Actions[0].AIPrompt.AllowedTools = []string{"get_team_members"}
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -673,7 +675,7 @@ func TestHooks_Before_GetTeamMembers_MultiTeamAllowed(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamMembers_MessagePosted_OK(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -687,7 +689,7 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_OK(t *testing.T) {
 }
 
 func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -702,7 +704,7 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
 }
 
 func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -716,7 +718,7 @@ func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
 }
 
 func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": guardrailFlow()}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
@@ -730,9 +732,9 @@ func TestHooks_Before_RejectsMissingCallerHeader(t *testing.T) {
 }
 
 func TestHooks_RejectsFlowMissingCreator(t *testing.T) {
-	f := guardrailFlow()
+	f := guardrailAutomation()
 	f.CreatedBy = ""
-	store := &mockFlowStore{flows: map[string]*model.Automation{"flow1": f}}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"flow1": f}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 

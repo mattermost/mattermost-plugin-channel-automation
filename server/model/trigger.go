@@ -24,7 +24,7 @@ type TriggerAPI interface {
 }
 
 // TriggerHandler owns the lifecycle of a single trigger type: config
-// validation, matching events, resolving candidate flows, and building the
+// validation, matching events, resolving candidate automations, and building the
 // TriggerData passed to automation execution.
 type TriggerHandler interface {
 	// Type returns the trigger type string (e.g. "message_posted").

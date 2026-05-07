@@ -7,7 +7,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// Dispatcher resolves matching flows for an event, builds the trigger data
+// Dispatcher resolves matching automations for an event, builds the trigger data
 // once, and enqueues a work item per matched automation. It is the single path
 // from plugin hooks to the work queue for event-driven triggers.
 type Dispatcher struct {
@@ -27,7 +27,7 @@ func NewDispatcher(api plugin.API, triggerService *TriggerService, enqueuer Work
 	}
 }
 
-// Dispatch finds matching flows for the event, builds TriggerData via the
+// Dispatch finds matching automations for the event, builds TriggerData via the
 // registered handler, and enqueues a work item per matched automation. Logs and
 // returns silently on errors. Avoids blocking the Mattermost server.
 func (d *Dispatcher) Dispatch(event *model.Event) {
@@ -36,12 +36,12 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 		return
 	}
 
-	handler, flows, err := d.triggerService.FindMatchingAutomations(event)
+	handler, automations, err := d.triggerService.FindMatchingAutomations(event)
 	if err != nil {
-		d.api.LogError("Failed to find matching flows", "type", event.Type, "err", err.Error())
+		d.api.LogError("Failed to find matching automations", "type", event.Type, "err", err.Error())
 		return
 	}
-	if len(flows) == 0 {
+	if len(automations) == 0 {
 		return
 	}
 
@@ -52,16 +52,16 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 	}
 
 	failures := 0
-	for _, f := range flows {
+	for _, a := range automations {
 		item := &model.WorkItem{
 			ID:             mmmodel.NewId(),
-			AutomationID:   f.ID,
-			AutomationName: f.Name,
+			AutomationID:   a.ID,
+			AutomationName: a.Name,
 			TriggerData:    triggerData,
 		}
 		if err := d.enqueuer.Enqueue(item); err != nil {
 			d.api.LogError("Failed to enqueue work item",
-				"automation_id", f.ID,
+				"automation_id", a.ID,
 				"type", event.Type,
 				"err", err.Error(),
 			)
@@ -70,7 +70,7 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 		}
 		d.api.LogDebug("Work item enqueued",
 			"work_item_id", item.ID,
-			"automation_id", f.ID,
+			"automation_id", a.ID,
 			"type", event.Type,
 		)
 	}
@@ -78,7 +78,7 @@ func (d *Dispatcher) Dispatch(event *model.Event) {
 	if failures > 0 {
 		d.api.LogError("Some work items failed to enqueue",
 			"type", event.Type,
-			"total", len(flows),
+			"total", len(automations),
 			"failed", failures,
 		)
 	}
