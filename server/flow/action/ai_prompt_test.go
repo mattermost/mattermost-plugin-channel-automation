@@ -53,7 +53,7 @@ func (m *mockBridgeClient) GetAgentTools(_, _ string) ([]bridgeclient.BridgeTool
 
 func newTestAPI() *plugintest.API {
 	api := &plugintest.API{}
-	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	api.On("LogDebug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 	return api
 }
@@ -705,6 +705,293 @@ func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 
 	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
 	assert.Equal(t, "Handle this incident", bc.lastReq.Posts[2].Message)
+}
+
+func TestAIPromptAction_Execute_ThreadContext_InjectsTranscriptAndMetadata(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply to the thread",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	// Thread is populated by the message_posted trigger handler when the
+	// firing post is itself a reply; the action just consumes it.
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "replyp", ThreadId: "rootp", ChannelId: "ch1", Message: "world"},
+			Thread: &model.SafeThread{
+				RootID:    "rootp",
+				PostCount: 2,
+				Messages: []model.SafePost{
+					{Id: "rootp", User: model.SafeUser{Username: "alice", FirstName: "Alice", LastName: "A."}, Message: "hello", CreateAt: 100},
+					{Id: "replyp", User: model.SafeUser{Username: "bob", FirstName: "Bob", LastName: "B."}, Message: "world", CreateAt: 200},
+				},
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+
+	// Posts: [trigger metadata (system), <user_data> with transcript (user), final prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 3)
+
+	triggerMeta := bc.lastReq.Posts[0]
+	assert.Equal(t, "system", triggerMeta.Role)
+	assert.Contains(t, triggerMeta.Message, "Thread Post Count: 2")
+	assert.Contains(t, triggerMeta.Message, "Thread Root ID: rootp")
+	// User-generated content must NOT leak into the system block.
+	assert.NotContains(t, triggerMeta.Message, "hello")
+	assert.NotContains(t, triggerMeta.Message, "world")
+
+	userContent := bc.lastReq.Posts[1]
+	assert.Equal(t, "user", userContent.Role)
+	assert.Contains(t, userContent.Message, "<user_data>")
+	assert.Contains(t, userContent.Message, "Thread Transcript (oldest first):")
+	assert.Contains(t, userContent.Message, "@alice (Alice A.): hello")
+	assert.Contains(t, userContent.Message, "@bob (Bob B.): world")
+
+	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
+	assert.Equal(t, "Reply to the thread", bc.lastReq.Posts[2].Message)
+}
+
+func TestAIPromptAction_Execute_ThreadContext_DisclosesTruncationToModel(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Reply to the thread",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	// Synthetic truncated thread: original count higher than len(Messages),
+	// Truncated=true. The trigger metadata system block must surface this
+	// so the model knows it is not seeing the full conversation.
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "replyp", ThreadId: "rootp", ChannelId: "ch1", Message: "x"},
+			Thread: &model.SafeThread{
+				RootID:    "rootp",
+				PostCount: 250,
+				Truncated: true,
+				Messages: []model.SafePost{
+					{Id: "rootp", User: model.SafeUser{Username: "alice"}, Message: "topic", CreateAt: 0},
+					{Id: "replyp", User: model.SafeUser{Username: "bob"}, Message: "latest", CreateAt: 250},
+				},
+			},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+
+	triggerMeta := bc.lastReq.Posts[0]
+	assert.Contains(t, triggerMeta.Message, "Thread Post Count: 250")
+	assert.Contains(t, triggerMeta.Message, "Thread Truncated: true")
+	assert.Contains(t, triggerMeta.Message, "most recent 1 replies")
+}
+
+func TestAIPromptAction_Execute_ThreadContext_NotInjectedWhenAbsent(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Greet the post author",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	// Root-post fire: trigger handler did not attach a Thread.
+	ctx := &model.FlowContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "rootp", ThreadId: "rootp", ChannelId: "ch1", Message: "hi"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	// Posts: [trigger metadata (system), <user_data> (user), final prompt (user)]
+	require.Len(t, bc.lastReq.Posts, 3)
+	assert.NotContains(t, bc.lastReq.Posts[0].Message, "Thread Post Count")
+	assert.NotContains(t, bc.lastReq.Posts[1].Message, "Thread Transcript")
+}
+
+func TestAIPromptAction_Execute_UserIDFromTrigger(t *testing.T) {
+	tests := []struct {
+		name      string
+		createdBy string
+	}{
+		{name: "both set, trigger wins", createdBy: "flow-creator-id"},
+		{name: "empty CreatedBy, trigger still wins", createdBy: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newTestAPI()
+			bc := &mockBridgeClient{agentResponse: "ok"}
+			a := NewAIPromptAction(api, bc)
+
+			act := &model.Action{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "hello",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
+				},
+			}
+			ctx := &model.FlowContext{
+				CreatedBy: tc.createdBy,
+				Trigger: model.TriggerData{
+					User: &model.SafeUser{Id: "triggering-user-id", Username: "bob"},
+				},
+				Steps: make(map[string]model.StepOutput),
+			}
+
+			_, err := a.Execute(act, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, "triggering-user-id", bc.lastReq.UserID)
+		})
+	}
+}
+
+func TestAIPromptAction_Execute_UserIDFallbackToCreatedBy(t *testing.T) {
+	tests := []struct {
+		name    string
+		trigger model.TriggerData
+	}{
+		{
+			name:    "no trigger user (e.g. schedule)",
+			trigger: model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
+		},
+		{
+			name:    "trigger user with empty id",
+			trigger: model.TriggerData{User: &model.SafeUser{Username: "anon"}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newTestAPI()
+			bc := &mockBridgeClient{agentResponse: "ok"}
+			a := NewAIPromptAction(api, bc)
+
+			act := &model.Action{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "hello",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
+				},
+			}
+			ctx := &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   tc.trigger,
+				Steps:     make(map[string]model.StepOutput),
+			}
+
+			_, err := a.Execute(act, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, "flow-creator-id", bc.lastReq.UserID)
+		})
+	}
+}
+
+func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
+	tests := []struct {
+		name      string
+		requestAs string
+		ctx       *model.FlowContext
+		want      string
+	}{
+		{
+			name:      "creator forces flow creator over trigger user",
+			requestAs: "creator",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "creator with no trigger user still uses creator",
+			requestAs: "creator",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "triggerer prefers trigger user",
+			requestAs: "triggerer",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "triggering-user-id",
+		},
+		{
+			name:      "triggerer falls back to creator when no trigger user",
+			requestAs: "triggerer",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{Schedule: &model.ScheduleInfo{Interval: "1h"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "flow-creator-id",
+		},
+		{
+			name:      "empty defaults to triggerer behavior",
+			requestAs: "",
+			ctx: &model.FlowContext{
+				CreatedBy: "flow-creator-id",
+				Trigger:   model.TriggerData{User: &model.SafeUser{Id: "triggering-user-id"}},
+				Steps:     make(map[string]model.StepOutput),
+			},
+			want: "triggering-user-id",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newTestAPI()
+			bc := &mockBridgeClient{agentResponse: "ok"}
+			a := NewAIPromptAction(api, bc)
+
+			act := &model.Action{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "hello",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
+					RequestAs:    tc.requestAs,
+				},
+			}
+
+			_, err := a.Execute(act, tc.ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, bc.lastReq.UserID)
+		})
+	}
 }
 
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {

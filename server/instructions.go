@@ -34,8 +34,13 @@ users rely on this structure to understand risk before they confirm):
 2. AI TOOLS: Which tools the AI agent will have access to and what each one can do.
    - Without tools, the agent can only generate text from its built-in knowledge — it cannot
      read any Mattermost data or take any actions.
-   - With tools, the agent inherits YOUR permissions — it can access anything you can access.
-     Explain what each granted tool does so the user understands the access they are giving.
+   - With tools, the agent inherits the permissions of the user the request is attributed to
+     (controlled by request_as — see below). By default the request is attributed to the user
+     who triggered the automation ("triggerer") and the agent acts with that user's permissions;
+     when request_as is "creator", the agent acts with the automation creator's permissions
+     regardless of who triggered it. State explicitly which identity the tools will run as so
+     the user understands the access they are granting (especially when request_as is "creator"
+     in a shared channel — every triggerer will exercise the creator's permissions).
 3. GUARDRAILS: Dedicated step — do not fold this into item 2. Reference the "MATTERMOST MCP CHANNEL
    GUARDRAILS" list below. For each ai_prompt step that uses allowed_tools AND includes at least
    one guardrail-constrained Mattermost tool name (channel- or team-scoped), state the exact
@@ -143,11 +148,11 @@ Action types:
    {"id": "post", "send_message": {"channel_id": "<ch>", "body": "Hello!", "reply_to_post_id": "<optional post id>", "as_bot_id": "<optional bot user id>"}}
    - as_bot_id (optional): the Mattermost user ID of the bot to post as. Must be a bot account. If omitted, the message is posted as the default automation bot. Use list_agents to find bot IDs. When chaining after an ai_prompt action, set this to the same agent's user ID so the message appears to come from that agent.
 2. "ai_prompt": Runs an AI agent with a prompt and optional tools. With tools, the agent can perform actions (e.g. modify channels, manage members, search) — not just generate text. Does NOT post a message — chain a send_message action after to post the response.
-   {"id": "ask", "ai_prompt": {"prompt": "...", "provider_type": "agent", "provider_id": "<agent-user-id>", "system_prompt": "...", "allowed_tools": ["<tool name from discovery>", "..."], "guardrails": {"channel_ids": ["<26-char channel id>", "..."]}}}
+   {"id": "ask", "ai_prompt": {"prompt": "...", "provider_type": "agent", "provider_id": "<agent-user-id>", "system_prompt": "...", "allowed_tools": ["<tool name from discovery>", "..."], "guardrails": {"channel_ids": ["<26-char channel id>", "..."]}, "request_as": "triggerer"}}
    - provider_type: "agent" (a bot) or "service" (a raw LLM service)
    - provider_id: the agent's Mattermost user ID (26-char ID). Call list_agents to discover available agents and their IDs.
    - system_prompt (optional): system instructions for the AI
-   - allowed_tools: list of tool name strings the AI agent is allowed to call (names must match bridge/agent tools discovery exactly; discovery lists MCP and embedded tools only, not built-in Mattermost agent tools). WITHOUT this, the agent has NO tool access and can only generate text from its built-in knowledge — it cannot read any Mattermost data or take any actions. With tools, the agent inherits the creating user's permissions and can access anything they can access. IMPORTANT: Only include tools the user has explicitly agreed to. Always explain what each tool does in your summary. Prefer the minimum set of tools needed.
+   - allowed_tools: list of tool name strings the AI agent is allowed to call (names must match bridge/agent tools discovery exactly; discovery lists MCP and embedded tools only, not built-in Mattermost agent tools). WITHOUT this, the agent has NO tool access and can only generate text from its built-in knowledge — it cannot read any Mattermost data or take any actions. With tools, the agent inherits the permissions of the user the request is attributed to via request_as (default "triggerer" — the user who triggered the run; "creator" pins it to the automation creator). IMPORTANT: Only include tools the user has explicitly agreed to. Always explain what each tool does in your summary. Prefer the minimum set of tools needed.
    - guardrails (optional): {"channel_ids": ["<26-char channel id>", "..."]}. When channel_ids is
      non-empty AND allowed_tools is set, hooks constrain the built-in Mattermost MCP tools listed
      in the "MATTERMOST MCP CHANNEL GUARDRAILS" section below (channel-scoped tools like
@@ -160,6 +165,17 @@ Action types:
      REQUIRED (server-enforced 403 on save) whenever allowed_tools is non-empty AND the trigger
      context is sensitive: public channels, private channels with >1 member, GMs, DMs with a
      non-bot user, or team-scoped triggers (channel_created, user_joined_team).
+   - request_as (optional): selects which user the AI completion request — and therefore any
+     tool calls made by the agent — is attributed to. Bounded enum, no arbitrary user IDs:
+       - "triggerer" (default, also used when omitted): the user who triggered the automation
+         (e.g. the post author for message_posted, the joiner for membership_changed); falls
+         back to the automation creator when the trigger has no associated user (schedule and
+         channel_created triggers always attribute to the creator).
+       - "creator": always the automation creator, regardless of who triggered the run.
+     The agent runs with the resolved user's permissions, so picking "creator" in a shared
+     channel lets every triggerer exercise the creator's access — only choose "creator" when
+     the automation needs to act with the creator's elevated permissions and the user
+     understands that. Any other value is rejected at create/update time.
    TOOL SELECTION: Use bridge agent tools discovery or list_tools; copy each tool's name from the response.
    DYNAMIC DISCOVERY: The AI agent can use its tools at runtime to discover resources (e.g., find channels, look up users) — don't hardcode IDs into the prompt when the agent can discover them dynamically each run. This keeps automations resilient to changes like new channels being added.
    NOTE: "web_search" is NOT a valid tool name in allowed_tools. Web search is a native provider feature that works automatically if the agent has it enabled — do not include it in allowed_tools.

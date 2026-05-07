@@ -2,6 +2,7 @@ package action
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,21 +80,30 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.FlowContext) (
 	}
 	posts = append(posts, bridgeclient.Post{Role: "user", Message: rendered})
 
-	a.api.LogDebug("AI prompt action: rendered prompt",
-		"action_id", action.ID,
-		"provider_type", cfg.ProviderType,
-		"provider_id", cfg.ProviderID,
-		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
-	)
-
 	var channelID string
 	if ctx.Trigger.Channel != nil {
 		channelID = ctx.Trigger.Channel.Id
 	}
 
+	userID := ctx.CreatedBy
+	userIDSource := model.AIPromptRequestAsCreator
+	if cfg.RequestAs != model.AIPromptRequestAsCreator && ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
+		userID = ctx.Trigger.User.Id
+		userIDSource = model.AIPromptRequestAsTriggerer
+	}
+
+	a.api.LogDebug("AI prompt action: rendered prompt",
+		"action_id", action.ID,
+		"provider_type", cfg.ProviderType,
+		"provider_id", cfg.ProviderID,
+		"rendered_prompt_length", fmt.Sprintf("%d", len(rendered)),
+		"user_id", userID,
+		"user_id_source", userIDSource,
+	)
+
 	req := bridgeclient.CompletionRequest{
 		Posts:     posts,
-		UserID:    ctx.CreatedBy,
+		UserID:    userID,
 		ChannelID: channelID,
 	}
 
@@ -172,6 +182,25 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 		}
 		if p.Message != "" {
 			user.WriteString("Post Message:\n" + p.Message + "\n")
+		}
+	}
+
+	if trigger.Thread != nil {
+		th := trigger.Thread
+		// Thread metadata (counts, IDs, truncation flag) is trusted system
+		// context — channel-automation generates these values, not users.
+		meta.WriteString("Thread Post Count: " + strconv.Itoa(th.PostCount) + "\n")
+		if th.RootID != "" {
+			meta.WriteString("Thread Root ID: " + th.RootID + "\n")
+		}
+		if th.Truncated {
+			meta.WriteString("Thread Truncated: true (transcript shows the root post plus the most recent " +
+				strconv.Itoa(len(th.Messages)-1) + " replies; older replies were dropped to bound work item size)\n")
+		}
+		// The transcript is user-generated content and must live in the
+		// user_data block where prompt-injection guardrails apply.
+		if transcript := th.TranscriptDisplay(); transcript != "" {
+			user.WriteString("Thread Transcript (oldest first):\n" + transcript + "\n")
 		}
 	}
 

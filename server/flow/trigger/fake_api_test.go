@@ -22,6 +22,8 @@ type fakeTriggerAPI struct {
 	teamErrors      map[string]*mmmodel.AppError
 	channelByName   map[string]*mmmodel.Channel
 	channelByNameEr map[string]*mmmodel.AppError
+	postThreads     map[string]*mmmodel.PostList
+	postThreadErrs  map[string]*mmmodel.AppError
 
 	warnCalls []string
 }
@@ -36,6 +38,8 @@ func newFakeTriggerAPI() *fakeTriggerAPI {
 		teamErrors:      map[string]*mmmodel.AppError{},
 		channelByName:   map[string]*mmmodel.Channel{},
 		channelByNameEr: map[string]*mmmodel.AppError{},
+		postThreads:     map[string]*mmmodel.PostList{},
+		postThreadErrs:  map[string]*mmmodel.AppError{},
 	}
 }
 
@@ -78,6 +82,16 @@ func (f *fakeTriggerAPI) GetTeam(id string) (*mmmodel.Team, *mmmodel.AppError) {
 		return t, nil
 	}
 	return nil, mmmodel.NewAppError("fake", "not_found", nil, fmt.Sprintf("team %s not registered in fake", id), http.StatusInternalServerError)
+}
+
+func (f *fakeTriggerAPI) GetPostThread(postID string) (*mmmodel.PostList, *mmmodel.AppError) {
+	if err, ok := f.postThreadErrs[postID]; ok {
+		return nil, err
+	}
+	if pl, ok := f.postThreads[postID]; ok {
+		return pl, nil
+	}
+	return nil, mmmodel.NewAppError("fake", "not_found", nil, fmt.Sprintf("post thread %s not registered in fake", postID), http.StatusInternalServerError)
 }
 
 func (f *fakeTriggerAPI) LogWarn(msg string, _ ...any) {
