@@ -10,7 +10,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// CheckGuardrailsRequired rejects flows whose ai_prompt actions have
+// CheckGuardrailsRequired rejects automations whose ai_prompt actions have
 // allowed_tools but no guardrails when the trigger context is "sensitive":
 //
 //   - Team-scoped triggers (channel_created, user_joined_team) — the channel
@@ -30,8 +30,8 @@ import (
 //
 // This check intentionally runs after the standard authorization checks so it
 // cannot be used to probe channel types without already being authorized to
-// create flows referencing them.
-func CheckGuardrailsRequired(api plugin.API, f *model.Flow) error {
+// create automations referencing them.
+func CheckGuardrailsRequired(api plugin.API, f *model.Automation) error {
 	actionIdx, needs := firstAIPromptNeedingGuardrails(f)
 	if !needs {
 		return nil
@@ -41,7 +41,7 @@ func CheckGuardrailsRequired(api plugin.API, f *model.Flow) error {
 
 // firstAIPromptNeedingGuardrails returns the index of the first ai_prompt
 // action with non-empty allowed_tools and missing/empty guardrails.
-func firstAIPromptNeedingGuardrails(f *model.Flow) (int, bool) {
+func firstAIPromptNeedingGuardrails(f *model.Automation) (int, bool) {
 	for i := range f.Actions {
 		ai := f.Actions[i].AIPrompt
 		if ai == nil {
@@ -62,7 +62,7 @@ func firstAIPromptNeedingGuardrails(f *model.Flow) (int, bool) {
 // guardrails are required for the trigger context, or nil if the context is
 // exempt. A non-nil error wrapping an *AppError indicates an infrastructure
 // failure that should surface as 500.
-func checkSensitiveTriggerContext(api plugin.API, f *model.Flow, actionIdx int) error {
+func checkSensitiveTriggerContext(api plugin.API, f *model.Automation, actionIdx int) error {
 	if f.Trigger.ChannelCreated != nil {
 		return fmt.Errorf("action %d: ai_prompt with allowed_tools requires guardrails.channel_ids when the trigger is channel_created (the channel that will fire is unknown at configuration time)", actionIdx)
 	}

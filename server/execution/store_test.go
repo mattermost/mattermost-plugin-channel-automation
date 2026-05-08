@@ -72,12 +72,12 @@ func setupStore(t *testing.T) (*Store, *inMemoryKV) {
 	return NewStore(api, &sync.Mutex{}), kv
 }
 
-func makeRecord(id, flowID string) *model.ExecutionRecord {
+func makeRecord(id, automationID string) *model.ExecutionRecord {
 	return &model.ExecutionRecord{
-		ID:       id,
-		FlowID:   flowID,
-		FlowName: "Test Flow",
-		Status:   "success",
+		ID:             id,
+		AutomationID:   automationID,
+		AutomationName: "Test Automation",
+		Status:         "success",
 		Steps: map[string]model.StepOutput{
 			"step1": {Message: "done"},
 		},
@@ -97,8 +97,8 @@ func TestExecutionStore_SaveAndGet(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "x1", got.ID)
-	assert.Equal(t, "f1", got.FlowID)
-	assert.Equal(t, "Test Flow", got.FlowName)
+	assert.Equal(t, "f1", got.AutomationID)
+	assert.Equal(t, "Test Automation", got.AutomationName)
 	assert.Equal(t, "success", got.Status)
 	assert.Equal(t, "done", got.Steps["step1"].Message)
 }
@@ -111,15 +111,15 @@ func TestExecutionStore_GetNotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-func TestExecutionStore_ListByFlow(t *testing.T) {
+func TestExecutionStore_ListByAutomation(t *testing.T) {
 	store, _ := setupStore(t)
 
-	// Save records for two different flows.
+	// Save records for two different automations.
 	require.NoError(t, store.Save(makeRecord("x1", "f1")))
 	require.NoError(t, store.Save(makeRecord("x2", "f1")))
 	require.NoError(t, store.Save(makeRecord("x3", "f2")))
 
-	records, err := store.ListByFlow("f1", 10)
+	records, err := store.ListByAutomation("f1", 10)
 	require.NoError(t, err)
 	assert.Len(t, records, 2)
 
@@ -170,13 +170,13 @@ func TestExecutionStore_ListFromIndex_SkipsExpired(t *testing.T) {
 	kv.mu.Unlock()
 
 	// Request limit=3: should skip expired entries and still return 3 results.
-	records, err := store.ListByFlow("f1", 3)
+	records, err := store.ListByAutomation("f1", 3)
 	require.NoError(t, err)
 	assert.Len(t, records, 3)
 
 	// Stale entries should have been compacted from the index.
 	kv.mu.Lock()
-	data := kv.data[flowIndexPrefix+"f1"]
+	data := kv.data[automationIndexPrefix+"f1"]
 	kv.mu.Unlock()
 
 	var ids []string
@@ -188,17 +188,17 @@ func TestExecutionStore_ListFromIndex_SkipsExpired(t *testing.T) {
 	}
 }
 
-func TestExecutionStore_PurgeFlow(t *testing.T) {
+func TestExecutionStore_PurgeAutomation(t *testing.T) {
 	store, kv := setupStore(t)
 
-	// Save records for two flows so we can verify cross-flow isolation.
+	// Save records for two automations so we can verify cross-automation isolation.
 	require.NoError(t, store.Save(makeRecord("x1", "f1")))
 	require.NoError(t, store.Save(makeRecord("x2", "f1")))
 	require.NoError(t, store.Save(makeRecord("x3", "f2")))
 
-	// Per-flow index should exist.
+	// Per-automation index should exist.
 	kv.mu.Lock()
-	_, exists := kv.data[flowIndexPrefix+"f1"]
+	_, exists := kv.data[automationIndexPrefix+"f1"]
 	kv.mu.Unlock()
 	require.True(t, exists)
 
@@ -207,11 +207,11 @@ func TestExecutionStore_PurgeFlow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, records, 3)
 
-	require.NoError(t, store.PurgeFlow("f1"))
+	require.NoError(t, store.PurgeAutomation("f1"))
 
-	// Per-flow index should be deleted.
+	// Per-automation index should be deleted.
 	kv.mu.Lock()
-	_, exists = kv.data[flowIndexPrefix+"f1"]
+	_, exists = kv.data[automationIndexPrefix+"f1"]
 	kv.mu.Unlock()
 	assert.False(t, exists)
 
@@ -224,9 +224,9 @@ func TestExecutionStore_PurgeFlow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got)
 
-	// Global index should only contain the other flow's record.
+	// Global index should only contain the other automation's record.
 	// Inspect raw KV data directly — ListRecent self-heals stale entries,
-	// so it would pass even if PurgeFlow didn't clean the global index.
+	// so it would pass even if PurgeAutomation didn't clean the global index.
 	kv.mu.Lock()
 	globalIndexBytes, exists := kv.data[globalIndexKey]
 	kv.mu.Unlock()
@@ -236,7 +236,7 @@ func TestExecutionStore_PurgeFlow(t *testing.T) {
 	require.NoError(t, json.Unmarshal(globalIndexBytes, &globalIndex))
 	assert.Equal(t, []string{"x3"}, globalIndex)
 
-	// Records from the other flow should be untouched.
+	// Records from the other automation should be untouched.
 	got, err = store.Get("x3")
 	require.NoError(t, err)
 	assert.NotNil(t, got)
@@ -267,20 +267,20 @@ func TestExecutionStore_TruncateSteps(t *testing.T) {
 func TestExecutionStore_IndexCapping(t *testing.T) {
 	store, kv := setupStore(t)
 
-	// Save more records than maxFlowIndexSize.
-	for range maxFlowIndexSize + 10 {
+	// Save more records than maxAutomationIndexSize.
+	for range maxAutomationIndexSize + 10 {
 		rec := makeRecord(mmmodel.NewId(), "f1")
 		require.NoError(t, store.Save(rec))
 	}
 
-	// Flow index should be capped at maxFlowIndexSize.
+	// Automation index should be capped at maxAutomationIndexSize.
 	kv.mu.Lock()
-	data := kv.data[flowIndexPrefix+"f1"]
+	data := kv.data[automationIndexPrefix+"f1"]
 	kv.mu.Unlock()
 
 	var ids []string
 	require.NoError(t, json.Unmarshal(data, &ids))
-	assert.Len(t, ids, maxFlowIndexSize)
+	assert.Len(t, ids, maxAutomationIndexSize)
 }
 
 func TestExecutionStore_GlobalIndexCapping(t *testing.T) {

@@ -6,18 +6,19 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the flow's trigger type:
+All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the automation's trigger type:
 
-- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) on every literal channel referenced in the flow (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this flow"`.
-- **Team-scoped triggers** (`channel_created`): the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the flow must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"`.
+- **`channel_created` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
+- **`user_joined_team` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
 
 In practice, validation (`ValidateSendMessageChannel`) already requires `send_message.channel_id` to be either the literal trigger channel ID or the template `{{.Trigger.Channel.Id}}`, so for channel-scoped triggers the set of literal channels checked collapses to the trigger channel, and for `channel_created` any literal `send_message.channel_id` must belong to `team_id`.
 
-The list endpoint filters results to only flows the user has permission to view under the rules above.
+The list endpoint filters results to only automations the user has permission to view under the rules above.
 
 ### MCP tool hook endpoints
 
-The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{flow_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the flow's `created_by` and returns `403 Forbidden` on mismatch (or when the flow has no recorded creator). System admin status does not bypass this check.
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the automation's `created_by` and returns `403 Forbidden` on mismatch (or when the automation has no recorded creator). System admin status does not bypass this check.
 
 ## Endpoints
 
@@ -67,20 +68,20 @@ Any authenticated user may call this endpoint — no channel-admin check is perf
 
 ---
 
-### List flows
+### List automations
 
 ```
-GET /flows
-GET /flows?channel_id=<channel-id>
+GET /automations
+GET /automations?channel_id=<channel-id>
 ```
 
-Returns all flows visible to the requesting user. System admins see all flows; other users only see flows where they have channel admin permissions on all referenced channels.
+Returns all automations visible to the requesting user. System admins see all automations; other users only see automations where they have channel admin permissions on all referenced channels.
 
 **Query parameters:**
 
-| Parameter    | Type   | Description                                                      |
-| ------------ | ------ | ---------------------------------------------------------------- |
-| `channel_id` | string | _(optional)_ Filter to flows whose trigger targets this channel. |
+| Parameter    | Type   | Description                                                             |
+| ------------ | ------ | ----------------------------------------------------------------------- |
+| `channel_id` | string | _(optional)_ Filter to automations whose trigger targets this channel.  |
 
 **Response:** `200 OK`
 
@@ -113,21 +114,21 @@ Returns all flows visible to the requesting user. System admins see all flows; o
 
 **Errors:**
 
-| Status | Body                   |
-| ------ | ---------------------- |
-| 500    | `failed to list flows` |
+| Status | Body                         |
+| ------ | ---------------------------- |
+| 500    | `failed to list automations` |
 
 ---
 
-### Create flow
+### Create automation
 
 ```
-POST /flows
+POST /automations
 ```
 
-Creates a new flow. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
+Creates a new automation. The server assigns `id`, `created_at`, `updated_at`, and `created_by`. Each action must include a user-specified `id` (lowercase slug format, e.g. `"send-greeting"`).
 
-For every `ai_prompt` action with `provider_type: "agent"`, the server confirms with the AI plugin bridge that the flow's creator has access to the chosen `provider_id`, regardless of whether `allowed_tools` is set. Inaccessible, deactivated, or non-existent agent IDs are rejected at create/update time instead of failing with an opaque 403 at execute time. The bridge is queried at most once per distinct `provider_id` per request, so the access check and the `allowed_tools` validation share a single bridge round-trip.
+For every `ai_prompt` action with `provider_type: "agent"`, the server confirms with the AI plugin bridge that the automation's creator has access to the chosen `provider_id`, regardless of whether `allowed_tools` is set. Inaccessible, deactivated, or non-existent agent IDs are rejected at create/update time instead of failing with an opaque 403 at execute time. The bridge is queried at most once per distinct `provider_id` per request, so the access check and the `allowed_tools` validation share a single bridge round-trip.
 
 `allowed_tools` and `guardrails` are only valid when `provider_type` is `"agent"`. The bridge rejects `allowed_tools` on service completion endpoints with HTTP 400; the server mirrors that rule at save time so the misconfiguration surfaces immediately.
 
@@ -160,7 +161,7 @@ When `guardrails` is set on an `ai_prompt` action, `allowed_tools` must be non-e
 
 **Response:** `201 Created`
 
-The created flow object with all server-assigned fields populated.
+The created automation object with all server-assigned fields populated.
 
 **Errors:**
 
@@ -177,43 +178,43 @@ The created flow object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
-| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 500    | `failed to create flow`                                                                                     |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
+| 500    | `failed to create automation`                                                                               |
 | 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
 | 502    | `action <i>: cannot verify access to agent "<id>": bridge client unavailable` (AI plugin not installed/active) |
 
 ---
 
-### Get flow
+### Get automation
 
 ```
-GET /flows/{id}
+GET /automations/{id}
 ```
 
-Returns a single flow by ID.
+Returns a single automation by ID.
 
 **Response:** `200 OK`
 
-The flow object.
+The automation object.
 
 **Errors:**
 
-| Status | Body                                                                                        |
-| ------ | ------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
-| 404    | `flow not found`                                                                            |
-| 500    | `failed to get flow`                                                                        |
+| Status | Body                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 404    | `automation not found`                                                                            |
+| 500    | `failed to get automation`                                                                        |
 
 ---
 
-### Update flow
+### Update automation
 
 ```
-PUT /flows/{id}
+PUT /automations/{id}
 ```
 
-Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create flow](#create-flow); the agent access check uses the original `created_by` (not the editor), so a system admin editing on behalf of another user cannot bypass the original creator's bridge ACL.
+Replaces an automation. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create automation](#create-automation); the agent access check uses the original `created_by` (not the editor), so a system admin editing on behalf of another user cannot bypass the original creator's bridge ACL.
 
 **Request body** (max 1 MB):
 
@@ -240,7 +241,7 @@ Replaces a flow. The server preserves immutable fields (`id`, `created_at`, `cre
 
 **Response:** `200 OK`
 
-The updated flow object.
+The updated automation object.
 
 **Errors:**
 
@@ -257,32 +258,32 @@ The updated flow object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow`                 |
-| 404    | `flow not found`                                                                                            |
-| 409    | `channel has reached the maximum of <N> flow(s)`                                                            |
-| 500    | `failed to update flow`                                                                                     |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 404    | `automation not found`                                                                                      |
+| 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
+| 500    | `failed to update automation`                                                                               |
 | 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
 | 502    | `action <i>: cannot verify access to agent "<id>": bridge client unavailable` (AI plugin not installed/active) |
 
 ---
 
-### Delete flow
+### Delete automation
 
 ```
-DELETE /flows/{id}
+DELETE /automations/{id}
 ```
 
-Deletes a flow by ID.
+Deletes an automation by ID.
 
 **Response:** `204 No Content`
 
 **Errors:**
 
-| Status | Body                                                                                        |
-| ------ | ------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this flow` |
-| 404    | `flow not found`                                                                            |
-| 500    | `failed to delete flow`                                                                     |
+| Status | Body                                                                                              |
+| ------ | ------------------------------------------------------------------------------------------------- |
+| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 404    | `automation not found`                                                                            |
+| 500    | `failed to delete automation`                                                                     |
 
 ---
 
@@ -318,14 +319,14 @@ Returns the tools available for a specific AI agent. Proxies the request to the 
 
 ---
 
-### List executions for a flow
+### List executions for an automation
 
 ```
-GET /flows/{flow_id}/executions
-GET /flows/{flow_id}/executions?limit=50
+GET /automations/{automation_id}/executions
+GET /automations/{automation_id}/executions?limit=50
 ```
 
-Returns execution history records for a specific flow, ordered by most recent first. The user must have permission to view the flow (system admin or channel admin on all referenced channels).
+Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation (system admin or channel admin on all referenced channels).
 
 **Query parameters:**
 
@@ -339,8 +340,8 @@ Returns execution history records for a specific flow, ordered by most recent fi
 [
     {
         "id": "exec-id-1",
-        "flow_id": "flow-id-1",
-        "flow_name": "My Flow",
+        "automation_id": "automation-id-1",
+        "automation_name": "My Automation",
         "status": "success",
         "steps": {
             "send-greeting": {
@@ -359,12 +360,12 @@ Returns execution history records for a specific flow, ordered by most recent fi
 
 **Errors:**
 
-| Status | Body                        |
-| ------ | --------------------------- |
-| 403    | `forbidden`                 |
-| 404    | `flow not found`            |
-| 500    | `failed to get flow`        |
-| 500    | `failed to list executions` |
+| Status | Body                         |
+| ------ | ---------------------------- |
+| 403    | `forbidden`                  |
+| 404    | `automation not found`       |
+| 500    | `failed to get automation`   |
+| 500    | `failed to list executions`  |
 
 ---
 
@@ -374,7 +375,7 @@ Returns execution history records for a specific flow, ordered by most recent fi
 GET /executions/{id}
 ```
 
-Returns a single execution record by ID. The user must have permission to view the parent flow. If the flow has been deleted, only system admins can view the execution.
+Returns a single execution record by ID. The user must have permission to view the parent automation. If the automation has been deleted, only system admins can view the execution.
 
 **Response:** `200 OK`
 
@@ -382,12 +383,12 @@ An [ExecutionRecord](#executionrecord) object.
 
 **Errors:**
 
-| Status | Body                      |
-| ------ | ------------------------- |
-| 403    | `forbidden`               |
-| 404    | `execution not found`     |
-| 500    | `failed to get execution` |
-| 500    | `failed to get flow`      |
+| Status | Body                         |
+| ------ | ---------------------------- |
+| 403    | `forbidden`                  |
+| 404    | `execution not found`        |
+| 500    | `failed to get execution`    |
+| 500    | `failed to get automation`   |
 
 ---
 
@@ -398,7 +399,7 @@ GET /executions
 GET /executions?limit=50
 ```
 
-Returns recent execution records across all flows. **System admin only.**
+Returns recent execution records across all automations. **System admin only.**
 
 **Query parameters:**
 
@@ -421,14 +422,14 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ## Data types
 
-### Flow
+### Automation
 
 | Field        | Type                | Description                                                    |
 | ------------ | ------------------- | -------------------------------------------------------------- |
 | `id`         | string              | 26-character unique ID (server-assigned)                       |
 | `name`       | string              | Display name                                                   |
-| `enabled`    | boolean             | Whether the flow is active                                     |
-| `trigger`    | [Trigger](#trigger) | When the flow fires                                            |
+| `enabled`    | boolean             | Whether the automation is active                               |
+| `trigger`    | [Trigger](#trigger) | When the automation fires                                      |
 | `actions`    | [Action](#action)[] | Steps to execute                                               |
 | `created_at` | integer             | Creation time in milliseconds since epoch (server-assigned)    |
 | `updated_at` | integer             | Last update time in milliseconds since epoch (server-assigned) |
@@ -436,18 +437,18 @@ An array of [ExecutionRecord](#executionrecord) objects.
 
 ### ExecutionRecord
 
-| Field          | Type                                 | Description                                               |
-| -------------- | ------------------------------------ | --------------------------------------------------------- |
-| `id`           | string                               | Unique execution ID (server-assigned)                     |
-| `flow_id`      | string                               | ID of the flow that was executed                          |
-| `flow_name`    | string                               | Name of the flow at execution time                        |
-| `status`       | string                               | `"success"` or `"failed"`                                 |
-| `error`        | string                               | _(optional)_ Error message if status is `"failed"`        |
-| `steps`        | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
-| `trigger_data` | [TriggerData](#trigger-data-fields)  | Snapshot of the trigger event data                        |
-| `created_at`   | integer                              | Time the execution was queued (ms since epoch)            |
-| `started_at`   | integer                              | Time execution started (ms since epoch)                   |
-| `completed_at` | integer                              | Time execution completed (ms since epoch)                 |
+| Field             | Type                                 | Description                                               |
+| ----------------- | ------------------------------------ | --------------------------------------------------------- |
+| `id`              | string                               | Unique execution ID (server-assigned)                     |
+| `automation_id`   | string                               | ID of the automation that was executed                    |
+| `automation_name` | string                               | Name of the automation at execution time                  |
+| `status`          | string                               | `"success"` or `"failed"`                                 |
+| `error`           | string                               | _(optional)_ Error message if status is `"failed"`        |
+| `steps`           | map[string][StepOutput](#stepoutput) | Output from each executed action step, keyed by action ID |
+| `trigger_data`    | [TriggerData](#trigger-data-fields)  | Snapshot of the trigger event data                        |
+| `created_at`      | integer                              | Time the execution was queued (ms since epoch)            |
+| `started_at`      | integer                              | Time execution started (ms since epoch)                   |
+| `completed_at`    | integer                              | Time execution completed (ms since epoch)                 |
 
 ### StepOutput
 
@@ -517,11 +518,11 @@ Exactly one key should be set, indicating the trigger type:
 
 Exactly one type-specific config key should be set alongside `id`:
 
-| Field          | Type                                                | Description                                                                                                                     |
-| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the flow. |
-| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                    |
-| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                    |
+| Field          | Type                                                | Description                                                                                                                           |
+| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string                                              | User-specified slug ID (required, lowercase alphanumeric with hyphens, e.g. `"send-greeting"`). Must be unique within the automation. |
+| `send_message` | [SendMessageActionConfig](#sendmessageactionconfig) | _(optional)_ Posts a message                                                                                                          |
+| `ai_prompt`    | [AIPromptActionConfig](#aipromptactionconfig)       | _(optional)_ Sends a prompt to an AI service                                                                                          |
 
 #### SendMessageActionConfig
 
@@ -542,7 +543,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional, agent only)_ Allowlist of tool names the agent may use without approval. Only valid when `provider_type` is `"agent"` (services reject `allowed_tools` at the bridge). Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
-| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the flow creator) or `"creator"` (always the flow creator). Any other value is rejected at create/update time. |
+| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
@@ -554,7 +555,7 @@ Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
 Hook handlers maintain an explicit catalog of **production** Mattermost built-in MCP tool names from the agents plugin (dev-only tools such as `create_user` / `create_post_as_user` / `create_team` / `add_user_to_team` are excluded). The bridge is told about a tool's `before` callback only when the catalog declares one. Tools not in the catalog get no callbacks at all and ride the agent's normal allowed_tools path. As defense in depth, the hook HTTP handler still rejects any callback that arrives for a tool that is not in the catalog.
 
-`allowed_tools` is also re-validated at execution time (not just on flow create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save. The validator additionally rejects `get_user_channels` whenever guardrails are configured for the same `ai_prompt` action.
+`allowed_tools` is also re-validated at execution time (not just on automation create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save. The validator additionally rejects `get_user_channels` whenever guardrails are configured for the same `ai_prompt` action.
 
 When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
 
@@ -572,7 +573,7 @@ Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
-When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the parent thread (root + replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the flow continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
+When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the parent thread (root + replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the automation continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
 
 To bound work item size for the Mattermost KV store, threads larger than 61 messages are truncated to the root post plus the most recent 60 replies. `{{.Trigger.Thread.PostCount}}` always reflects the original full thread size, and `{{.Trigger.Thread.Truncated}}` reports whether older replies were dropped. The `ai_prompt` action surfaces the truncation in its trigger-context system message so the model knows it is not seeing the full conversation.
 
@@ -592,7 +593,7 @@ Fires when a new public channel (type `"O"`) is created on the specified `team_i
 
 ### `user_joined_team`
 
-Fires when a user joins the configured team. Bot users are automatically excluded. The optional `user_type` field filters by user role: `"user"` matches only regular users, `"guest"` matches only guests, and `""` (default) matches both. The user creating the flow must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`. The user's guest status is available via `{{.Trigger.User.IsGuest}}`.
+Fires when a user joins the configured team. Bot users are automatically excluded. The optional `user_type` field filters by user role: `"user"` matches only regular users, `"guest"` matches only guests, and `""` (default) matches both. The user creating the automation must be a team admin or a channel admin on the team's default channel (town-square). Team information is available via `{{.Trigger.Team.Id}}`, `{{.Trigger.Team.Name}}`, and `{{.Trigger.Team.DisplayName}}`. The team's default channel ID is available via `{{.Trigger.Team.DefaultChannelId}}`. The user's guest status is available via `{{.Trigger.User.IsGuest}}`.
 
 ---
 
@@ -602,16 +603,16 @@ Fires when a user joins the configured team. Bot users are automatically exclude
 
 Posts a message to a channel as the plugin bot user.
 
-The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templates with the flow context.
+The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templates with the automation context.
 
 ### `ai_prompt`
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
-By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the flow creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the flow creator unconditionally:
+By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
 - `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
-- `"creator"` — always use the flow creator, even when a triggering user is available.
+- `"creator"` — always use the automation creator, even when a triggering user is available.
 
 The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 
@@ -633,13 +634,13 @@ These are sourced from the plugin server clock at execution time (not template-a
 
 ## Template context
 
-Action templates receive a `FlowContext` object with the following structure:
+Action templates receive an `AutomationContext` object with the following structure:
 
 ```
-{{.FlowID}}             — id of the flow being executed
-{{.CreatedBy}}          — user ID of the flow creator
+{{.AutomationID}}       — id of the automation being executed
+{{.CreatedBy}}          — user ID of the automation creator
 {{.Trigger}}            — trigger event data
-{{.Trigger.Post}}       — the post that triggered the flow (message_posted only)
+{{.Trigger.Post}}       — the post that triggered the automation (message_posted only)
 {{.Trigger.Channel}}    — the channel where the event occurred (message_posted, membership_changed, channel_created)
 {{.Trigger.User}}       — the user who triggered the event (message_posted, membership_changed, channel_created, user_joined_team)
 {{.Trigger.Team}}       — the team the user joined (user_joined_team only)

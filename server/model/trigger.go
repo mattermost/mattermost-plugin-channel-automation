@@ -24,14 +24,14 @@ type TriggerAPI interface {
 }
 
 // TriggerHandler owns the lifecycle of a single trigger type: config
-// validation, matching events, resolving candidate flows, and building the
-// TriggerData passed to flow execution.
+// validation, matching events, resolving candidate automations, and building the
+// TriggerData passed to automation execution.
 type TriggerHandler interface {
 	// Type returns the trigger type string (e.g. "message_posted").
 	Type() string
 
 	// Matches reports whether the trigger configuration matches the event.
-	// Called after CandidateFlowIDs has already narrowed down the set.
+	// Called after CandidateAutomationIDs has already narrowed down the set.
 	Matches(trigger *Trigger, event *Event) bool
 
 	// Validate checks the per-type configuration (required fields, enum
@@ -41,15 +41,15 @@ type TriggerHandler interface {
 	// caller before Validate is invoked.
 	Validate(trigger *Trigger, existing *Trigger) error
 
-	// CandidateFlowIDs returns the flow IDs that could potentially match
+	// CandidateAutomationIDs returns the automation IDs that could potentially match
 	// this event, using whatever store index is most selective for the
 	// trigger type. Returning nil is valid ("no candidates").
-	CandidateFlowIDs(store Store, event *Event) ([]string, error)
+	CandidateAutomationIDs(store Store, event *Event) ([]string, error)
 
 	// BuildTriggerData fetches auxiliary Mattermost data (channel, user,
 	// team, default channel) and returns the TriggerData payload attached
 	// to every work item enqueued for this event. Called once per event,
-	// after at least one flow has matched (i.e. CandidateFlowIDs returned
+	// after at least one automation has matched (i.e. CandidateAutomationIDs returned
 	// a non-empty set and Matches returned true for at least one of them).
 	// An error aborts dispatch for the event.
 	BuildTriggerData(api TriggerAPI, event *Event) (TriggerData, error)

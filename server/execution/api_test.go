@@ -17,33 +17,37 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// mockFlowStore implements model.Store for testing.
-type mockFlowStore struct {
-	flows map[string]*model.Flow
+// mockAutomationStore implements model.Store for testing.
+type mockAutomationStore struct {
+	automations map[string]*model.Automation
 }
 
-func (m *mockFlowStore) Get(id string) (*model.Flow, error) { return m.flows[id], nil }
-func (m *mockFlowStore) List() ([]*model.Flow, error)       { return nil, nil }
-func (m *mockFlowStore) ListByTriggerChannel(_ string) ([]*model.Flow, error) {
+func (m *mockAutomationStore) Get(id string) (*model.Automation, error) {
+	return m.automations[id], nil
+}
+func (m *mockAutomationStore) List() ([]*model.Automation, error) { return nil, nil }
+func (m *mockAutomationStore) ListByTriggerChannel(_ string) ([]*model.Automation, error) {
 	return nil, nil
 }
-func (m *mockFlowStore) ListScheduled() ([]*model.Flow, error)       { return nil, nil }
-func (m *mockFlowStore) Save(_ *model.Flow) error                    { return nil }
-func (m *mockFlowStore) Delete(_ string) error                       { return nil }
-func (m *mockFlowStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
-func (m *mockFlowStore) GetFlowIDsForChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
+func (m *mockAutomationStore) Save(_ *model.Automation) error              { return nil }
+func (m *mockAutomationStore) Delete(_ string) error                       { return nil }
+func (m *mockAutomationStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
+func (m *mockAutomationStore) GetAutomationIDsForChannel(_ string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) GetFlowIDsForMembershipChannel(_ string) ([]string, error) {
+func (m *mockAutomationStore) GetAutomationIDsForMembershipChannel(_ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockFlowStore) GetChannelCreatedFlowIDs() ([]string, error)            { return nil, nil }
-func (m *mockFlowStore) GetFlowIDsForUserJoinedTeam(_ string) ([]string, error) { return nil, nil }
+func (m *mockAutomationStore) GetChannelCreatedAutomationIDs() ([]string, error) { return nil, nil }
+func (m *mockAutomationStore) GetAutomationIDsForUserJoinedTeam(_ string) ([]string, error) {
+	return nil, nil
+}
 
 // expectLogCalls registers permissive LogError and LogWarn expectations that
 // accept any number of arguments. This covers enriched log calls that include
-// user_id, flow_id, execution_id, and other context fields.
+// user_id, automation_id, execution_id, and other context fields.
 func expectLogCalls(api *plugintest.API) {
 	// LogError with 3, 5, 7, or 9 args (msg + 1-4 key-value pairs).
 	api.On("LogError", mock.Anything, mock.Anything, mock.Anything).Maybe()
@@ -57,11 +61,11 @@ func expectLogCalls(api *plugintest.API) {
 	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 }
 
-func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugintest.API) {
+func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockAutomationStore, *plugintest.API) {
 	t.Helper()
 
 	execStore, _ := setupStore(t)
-	flowStore := &mockFlowStore{flows: make(map[string]*model.Flow)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
 	api := &plugintest.API{}
 	expectLogCalls(api)
@@ -70,24 +74,24 @@ func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockFlowStore, *plugin
 		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
 	).Maybe()
 
-	handler := NewAPIHandler(execStore, flowStore, api)
+	handler := NewAPIHandler(execStore, automationStore, api)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
-	return router, execStore, flowStore, api
+	return router, execStore, automationStore, api
 }
 
-func setupAPIHandlerWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, *Store, *mockFlowStore) {
+func setupAPIHandlerWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, *Store, *mockAutomationStore) {
 	t.Helper()
 
 	execStore, _ := setupStore(t)
-	flowStore := &mockFlowStore{flows: make(map[string]*model.Flow)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
-	handler := NewAPIHandler(execStore, flowStore, api)
+	handler := NewAPIHandler(execStore, automationStore, api)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 
-	return router, execStore, flowStore
+	return router, execStore, automationStore
 }
 
 func TestParseLimit(t *testing.T) {
@@ -127,29 +131,53 @@ func TestParseLimit(t *testing.T) {
 	})
 }
 
-func TestExecutionAPI_ListByFlow_RequiresAuth(t *testing.T) {
+func TestExecutionAPI_ListByAutomation_RequiresAuth(t *testing.T) {
 	router, _, _, _ := setupAPIHandler(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/f1/executions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/f1/executions", nil)
 	// No Mattermost-User-ID header.
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestExecutionAPI_ListByFlow_FlowNotFound(t *testing.T) {
+func TestExecutionAPI_ListByAutomation_AutomationNotFound_NonAdmin(t *testing.T) {
+	// When the parent automation is missing (deleted) and the caller is not
+	// a system admin, the endpoint mirrors handleGet and returns 403 rather
+	// than leaking existence via 404.
 	router, _, _, _ := setupAPIHandler(t)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/nonexistent/executions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/nonexistent/executions", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
+func TestExecutionAPI_ListByAutomation_AutomationNotFound_SysAdmin(t *testing.T) {
+	// System admins can still list execution history for a deleted parent
+	// automation — the records are preserved (TTL) so the orphaned history
+	// stays discoverable for auditing.
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "admin", mmmodel.PermissionManageSystem).Return(true)
+
+	router, _, _ := setupAPIHandlerWithCustomMock(t, api)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/automations/nonexistent/executions", nil)
+	r.Header.Set("Mattermost-User-ID", "admin")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var records []*model.ExecutionRecord
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&records))
+	assert.Empty(t, records)
+}
+
+func TestExecutionAPI_ListByAutomation_RequiresAutomationPermission(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
@@ -160,45 +188,45 @@ func TestExecutionAPI_ListByFlow_RequiresFlowPermission(t *testing.T) {
 		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
 
-	router, _, flowStore := setupAPIHandlerWithCustomMock(t, api)
-	flowStore.flows["f1"] = &model.Flow{
+	router, _, automationStore := setupAPIHandlerWithCustomMock(t, api)
+	automationStore.automations["f1"] = &model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/f1/executions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/f1/executions", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestExecutionAPI_ListByFlow_ChannelCreatedRequiresTeamAdmin(t *testing.T) {
+func TestExecutionAPI_ListByAutomation_ChannelCreatedRequiresTeamAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
 	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
-	router, _, flowStore := setupAPIHandlerWithCustomMock(t, api)
-	flowStore.flows["f1"] = &model.Flow{
+	router, _, automationStore := setupAPIHandlerWithCustomMock(t, api)
+	automationStore.automations["f1"] = &model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/f1/executions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/f1/executions", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestExecutionAPI_ListByFlow_Success(t *testing.T) {
-	router, execStore, flowStore, _ := setupAPIHandler(t)
+func TestExecutionAPI_ListByAutomation_Success(t *testing.T) {
+	router, execStore, automationStore, _ := setupAPIHandler(t)
 
-	flowStore.flows["f1"] = &model.Flow{
+	automationStore.automations["f1"] = &model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}
@@ -207,7 +235,7 @@ func TestExecutionAPI_ListByFlow_Success(t *testing.T) {
 	require.NoError(t, execStore.Save(makeRecord("x2", "f1")))
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/flows/f1/executions", nil)
+	r := httptest.NewRequest(http.MethodGet, "/automations/f1/executions", nil)
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
@@ -232,9 +260,9 @@ func TestExecutionAPI_Get_NotFound(t *testing.T) {
 }
 
 func TestExecutionAPI_Get_Success(t *testing.T) {
-	router, execStore, flowStore, _ := setupAPIHandler(t)
+	router, execStore, automationStore, _ := setupAPIHandler(t)
 
-	flowStore.flows["f1"] = &model.Flow{
+	automationStore.automations["f1"] = &model.Automation{
 		ID:      "f1",
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}
@@ -254,15 +282,15 @@ func TestExecutionAPI_Get_Success(t *testing.T) {
 	assert.Equal(t, "x1", rec.ID)
 }
 
-func TestExecutionAPI_Get_DeletedFlow_RequiresSystemAdmin(t *testing.T) {
+func TestExecutionAPI_Get_DeletedAutomation_RequiresSystemAdmin(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 
 	router, execStore, _ := setupAPIHandlerWithCustomMock(t, api)
 
-	// Save a record but don't add the flow to the flow store (simulates deleted flow).
-	require.NoError(t, execStore.Save(makeRecord("x1", "deleted-flow")))
+	// Save a record but don't add the automation to the automation store (simulates deleted automation).
+	require.NoError(t, execStore.Save(makeRecord("x1", "deleted-automation")))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/executions/x1", nil)
@@ -272,14 +300,14 @@ func TestExecutionAPI_Get_DeletedFlow_RequiresSystemAdmin(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestExecutionAPI_Get_DeletedFlow_SystemAdminAllowed(t *testing.T) {
+func TestExecutionAPI_Get_DeletedAutomation_SystemAdminAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
 	router, execStore, _ := setupAPIHandlerWithCustomMock(t, api)
 
-	require.NoError(t, execStore.Save(makeRecord("x1", "deleted-flow")))
+	require.NoError(t, execStore.Save(makeRecord("x1", "deleted-automation")))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/executions/x1", nil)
@@ -370,12 +398,12 @@ func TestExecutionAPI_ListRecent_Success(t *testing.T) {
 	expectLogCalls(kvAPI)
 
 	execStore := NewStore(kvAPI, &sync.Mutex{})
-	flowStore := &mockFlowStore{flows: make(map[string]*model.Flow)}
+	automationStore := &mockAutomationStore{automations: make(map[string]*model.Automation)}
 
 	require.NoError(t, execStore.Save(makeRecord("x1", "f1")))
 	require.NoError(t, execStore.Save(makeRecord("x2", "f2")))
 
-	handler := NewAPIHandler(execStore, flowStore, api)
+	handler := NewAPIHandler(execStore, automationStore, api)
 	router := mux.NewRouter()
 	handler.RegisterRoutes(router)
 

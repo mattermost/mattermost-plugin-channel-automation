@@ -13,7 +13,7 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-func aiPromptFlow(triggerChannelID string, allowedTools []string, guardrailChannelIDs []string) *model.Flow {
+func aiPromptAutomation(triggerChannelID string, allowedTools []string, guardrailChannelIDs []string) *model.Automation {
 	ai := &model.AIPromptActionConfig{
 		Prompt:       "do something",
 		ProviderType: "agent",
@@ -27,7 +27,7 @@ func aiPromptFlow(triggerChannelID string, allowedTools []string, guardrailChann
 		}
 		ai.Guardrails = &model.Guardrails{Channels: channels}
 	}
-	return &model.Flow{
+	return &model.Automation{
 		CreatedBy: "creator1",
 		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: triggerChannelID}},
 		Actions:   []model.Action{{ID: "a1", AIPrompt: ai}},
@@ -38,7 +38,7 @@ func TestCheckGuardrailsRequired_PublicChannelRequiresGuardrails(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("GetChannel", "ch-pub").Return(&mmmodel.Channel{Id: "ch-pub", Type: mmmodel.ChannelTypeOpen}, nil)
 
-	f := aiPromptFlow("ch-pub", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-pub", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -49,7 +49,7 @@ func TestCheckGuardrailsRequired_PublicChannelGuardrailsSetAllowed(t *testing.T)
 	api := &plugintest.API{}
 	api.On("GetChannel", "ch-pub").Return(&mmmodel.Channel{Id: "ch-pub", Type: mmmodel.ChannelTypeOpen}, nil).Maybe()
 
-	f := aiPromptFlow("ch-pub", []string{"some_tool"}, []string{mmmodel.NewId()})
+	f := aiPromptAutomation("ch-pub", []string{"some_tool"}, []string{mmmodel.NewId()})
 
 	err := CheckGuardrailsRequired(api, f)
 	require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestCheckGuardrailsRequired_PrivateSingleMemberAllowed(t *testing.T) {
 	api.On("GetChannel", "ch-priv").Return(&mmmodel.Channel{Id: "ch-priv", Type: mmmodel.ChannelTypePrivate}, nil)
 	api.On("GetChannelStats", "ch-priv").Return(&mmmodel.ChannelStats{ChannelId: "ch-priv", MemberCount: 1}, nil)
 
-	f := aiPromptFlow("ch-priv", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-priv", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestCheckGuardrailsRequired_PrivateMultiMemberRequiresGuardrails(t *testing
 	api.On("GetChannel", "ch-priv").Return(&mmmodel.Channel{Id: "ch-priv", Type: mmmodel.ChannelTypePrivate}, nil)
 	api.On("GetChannelStats", "ch-priv").Return(&mmmodel.ChannelStats{ChannelId: "ch-priv", MemberCount: 2}, nil)
 
-	f := aiPromptFlow("ch-priv", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-priv", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -82,7 +82,7 @@ func TestCheckGuardrailsRequired_GroupMessageRequiresGuardrails(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("GetChannel", "ch-gm").Return(&mmmodel.Channel{Id: "ch-gm", Type: mmmodel.ChannelTypeGroup}, nil)
 
-	f := aiPromptFlow("ch-gm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-gm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -98,7 +98,7 @@ func TestCheckGuardrailsRequired_DMWithBotAllowed(t *testing.T) {
 	}, nil)
 	api.On("GetUser", "botuser").Return(&mmmodel.User{Id: "botuser", IsBot: true}, nil)
 
-	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-dm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestCheckGuardrailsRequired_DMWithUserRequiresGuardrails(t *testing.T) {
 	}, nil)
 	api.On("GetUser", "otheruser").Return(&mmmodel.User{Id: "otheruser", IsBot: false}, nil)
 
-	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-dm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -127,7 +127,7 @@ func TestCheckGuardrailsRequired_DMSelfAllowed(t *testing.T) {
 		{ChannelId: "ch-dm", UserId: "creator1"},
 	}, nil)
 
-	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-dm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestCheckGuardrailsRequired_DMSelfAllowed(t *testing.T) {
 func TestCheckGuardrailsRequired_ChannelCreatedTriggerAlwaysRequires(t *testing.T) {
 	api := &plugintest.API{}
 
-	f := &model.Flow{
+	f := &model.Automation{
 		CreatedBy: "creator1",
 		Trigger:   model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
@@ -153,7 +153,7 @@ func TestCheckGuardrailsRequired_ChannelCreatedTriggerAlwaysRequires(t *testing.
 func TestCheckGuardrailsRequired_UserJoinedTeamTriggerAlwaysRequires(t *testing.T) {
 	api := &plugintest.API{}
 
-	f := &model.Flow{
+	f := &model.Automation{
 		CreatedBy: "creator1",
 		Trigger:   model.Trigger{UserJoinedTeam: &model.UserJoinedTeamConfig{TeamID: "team1"}},
 		Actions: []model.Action{{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
@@ -170,17 +170,17 @@ func TestCheckGuardrailsRequired_UserJoinedTeamTriggerAlwaysRequires(t *testing.
 func TestCheckGuardrailsRequired_NoAllowedToolsAllowed(t *testing.T) {
 	api := &plugintest.API{}
 
-	f := aiPromptFlow("ch-pub", nil, nil)
+	f := aiPromptAutomation("ch-pub", nil, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.NoError(t, err)
 	api.AssertNotCalled(t, "GetChannel", "ch-pub")
 }
 
-func TestCheckGuardrailsRequired_SendMessageOnlyFlowAllowed(t *testing.T) {
+func TestCheckGuardrailsRequired_SendMessageOnlyAutomationAllowed(t *testing.T) {
 	api := &plugintest.API{}
 
-	f := &model.Flow{
+	f := &model.Automation{
 		CreatedBy: "creator1",
 		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch-pub"}},
 		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{
@@ -200,7 +200,7 @@ func TestCheckGuardrailsRequired_GetChannelServerErrorWraps(t *testing.T) {
 		StatusCode: http.StatusInternalServerError,
 	})
 
-	f := aiPromptFlow("ch-pub", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-pub", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -218,7 +218,7 @@ func TestCheckGuardrailsRequired_GetChannelStatsServerErrorWraps(t *testing.T) {
 		StatusCode: http.StatusInternalServerError,
 	})
 
-	f := aiPromptFlow("ch-priv", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-priv", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -236,7 +236,7 @@ func TestCheckGuardrailsRequired_GetChannelMembersServerErrorWraps(t *testing.T)
 		StatusCode: http.StatusInternalServerError,
 	})
 
-	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-dm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
@@ -258,7 +258,7 @@ func TestCheckGuardrailsRequired_GetUserServerErrorWraps(t *testing.T) {
 		StatusCode: http.StatusInternalServerError,
 	})
 
-	f := aiPromptFlow("ch-dm", []string{"some_tool"}, nil)
+	f := aiPromptAutomation("ch-dm", []string{"some_tool"}, nil)
 
 	err := CheckGuardrailsRequired(api, f)
 	require.Error(t, err)
