@@ -163,7 +163,7 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 
 	limit := h.channelFlowLimit()
 	if err := h.store.SaveWithChannelLimit(&f, limit, ""); err != nil {
-		if errors.Is(err, ErrChannelFlowLimitExceeded) {
+		if errors.Is(err, model.ErrChannelFlowLimitExceeded) {
 			msg := fmt.Sprintf("channel has reached the maximum of %d flow(s)", limit)
 			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
 			return
@@ -320,7 +320,7 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 
 	limit := h.channelFlowLimit()
 	if err := h.store.SaveWithChannelLimit(&f, limit, f.ID); err != nil {
-		if errors.Is(err, ErrChannelFlowLimitExceeded) {
+		if errors.Is(err, model.ErrChannelFlowLimitExceeded) {
 			msg := fmt.Sprintf("channel has reached the maximum of %d flow(s)", limit)
 			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
 			return

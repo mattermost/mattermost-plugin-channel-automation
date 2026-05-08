@@ -799,7 +799,7 @@ func TestStore_SaveWithChannelLimit_RejectsAtLimit(t *testing.T) {
 	}
 	err := store.SaveWithChannelLimit(overflow, limit, "")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrChannelFlowLimitExceeded), "expected ErrChannelFlowLimitExceeded, got %v", err)
+	assert.True(t, errors.Is(err, model.ErrChannelFlowLimitExceeded), "expected model.ErrChannelFlowLimitExceeded, got %v", err)
 
 	// Overflow flow must not be persisted.
 	got, err := store.Get("f-overflow")
@@ -858,7 +858,7 @@ func TestStore_SaveWithChannelLimit_MovingToDifferentChannel(t *testing.T) {
 	}
 	err := store.SaveWithChannelLimit(moved, limit, "f1")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrChannelFlowLimitExceeded))
+	assert.True(t, errors.Is(err, model.ErrChannelFlowLimitExceeded))
 }
 
 func TestStore_SaveWithChannelLimit_NoLimitBypassesCheck(t *testing.T) {
@@ -923,7 +923,7 @@ func TestStore_SaveWithChannelLimit_AtomicUnderConcurrency(t *testing.T) {
 			switch {
 			case err == nil:
 				atomic.AddInt64(&successN, 1)
-			case errors.Is(err, ErrChannelFlowLimitExceeded):
+			case errors.Is(err, model.ErrChannelFlowLimitExceeded):
 				atomic.AddInt64(&rejectN, 1)
 			default:
 				atomic.AddInt64(&otherN, 1)
@@ -989,7 +989,7 @@ func TestStore_DeleteSaveWithChannelLimit_NoStaleIndex(t *testing.T) {
 		// with the sentinel (Save won the lock first while f1 was still
 		// indexed). It must never return any other error.
 		if saveErr != nil {
-			assert.True(t, errors.Is(saveErr, ErrChannelFlowLimitExceeded),
+			assert.True(t, errors.Is(saveErr, model.ErrChannelFlowLimitExceeded),
 				"iteration %d: unexpected error %v", i, saveErr)
 		}
 	}

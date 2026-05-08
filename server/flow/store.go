@@ -2,7 +2,6 @@ package flow
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -22,11 +21,6 @@ const (
 	channelCreatedIndexKey           = "cc_index"
 	userJoinedTeamTriggerIndexPrefix = "ti:ujt:" // user_joined_team by team (7 + 26 = 33)
 )
-
-// ErrChannelFlowLimitExceeded is returned by SaveWithChannelLimit when
-// persisting the flow would push the count of flows on its trigger
-// channel above the supplied limit.
-var ErrChannelFlowLimitExceeded = errors.New("channel flow limit exceeded")
 
 // KVStore implements Store using the Mattermost plugin KV store.
 // Index mutations are serialized via indexMu to prevent lost updates
@@ -127,7 +121,7 @@ func (s *KVStore) Save(f *model.Flow) error {
 // when non-empty, names the flow being updated so it does not count
 // against itself when targeting the same channel.
 //
-// Returns ErrChannelFlowLimitExceeded when persisting would push the
+// Returns model.ErrChannelFlowLimitExceeded when persisting would push the
 // count above limit; the flow is not saved in that case. All other
 // returned errors indicate backend failures.
 //
@@ -158,7 +152,7 @@ func (s *KVStore) SaveWithChannelLimit(f *model.Flow, limit int, excludeID strin
 	}
 
 	if count >= limit {
-		return ErrChannelFlowLimitExceeded
+		return model.ErrChannelFlowLimitExceeded
 	}
 
 	return s.saveLocked(f)

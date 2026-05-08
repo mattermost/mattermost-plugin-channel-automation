@@ -1568,7 +1568,7 @@ func TestAPI_CreateFlow_BackendErrorReturns500(t *testing.T) {
 
 func TestAPI_CreateFlow_QuotaSentinelReturns409(t *testing.T) {
 	underlying, _ := setupStore(t)
-	store := &errStore{Store: underlying, saveErr: ErrChannelFlowLimitExceeded}
+	store := &errStore{Store: underlying, saveErr: model.ErrChannelFlowLimitExceeded}
 	router := setupAPIWithStore(t, store, 5)
 
 	body := `{
