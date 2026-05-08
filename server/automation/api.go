@@ -44,41 +44,13 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/automations/{id}", h.handleDeleteAutomation).Methods(http.MethodDelete)
 }
 
-// checkChannelAutomationLimit verifies that the channel has not reached the
-// per-channel automation limit. excludeAutomationID is used during updates so the
-// automation being modified does not count against itself.
-func (h *APIHandler) checkChannelAutomationLimit(channelID, excludeAutomationID string) error {
-	if channelID == "" {
-		return nil
+// channelAutomationLimit returns the configured per-channel automation
+// limit, or 0 when no limit is configured.
+func (h *APIHandler) channelAutomationLimit() int {
+	if h.config == nil {
+		return 0
 	}
-
-	limit := 0
-	if h.config != nil {
-		limit = h.config.MaxAutomationsPerChannel()
-	}
-	if limit <= 0 {
-		return nil
-	}
-
-	count, err := h.store.CountByTriggerChannel(channelID)
-	if err != nil {
-		return fmt.Errorf("failed to check channel automation count: %w", err)
-	}
-
-	if excludeAutomationID != "" {
-		existing, err := h.store.Get(excludeAutomationID)
-		if err != nil {
-			return fmt.Errorf("failed to check existing automation: %w", err)
-		}
-		if existing != nil && existing.TriggerChannelID() == channelID {
-			count--
-		}
-	}
-
-	if count >= limit {
-		return fmt.Errorf("channel has reached the maximum of %d automation(s)", limit)
-	}
-	return nil
+	return h.config.MaxAutomationsPerChannel()
 }
 
 func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Request) {
@@ -206,12 +178,13 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.checkChannelAutomationLimit(f.TriggerChannelID(), ""); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
-		return
-	}
-
-	if err := h.store.Save(&f); err != nil {
+	limit := h.channelAutomationLimit()
+	if err := h.store.SaveWithChannelLimit(&f, limit, ""); err != nil {
+		if errors.Is(err, model.ErrChannelAutomationLimitExceeded) {
+			msg := fmt.Sprintf("channel has reached the maximum of %d automation(s)", limit)
+			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
+			return
+		}
 		h.api.LogError("Failed to create automation", "user_id", f.CreatedBy, "automation_id", f.ID, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create automation", err.Error())
 		return
@@ -362,12 +335,13 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.checkChannelAutomationLimit(f.TriggerChannelID(), f.ID); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
-		return
-	}
-
-	if err := h.store.Save(&f); err != nil {
+	limit := h.channelAutomationLimit()
+	if err := h.store.SaveWithChannelLimit(&f, limit, f.ID); err != nil {
+		if errors.Is(err, model.ErrChannelAutomationLimitExceeded) {
+			msg := fmt.Sprintf("channel has reached the maximum of %d automation(s)", limit)
+			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
+			return
+		}
 		h.api.LogError("Failed to update automation", "user_id", userID, "automation_id", id, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update automation", err.Error())
 		return

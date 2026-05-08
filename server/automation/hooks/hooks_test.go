@@ -45,6 +45,9 @@ func (m *mockAutomationStore) ListByTriggerChannel(_ string) ([]*model.Automatio
 
 func (m *mockAutomationStore) ListScheduled() ([]*model.Automation, error) { return nil, nil }
 func (m *mockAutomationStore) Save(_ *model.Automation) error              { return nil }
+func (m *mockAutomationStore) SaveWithChannelLimit(_ *model.Automation, _ int, _ string) error {
+	return nil
+}
 func (m *mockAutomationStore) Delete(_ string) error                       { return nil }
 func (m *mockAutomationStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
 

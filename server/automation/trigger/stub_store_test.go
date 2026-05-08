@@ -65,6 +65,10 @@ func (s *stubStore) Save(*model.Automation) error {
 	panic("stubStore.Save not implemented")
 }
 
+func (s *stubStore) SaveWithChannelLimit(*model.Automation, int, string) error {
+	panic("stubStore.SaveWithChannelLimit not implemented")
+}
+
 func (s *stubStore) Delete(string) error {
 	panic("stubStore.Delete not implemented")
 }

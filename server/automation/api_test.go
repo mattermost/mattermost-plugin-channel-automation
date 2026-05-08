@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1514,4 +1515,132 @@ func TestAPI_UpdateAutomation_AIPromptAgent_AccessDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), `failed to list tools for agent \"bot1\"`)
 	require.Len(t, bridge.calls, 1)
 	assert.Equal(t, "creator1", bridge.calls[0].userID, "PUT must use existing.CreatedBy for the bridge check")
+}
+
+// errStore wraps an underlying model.Store and forces SaveWithChannelLimit
+// to return a configured error so handler-level error mapping can be tested
+// without driving the real KV store into a failure mode.
+type errStore struct {
+	model.Store
+	saveErr error
+}
+
+func (e *errStore) SaveWithChannelLimit(_ *model.Automation, _ int, _ string) error {
+	return e.saveErr
+}
+
+func setupAPIWithStore(t *testing.T, store model.Store, limit int) *mux.Router {
+	t.Helper()
+
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
+	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
+		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	).Maybe()
+
+	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxAutomationsPerChannel: limit}, nil)
+	router := mux.NewRouter()
+	handler.RegisterRoutes(router)
+	return router
+}
+
+func TestAPI_CreateAutomation_BackendErrorReturns500(t *testing.T) {
+	underlying, _ := setupStore(t)
+	store := &errStore{Store: underlying, saveErr: errors.New("boom: backend down")}
+	router := setupAPIWithStore(t, store, 5)
+
+	body := `{
+		"name": "Backend Error Automation",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to create automation")
+}
+
+func TestAPI_CreateAutomation_QuotaSentinelReturns409(t *testing.T) {
+	underlying, _ := setupStore(t)
+	store := &errStore{Store: underlying, saveErr: model.ErrChannelAutomationLimitExceeded}
+	router := setupAPIWithStore(t, store, 5)
+
+	body := `{
+		"name": "Quota Automation",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "maximum")
+}
+
+func TestAPI_UpdateAutomation_BackendErrorReturns500(t *testing.T) {
+	underlying, _ := setupStore(t)
+	// Seed an existing automation via the underlying store so the handler
+	// can load it before invoking SaveWithChannelLimit.
+	require.NoError(t, underlying.Save(&model.Automation{
+		ID:        "a1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	store := &errStore{Store: underlying, saveErr: errors.New("boom: backend down")}
+	router := setupAPIWithStore(t, store, 5)
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/a1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to update automation")
+}
+
+func TestAPI_UpdateAutomation_QuotaSentinelReturns409(t *testing.T) {
+	underlying, _ := setupStore(t)
+	require.NoError(t, underlying.Save(&model.Automation{
+		ID:        "a1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	store := &errStore{Store: underlying, saveErr: model.ErrChannelAutomationLimitExceeded}
+	router := setupAPIWithStore(t, store, 5)
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/a1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "maximum")
 }

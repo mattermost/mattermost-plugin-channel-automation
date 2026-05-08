@@ -2,7 +2,10 @@ package automation
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
@@ -751,4 +754,251 @@ func TestStore_CountByTriggerChannel(t *testing.T) {
 	count, err = store.CountByTriggerChannel("ch1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
+}
+
+func TestStore_SaveWithChannelLimit_AllowsBelowLimit(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 3
+	for i := range limit - 1 {
+		a := &model.Automation{
+			ID:      fmt.Sprintf("a%d", i),
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(a, limit, ""))
+	}
+
+	// One more brings us exactly to the limit; must still succeed.
+	final := &model.Automation{
+		ID:      "a-final",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(final, limit, ""))
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count)
+}
+
+func TestStore_SaveWithChannelLimit_RejectsAtLimit(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 2
+	for i := range limit {
+		a := &model.Automation{
+			ID:      fmt.Sprintf("a%d", i),
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(a, limit, ""))
+	}
+
+	// One past the limit must be rejected with the sentinel error.
+	overflow := &model.Automation{
+		ID:      "a-overflow",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	err := store.SaveWithChannelLimit(overflow, limit, "")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, model.ErrChannelAutomationLimitExceeded), "expected ErrChannelAutomationLimitExceeded, got %v", err)
+
+	// Overflow automation must not be persisted.
+	got, err := store.Get("a-overflow")
+	require.NoError(t, err)
+	assert.Nil(t, got, "rejected automation must not be saved")
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count, "channel count must not change after a rejected save")
+}
+
+func TestStore_SaveWithChannelLimit_SelfExclusion(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 1
+	original := &model.Automation{
+		ID:      "a1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(original, limit, ""))
+
+	// Updating the same automation on the same channel must succeed because
+	// the existing record is self-excluded from the count.
+	updated := &model.Automation{
+		ID:      "a1",
+		Name:    "Updated",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(updated, limit, "a1"))
+
+	got, err := store.Get("a1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "Updated", got.Name)
+
+	// The channel-trigger index must still contain a1 after a same-channel
+	// update. A regression here means quota checks would undercount and
+	// ListByTriggerChannel would miss the automation.
+	ids, err := store.(*KVStore).getChannelTriggerIndex("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a1"}, ids)
+}
+
+func TestStore_SaveWithChannelLimit_MovingToDifferentChannel(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 1
+	require.NoError(t, store.Save(&model.Automation{
+		ID:      "a1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+	require.NoError(t, store.Save(&model.Automation{
+		ID:      "a2",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+	}))
+
+	// Moving a1 onto ch2 (already at limit) must be rejected;
+	// self-exclusion does not apply because a1 isn't on ch2.
+	moved := &model.Automation{
+		ID:      "a1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+	}
+	err := store.SaveWithChannelLimit(moved, limit, "a1")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, model.ErrChannelAutomationLimitExceeded))
+}
+
+func TestStore_SaveWithChannelLimit_NoLimitBypassesCheck(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		t.Run(fmt.Sprintf("limit=%d", limit), func(t *testing.T) {
+			store, _ := setupStore(t)
+
+			for i := range 5 {
+				a := &model.Automation{
+					ID:      fmt.Sprintf("a%d", i),
+					Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+				}
+				require.NoError(t, store.SaveWithChannelLimit(a, limit, ""))
+			}
+
+			count, err := store.CountByTriggerChannel("ch1")
+			require.NoError(t, err)
+			assert.Equal(t, 5, count)
+		})
+	}
+}
+
+func TestStore_SaveWithChannelLimit_NoChannelBypassesCheck(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// channel_created automations have no trigger channel; the quota cannot
+	// apply regardless of how restrictive the limit is.
+	const limit = 1
+	for i := range 3 {
+		a := &model.Automation{
+			ID:      fmt.Sprintf("a%d", i),
+			Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(a, limit, ""))
+	}
+}
+
+// TestStore_SaveWithChannelLimit_AtomicUnderConcurrency is the regression
+// test for the original TOCTOU bug: with a per-channel limit of N and 2N
+// concurrent saves on the same channel, exactly N must succeed and N must
+// be rejected with the sentinel error.
+func TestStore_SaveWithChannelLimit_AtomicUnderConcurrency(t *testing.T) {
+	store, _ := setupStore(t)
+	const limit = 5
+	const goroutines = 2 * limit
+
+	var (
+		wg       sync.WaitGroup
+		successN int64
+		rejectN  int64
+		otherN   int64
+	)
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func() {
+			defer wg.Done()
+			a := &model.Automation{
+				ID:      fmt.Sprintf("a%02d", i),
+				Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+			}
+			err := store.SaveWithChannelLimit(a, limit, "")
+			switch {
+			case err == nil:
+				atomic.AddInt64(&successN, 1)
+			case errors.Is(err, model.ErrChannelAutomationLimitExceeded):
+				atomic.AddInt64(&rejectN, 1)
+			default:
+				atomic.AddInt64(&otherN, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.EqualValues(t, limit, successN, "exactly limit saves must succeed")
+	assert.EqualValues(t, goroutines-limit, rejectN, "the rest must hit the sentinel")
+	assert.EqualValues(t, 0, otherN, "no other error type is permitted")
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count)
+}
+
+// TestStore_DeleteSaveWithChannelLimit_NoStaleIndex covers the Delete /
+// SaveWithChannelLimit race: a concurrent Delete must not leave a stale
+// channel-trigger index entry that causes SaveWithChannelLimit to spuriously
+// reject a save below the limit.
+func TestStore_DeleteSaveWithChannelLimit_NoStaleIndex(t *testing.T) {
+	const limit = 1
+	const iterations = 200
+
+	for i := range iterations {
+		store, _ := setupStore(t)
+		require.NoError(t, store.Save(&model.Automation{
+			ID:      "a1",
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}))
+
+		var (
+			wg          sync.WaitGroup
+			deleteErr   error
+			saveErr     error
+			afterDelete int
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			deleteErr = store.Delete("a1")
+		}()
+		go func() {
+			defer wg.Done()
+			a := &model.Automation{
+				ID:      "a2",
+				Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+			}
+			saveErr = store.SaveWithChannelLimit(a, limit, "")
+		}()
+		wg.Wait()
+
+		require.NoError(t, deleteErr, "iteration %d", i)
+
+		// After both finish, ch1 must hold at most one automation ID — no
+		// stale entry.
+		ids, err := store.(*KVStore).getChannelTriggerIndex("ch1")
+		require.NoError(t, err)
+		afterDelete = len(ids)
+		assert.LessOrEqual(t, afterDelete, limit, "iteration %d: stale index entry, ids=%v", i, ids)
+
+		// Save must either succeed (Delete won the lock first) or be
+		// rejected with the sentinel (Save won the lock first while a1
+		// was still indexed). It must never return any other error.
+		if saveErr != nil {
+			assert.True(t, errors.Is(saveErr, model.ErrChannelAutomationLimitExceeded),
+				"iteration %d: unexpected error %v", i, saveErr)
+		}
+	}
 }
