@@ -128,14 +128,18 @@ func (s *KVStore) Save(f *model.Flow) error {
 // When the flow has no trigger channel (e.g. channel_created or
 // user_joined_team triggers), the quota does not apply and the call
 // degrades to a plain Save.
+//
+// indexMu is acquired for the entire body so the count read and the
+// persist share one critical section. The method MUST NOT be called
+// while indexMu is already held; it always takes the lock itself.
 func (s *KVStore) SaveWithChannelLimit(f *model.Flow, limit int, excludeID string) error {
-	channelID := f.TriggerChannelID()
-	if limit <= 0 || channelID == "" {
-		return s.Save(f)
-	}
-
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
+
+	channelID := f.TriggerChannelID()
+	if limit <= 0 || channelID == "" {
+		return s.saveLocked(f)
+	}
 
 	ids, err := s.getChannelTriggerIndex(channelID)
 	if err != nil {
@@ -145,17 +149,18 @@ func (s *KVStore) SaveWithChannelLimit(f *model.Flow, limit int, excludeID strin
 
 	// Self-exclusion: if the flow being updated already targets this
 	// channel, it is already counted in `ids`, so subtract 1.
-	if excludeID != "" {
-		if slices.Contains(ids, excludeID) {
-			count--
-		}
+	if excludeID != "" && slices.Contains(ids, excludeID) {
+		count--
 	}
 
 	if count >= limit {
 		return model.ErrChannelFlowLimitExceeded
 	}
 
-	return s.saveLocked(f)
+	// Pass the slice we just read to saveLocked so it can skip the
+	// redundant getChannelTriggerIndex(channelID) inside the same
+	// critical section.
+	return s.saveLockedWithChannelTriggerHint(f, channelID, ids)
 }
 
 // saveLocked persists the flow record and reconciles every secondary index
@@ -167,6 +172,15 @@ func (s *KVStore) SaveWithChannelLimit(f *model.Flow, limit int, excludeID strin
 // deadlock. Shared by Save and SaveWithChannelLimit so both paths see a
 // consistent view of the index they just read.
 func (s *KVStore) saveLocked(f *model.Flow) error {
+	return s.saveLockedWithChannelTriggerHint(f, "", nil)
+}
+
+// saveLockedWithChannelTriggerHint is the shared core for Save and
+// SaveWithChannelLimit. When hintChannelID matches the flow's new trigger
+// channel, hintIDs is used as the pre-read channel-trigger-index so the
+// implementation can skip a redundant getChannelTriggerIndex(channelID)
+// call already performed by SaveWithChannelLimit's quota check.
+func (s *KVStore) saveLockedWithChannelTriggerHint(f *model.Flow, hintChannelID string, hintIDs []string) error {
 	// Read old flow to clean up stale trigger index entries.
 	old, err := s.Get(f.ID)
 	if err != nil {
@@ -222,7 +236,11 @@ func (s *KVStore) saveLocked(f *model.Flow) error {
 		}
 	}
 	if newChID := f.TriggerChannelID(); newChID != "" {
-		if err := s.addChannelTriggerIndexLocked(newChID, f.ID); err != nil {
+		if newChID == hintChannelID {
+			if err := s.appendChannelTriggerIndexLocked(newChID, f.ID, hintIDs); err != nil {
+				return err
+			}
+		} else if err := s.addChannelTriggerIndexLocked(newChID, f.ID); err != nil {
 			return err
 		}
 	}
@@ -597,11 +615,18 @@ func (s *KVStore) addChannelTriggerIndexLocked(channelID, flowID string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(ids, flowID) {
+	return s.appendChannelTriggerIndexLocked(channelID, flowID, ids)
+}
+
+// appendChannelTriggerIndexLocked appends flowID to the supplied (already
+// fetched) channel-trigger-index slice and writes it back. The caller MUST
+// have read currentIDs while holding indexMu and MUST still hold it.
+func (s *KVStore) appendChannelTriggerIndexLocked(channelID, flowID string, currentIDs []string) error {
+	if slices.Contains(currentIDs, flowID) {
 		return nil
 	}
-	ids = append(ids, flowID)
-	return s.setChannelTriggerIndex(channelID, ids)
+	currentIDs = append(currentIDs, flowID)
+	return s.setChannelTriggerIndex(channelID, currentIDs)
 }
 
 func (s *KVStore) removeChannelTriggerIndexLocked(channelID, flowID string) error {

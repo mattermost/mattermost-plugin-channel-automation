@@ -1616,3 +1616,31 @@ func TestAPI_UpdateFlow_BackendErrorReturns500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "failed to update flow")
 }
+
+func TestAPI_UpdateFlow_QuotaSentinelReturns409(t *testing.T) {
+	underlying, _ := setupStore(t)
+	require.NoError(t, underlying.Save(&model.Flow{
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	store := &errStore{Store: underlying, saveErr: model.ErrChannelFlowLimitExceeded}
+	router := setupAPIWithStore(t, store, 5)
+
+	body := `{
+		"name": "Updated",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-msg", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/flows/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusConflict, w.Code)
+	assert.Contains(t, w.Body.String(), "maximum")
+}
