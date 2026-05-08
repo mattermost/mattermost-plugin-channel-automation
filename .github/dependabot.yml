@@ -4,6 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    labels:
+      - "dependencies"
+      - "go"
     groups:
       go-dependencies:
         patterns:
@@ -12,6 +15,8 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    labels:
+      - "dependencies"
     groups:
       github-actions:
         patterns:
