@@ -835,6 +835,13 @@ func TestStore_SaveWithChannelLimit_SelfExclusion(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, "Updated", got.Name)
+
+	// The channel-trigger index must still contain a1 after a same-channel
+	// update. A regression here means quota checks would undercount and
+	// ListByTriggerChannel would miss the automation.
+	ids, err := store.(*KVStore).getChannelTriggerIndex("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a1"}, ids)
 }
 
 func TestStore_SaveWithChannelLimit_MovingToDifferentChannel(t *testing.T) {

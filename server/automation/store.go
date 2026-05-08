@@ -229,14 +229,25 @@ func (s *KVStore) saveLockedWithChannelTriggerHint(a *model.Automation, hintChan
 	}
 
 	// Update channel-trigger index (covers all trigger types).
+	// When the trigger channel doesn't change, the index needs no update —
+	// skip both the remove and the add. This avoids two distinct hazards:
+	//   - Hint reuse: SaveWithChannelLimit's snapshot still contains a.ID
+	//     after the remove, so appendChannelTriggerIndexLocked would
+	//     short-circuit and leave the index empty.
+	//   - Wasted work: the pre-refactor remove+add did 2 KVGets + 2 KVSets
+	//     to land back on the same state.
+	oldChID := ""
 	if old != nil {
-		if oldChID := old.TriggerChannelID(); oldChID != "" {
-			if err := s.removeChannelTriggerIndexLocked(oldChID, a.ID); err != nil {
-				return err
-			}
+		oldChID = old.TriggerChannelID()
+	}
+	newChID := a.TriggerChannelID()
+
+	if oldChID != "" && oldChID != newChID {
+		if err := s.removeChannelTriggerIndexLocked(oldChID, a.ID); err != nil {
+			return err
 		}
 	}
-	if newChID := a.TriggerChannelID(); newChID != "" {
+	if newChID != "" && oldChID != newChID {
 		if newChID == hintChannelID {
 			if err := s.appendChannelTriggerIndexLocked(newChID, a.ID, hintIDs); err != nil {
 				return err
