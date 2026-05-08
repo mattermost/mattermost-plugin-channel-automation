@@ -102,13 +102,28 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Filter automations to only those the user has permission to view.
+	// We deliberately distinguish backend failures from genuine permission
+	// denials here: a permission-verification 5xx must not be silently
+	// swallowed as "user can't see this automation", because that would
+	// produce a misleading partial 200 OK while the permission backend is
+	// broken.
 	isAdmin := h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem)
 	if !isAdmin {
 		visible := make([]*model.Automation, 0, len(automations))
 		for _, a := range automations {
-			if permissions.CheckAutomationPermissions(h.api, userID, a) == nil {
+			permErr := permissions.CheckAutomationPermissions(h.api, userID, a)
+			if permErr == nil {
 				visible = append(visible, a)
+				continue
 			}
+			var appErr *mmmodel.AppError
+			if errors.As(permErr, &appErr) {
+				h.api.LogError("Failed to verify permissions while listing automations",
+					"user_id", userID, "automation_id", a.ID, "error", permErr.Error())
+				httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to verify permissions", "")
+				return
+			}
+			// Genuine permission denial — skip this automation.
 		}
 		automations = visible
 	}

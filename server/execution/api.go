@@ -54,11 +54,16 @@ func (h *APIHandler) handleListByAutomation(w http.ResponseWriter, r *http.Reque
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to get automation", "")
 		return
 	}
+	// If the automation was deleted, only system admins can list its
+	// execution history. This mirrors handleGet so a deleted automation's
+	// history stays discoverable to operators.
 	if a == nil {
-		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
-		return
-	}
-	if permErr := permissions.CheckAutomationPermissions(h.api, userID, a); permErr != nil {
+		if !h.api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
+			h.api.LogWarn("Permission denied for execution list (deleted automation)", "user_id", userID, "automation_id", automationID)
+			httputil.WriteErrorJSON(w, http.StatusForbidden, "forbidden", "")
+			return
+		}
+	} else if permErr := permissions.CheckAutomationPermissions(h.api, userID, a); permErr != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, permErr, userID, automationID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
@@ -113,7 +118,7 @@ func (h *APIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if err := permissions.CheckAutomationPermissions(h.api, userID, a); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, record.AutomationID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
 	}

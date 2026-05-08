@@ -142,7 +142,10 @@ func TestExecutionAPI_ListByAutomation_RequiresAuth(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-func TestExecutionAPI_ListByAutomation_AutomationNotFound(t *testing.T) {
+func TestExecutionAPI_ListByAutomation_AutomationNotFound_NonAdmin(t *testing.T) {
+	// When the parent automation is missing (deleted) and the caller is not
+	// a system admin, the endpoint mirrors handleGet and returns 403 rather
+	// than leaking existence via 404.
 	router, _, _, _ := setupAPIHandler(t)
 
 	w := httptest.NewRecorder()
@@ -150,7 +153,28 @@ func TestExecutionAPI_ListByAutomation_AutomationNotFound(t *testing.T) {
 	r.Header.Set("Mattermost-User-ID", "user1")
 
 	router.ServeHTTP(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestExecutionAPI_ListByAutomation_AutomationNotFound_SysAdmin(t *testing.T) {
+	// System admins can still list execution history for a deleted parent
+	// automation — the records are preserved (TTL) so the orphaned history
+	// stays discoverable for auditing.
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "admin", mmmodel.PermissionManageSystem).Return(true)
+
+	router, _, _ := setupAPIHandlerWithCustomMock(t, api)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/automations/nonexistent/executions", nil)
+	r.Header.Set("Mattermost-User-ID", "admin")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var records []*model.ExecutionRecord
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&records))
+	assert.Empty(t, records)
 }
 
 func TestExecutionAPI_ListByAutomation_RequiresAutomationPermission(t *testing.T) {
