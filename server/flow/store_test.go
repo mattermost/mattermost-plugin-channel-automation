@@ -2,7 +2,10 @@ package flow
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
@@ -751,4 +754,189 @@ func TestStore_CountByTriggerChannel(t *testing.T) {
 	count, err = store.CountByTriggerChannel("ch1")
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
+}
+
+func TestStore_SaveWithChannelLimit_AllowsBelowLimit(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 3
+	for i := range limit - 1 {
+		f := &model.Flow{
+			ID:      fmt.Sprintf("f%d", i),
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(f, limit, ""))
+	}
+
+	// One more brings us exactly to the limit; must still succeed.
+	final := &model.Flow{
+		ID:      "f-final",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(final, limit, ""))
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count)
+}
+
+func TestStore_SaveWithChannelLimit_RejectsAtLimit(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 2
+	for i := range limit {
+		f := &model.Flow{
+			ID:      fmt.Sprintf("f%d", i),
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(f, limit, ""))
+	}
+
+	// One past the limit must be rejected with the sentinel error.
+	overflow := &model.Flow{
+		ID:      "f-overflow",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	err := store.SaveWithChannelLimit(overflow, limit, "")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrChannelFlowLimitExceeded), "expected ErrChannelFlowLimitExceeded, got %v", err)
+
+	// Overflow flow must not be persisted.
+	got, err := store.Get("f-overflow")
+	require.NoError(t, err)
+	assert.Nil(t, got, "rejected flow must not be saved")
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count, "channel count must not change after a rejected save")
+}
+
+func TestStore_SaveWithChannelLimit_SelfExclusion(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 1
+	original := &model.Flow{
+		ID:      "f1",
+		Name:    "Original",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(original, limit, ""))
+
+	// Updating the same flow on the same channel must succeed because
+	// the existing record is self-excluded from the count.
+	updated := &model.Flow{
+		ID:      "f1",
+		Name:    "Updated",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+	require.NoError(t, store.SaveWithChannelLimit(updated, limit, "f1"))
+
+	got, err := store.Get("f1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "Updated", got.Name)
+}
+
+func TestStore_SaveWithChannelLimit_MovingToDifferentChannel(t *testing.T) {
+	store, _ := setupStore(t)
+
+	const limit = 1
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+	require.NoError(t, store.Save(&model.Flow{
+		ID:      "f2",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+	}))
+
+	// Moving f1 onto ch2 (already at limit) must be rejected;
+	// self-exclusion does not apply because f1 isn't on ch2.
+	moved := &model.Flow{
+		ID:      "f1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch2"}},
+	}
+	err := store.SaveWithChannelLimit(moved, limit, "f1")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrChannelFlowLimitExceeded))
+}
+
+func TestStore_SaveWithChannelLimit_NoLimitBypassesCheck(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		t.Run(fmt.Sprintf("limit=%d", limit), func(t *testing.T) {
+			store, _ := setupStore(t)
+
+			for i := range 5 {
+				f := &model.Flow{
+					ID:      fmt.Sprintf("f%d", i),
+					Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+				}
+				require.NoError(t, store.SaveWithChannelLimit(f, limit, ""))
+			}
+
+			count, err := store.CountByTriggerChannel("ch1")
+			require.NoError(t, err)
+			assert.Equal(t, 5, count)
+		})
+	}
+}
+
+func TestStore_SaveWithChannelLimit_NoChannelBypassesCheck(t *testing.T) {
+	store, _ := setupStore(t)
+
+	// channel_created flows have no trigger channel; the quota cannot
+	// apply regardless of how restrictive the limit is.
+	const limit = 1
+	for i := range 3 {
+		f := &model.Flow{
+			ID:      fmt.Sprintf("f%d", i),
+			Trigger: model.Trigger{ChannelCreated: &model.ChannelCreatedConfig{TeamID: "team1"}},
+		}
+		require.NoError(t, store.SaveWithChannelLimit(f, limit, ""))
+	}
+}
+
+// TestStore_SaveWithChannelLimit_AtomicUnderConcurrency is the regression
+// test for the original TOCTOU bug: with a per-channel limit of N and 2N
+// concurrent saves on the same channel, exactly N must succeed and N must
+// be rejected with the sentinel error.
+func TestStore_SaveWithChannelLimit_AtomicUnderConcurrency(t *testing.T) {
+	store, _ := setupStore(t)
+	const limit = 5
+	const goroutines = 2 * limit
+
+	var (
+		wg       sync.WaitGroup
+		successN int64
+		rejectN  int64
+		otherN   int64
+	)
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func() {
+			defer wg.Done()
+			f := &model.Flow{
+				ID:      fmt.Sprintf("a%02d", i),
+				Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+			}
+			err := store.SaveWithChannelLimit(f, limit, "")
+			switch {
+			case err == nil:
+				atomic.AddInt64(&successN, 1)
+			case errors.Is(err, ErrChannelFlowLimitExceeded):
+				atomic.AddInt64(&rejectN, 1)
+			default:
+				atomic.AddInt64(&otherN, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.EqualValues(t, limit, successN, "exactly limit saves must succeed")
+	assert.EqualValues(t, goroutines-limit, rejectN, "the rest must hit the sentinel")
+	assert.EqualValues(t, 0, otherN, "no other error type is permitted")
+
+	count, err := store.CountByTriggerChannel("ch1")
+	require.NoError(t, err)
+	assert.Equal(t, limit, count)
 }

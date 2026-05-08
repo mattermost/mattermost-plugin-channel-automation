@@ -95,6 +95,10 @@ func (s *testFlowStore) Save(f *model.Flow) error {
 	return nil
 }
 
+func (s *testFlowStore) SaveWithChannelLimit(f *model.Flow, _ int, _ string) error {
+	return s.Save(f)
+}
+
 func (s *testFlowStore) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

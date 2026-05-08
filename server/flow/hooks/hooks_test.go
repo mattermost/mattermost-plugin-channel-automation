@@ -41,8 +41,11 @@ func (m *mockFlowStore) ListByTriggerChannel(_ string) ([]*model.Flow, error) {
 	return nil, nil
 }
 
-func (m *mockFlowStore) ListScheduled() ([]*model.Flow, error)       { return nil, nil }
-func (m *mockFlowStore) Save(_ *model.Flow) error                    { return nil }
+func (m *mockFlowStore) ListScheduled() ([]*model.Flow, error) { return nil, nil }
+func (m *mockFlowStore) Save(_ *model.Flow) error              { return nil }
+func (m *mockFlowStore) SaveWithChannelLimit(_ *model.Flow, _ int, _ string) error {
+	return nil
+}
 func (m *mockFlowStore) Delete(_ string) error                       { return nil }
 func (m *mockFlowStore) CountByTriggerChannel(_ string) (int, error) { return 0, nil }
 

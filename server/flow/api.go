@@ -44,41 +44,13 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/flows/{id}", h.handleDeleteFlow).Methods(http.MethodDelete)
 }
 
-// checkChannelFlowLimit verifies that the channel has not reached the
-// per-channel flow limit. excludeFlowID is used during updates so the
-// flow being modified does not count against itself.
-func (h *APIHandler) checkChannelFlowLimit(channelID, excludeFlowID string) error {
-	if channelID == "" {
-		return nil
+// channelFlowLimit returns the configured per-channel flow limit, or 0
+// when no limit is configured.
+func (h *APIHandler) channelFlowLimit() int {
+	if h.config == nil {
+		return 0
 	}
-
-	limit := 0
-	if h.config != nil {
-		limit = h.config.MaxFlowsPerChannel()
-	}
-	if limit <= 0 {
-		return nil
-	}
-
-	count, err := h.store.CountByTriggerChannel(channelID)
-	if err != nil {
-		return fmt.Errorf("failed to check channel flow count: %w", err)
-	}
-
-	if excludeFlowID != "" {
-		existing, err := h.store.Get(excludeFlowID)
-		if err != nil {
-			return fmt.Errorf("failed to check existing flow: %w", err)
-		}
-		if existing != nil && existing.TriggerChannelID() == channelID {
-			count--
-		}
-	}
-
-	if count >= limit {
-		return fmt.Errorf("channel has reached the maximum of %d flow(s)", limit)
-	}
-	return nil
+	return h.config.MaxFlowsPerChannel()
 }
 
 func (h *APIHandler) handleListFlows(w http.ResponseWriter, r *http.Request) {
@@ -189,12 +161,13 @@ func (h *APIHandler) handleCreateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), ""); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
-		return
-	}
-
-	if err := h.store.Save(&f); err != nil {
+	limit := h.channelFlowLimit()
+	if err := h.store.SaveWithChannelLimit(&f, limit, ""); err != nil {
+		if errors.Is(err, ErrChannelFlowLimitExceeded) {
+			msg := fmt.Sprintf("channel has reached the maximum of %d flow(s)", limit)
+			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
+			return
+		}
 		h.api.LogError("Failed to create flow", "user_id", f.CreatedBy, "flow_id", f.ID, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to create flow", err.Error())
 		return
@@ -345,12 +318,13 @@ func (h *APIHandler) handleUpdateFlow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.checkChannelFlowLimit(f.TriggerChannelID(), f.ID); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusConflict, err.Error(), "")
-		return
-	}
-
-	if err := h.store.Save(&f); err != nil {
+	limit := h.channelFlowLimit()
+	if err := h.store.SaveWithChannelLimit(&f, limit, f.ID); err != nil {
+		if errors.Is(err, ErrChannelFlowLimitExceeded) {
+			msg := fmt.Sprintf("channel has reached the maximum of %d flow(s)", limit)
+			httputil.WriteErrorJSON(w, http.StatusConflict, msg, "")
+			return
+		}
 		h.api.LogError("Failed to update flow", "user_id", userID, "flow_id", id, "error", err.Error())
 		httputil.WriteErrorJSON(w, http.StatusInternalServerError, "failed to update flow", err.Error())
 		return
