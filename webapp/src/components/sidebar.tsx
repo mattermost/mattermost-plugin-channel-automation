@@ -8,7 +8,7 @@ interface NavItem {
     path: string;
 }
 
-const FlowsIcon = () => (
+const AutomationsIcon = () => (
     <svg
         width='16'
         height='16'
@@ -24,7 +24,7 @@ const FlowsIcon = () => (
 );
 
 const NAV_ITEMS: NavItem[] = [
-    {id: 'flows', label: 'Flows', icon: <FlowsIcon/>, path: '/workflows'},
+    {id: 'automations', label: 'Automations', icon: <AutomationsIcon/>, path: '/automations'},
 ];
 
 interface SidebarProps {

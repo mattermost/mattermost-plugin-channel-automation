@@ -12,12 +12,12 @@ import (
 	"github.com/mattermost/mattermost/server/public/pluginapi"
 	"github.com/mattermost/mattermost/server/public/pluginapi/cluster"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/action"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/notifier"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/command"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/execution"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/action"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/notifier"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
 )
@@ -40,14 +40,14 @@ type Plugin struct {
 
 	bridgeClient *bridgeclient.Client
 
-	botUserID       string
-	registry        *flow.Registry
-	flowStore       model.Store
-	historyStore    model.ExecutionStore
-	triggerService  *flow.TriggerService
-	flowExecutor    *flow.FlowExecutor
-	scheduleManager *flow.ScheduleManager
-	dispatcher      *flow.Dispatcher
+	botUserID          string
+	registry           *automation.Registry
+	automationStore    model.Store
+	historyStore       model.ExecutionStore
+	triggerService     *automation.TriggerService
+	automationExecutor *automation.Executor
+	scheduleManager    *automation.ScheduleManager
+	dispatcher         *automation.Dispatcher
 
 	// configurationLock synchronizes access to the configuration.
 	configurationLock sync.RWMutex
@@ -80,7 +80,7 @@ func (p *Plugin) OnActivate() error {
 
 	// TODO: Register tools in the bridge client
 
-	p.registry = flow.NewRegistry()
+	p.registry = automation.NewRegistry()
 	p.registry.RegisterTrigger(&trigger.MessagePostedTrigger{})
 	p.registry.RegisterTrigger(&trigger.ScheduleTrigger{})
 	p.registry.RegisterTrigger(&trigger.MembershipChangedTrigger{})
@@ -89,13 +89,13 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
 	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
 
-	flowIndexMu, err := cluster.NewMutex(p.API, "flow_index_mutex")
+	automationIndexMu, err := cluster.NewMutex(p.API, "automation_index_mutex")
 	if err != nil {
-		return fmt.Errorf("failed to create flow index mutex: %w", err)
+		return fmt.Errorf("failed to create automation index mutex: %w", err)
 	}
-	p.flowStore = flow.NewStore(p.API, flowIndexMu)
-	p.triggerService = flow.NewTriggerService(p.flowStore, p.registry)
-	p.flowExecutor = flow.NewFlowExecutor(p.registry)
+	p.automationStore = automation.NewStore(p.API, automationIndexMu)
+	p.triggerService = automation.NewTriggerService(p.automationStore, p.registry)
+	p.automationExecutor = automation.NewExecutor(p.registry)
 
 	// Set up persistent work queue.
 	indexMu, err := cluster.NewMutex(p.API, "wq_index_mutex")
@@ -117,20 +117,20 @@ func (p *Plugin) OnActivate() error {
 		p.API.LogInfo("Reset orphaned work items to pending", "count", resetCount)
 	}
 
-	maxWorkers := p.getConfiguration().MaxConcurrentFlowsLimit
+	maxWorkers := p.getConfiguration().MaxConcurrentAutomationsLimit
 	if maxWorkers <= 0 {
 		maxWorkers = 4
 	}
 
 	cooldownStore := notifier.NewCooldownStore(p.API, notifier.NotificationCooldown)
 	failureNotifier := notifier.NewCreatorNotifier(p.API, cooldownStore, p.botUserID)
-	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.flowExecutor, p.flowStore, p.historyStore, failureNotifier, p.API, maxWorkers)
+	p.workerPool = workqueue.NewWorkerPool(p.workQueueStore, p.automationExecutor, p.automationStore, p.historyStore, failureNotifier, p.API, maxWorkers)
 	p.workerPool.Start()
 
-	p.dispatcher = flow.NewDispatcher(p.API, p.triggerService, p.workQueueStore, p.workerPool)
+	p.dispatcher = automation.NewDispatcher(p.API, p.triggerService, p.workQueueStore, p.workerPool)
 
 	// Start schedule manager after worker pool so scheduled items can be processed.
-	p.scheduleManager = flow.NewScheduleManager(p.API, p.flowStore, p.workQueueStore, p.workerPool)
+	p.scheduleManager = automation.NewScheduleManager(p.API, p.automationStore, p.workQueueStore, p.workerPool)
 	if err := p.scheduleManager.Start(); err != nil {
 		p.API.LogError("Failed to start schedule manager", "err", err.Error())
 	}
@@ -229,7 +229,7 @@ func (p *Plugin) handleMembershipChange(member *mmmodel.ChannelMember, action st
 }
 
 // ChannelHasBeenCreated is invoked after a new channel is created.
-// Only public channels (type "O") trigger flows.
+// Only public channels (type "O") trigger automations.
 func (p *Plugin) ChannelHasBeenCreated(_ *plugin.Context, channel *mmmodel.Channel) {
 	if channel.Type != mmmodel.ChannelTypeOpen {
 		return
