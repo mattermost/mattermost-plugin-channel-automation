@@ -277,6 +277,19 @@ func (s *KVStore) saveLocked(f *model.Flow) error {
 }
 
 func (s *KVStore) Delete(id string) error {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+	return s.deleteLocked(id)
+}
+
+// deleteLocked removes the flow record and reconciles every secondary
+// index under a single indexMu critical section. The caller MUST hold
+// indexMu; deleteLocked invokes the *Locked helpers exclusively because
+// indexMu is non-reentrant. Holding the lock across the KVDelete and
+// the index cleanup prevents a concurrent SaveWithChannelLimit from
+// observing a flow ID that lingers in the channel-trigger index after
+// the record itself has been removed.
+func (s *KVStore) deleteLocked(id string) error {
 	f, err := s.Get(id)
 	if err != nil {
 		return err
@@ -289,42 +302,42 @@ func (s *KVStore) Delete(id string) error {
 		return fmt.Errorf("failed to delete flow %s: %w", id, appErr)
 	}
 
-	if err := s.removeFromIndex(id); err != nil {
+	if err := s.removeFromIndexLocked(id); err != nil {
 		return err
 	}
 
 	if f.Trigger.MessagePosted != nil && f.Trigger.MessagePosted.ChannelID != "" {
-		if err := s.removeTriggerIndex(f.Trigger.MessagePosted.ChannelID, id); err != nil {
+		if err := s.removeTriggerIndexLocked(f.Trigger.MessagePosted.ChannelID, id); err != nil {
 			return err
 		}
 	}
 
 	if f.Trigger.MembershipChanged != nil && f.Trigger.MembershipChanged.ChannelID != "" {
-		if err := s.removeMembershipTriggerIndex(f.Trigger.MembershipChanged.ChannelID, id); err != nil {
+		if err := s.removeMembershipTriggerIndexLocked(f.Trigger.MembershipChanged.ChannelID, id); err != nil {
 			return err
 		}
 	}
 
 	if chID := f.TriggerChannelID(); chID != "" {
-		if err := s.removeChannelTriggerIndex(chID, id); err != nil {
+		if err := s.removeChannelTriggerIndexLocked(chID, id); err != nil {
 			return err
 		}
 	}
 
 	if f.Trigger.Schedule != nil {
-		if err := s.removeFromScheduleIndex(id); err != nil {
+		if err := s.removeFromScheduleIndexLocked(id); err != nil {
 			return err
 		}
 	}
 
 	if f.Trigger.ChannelCreated != nil {
-		if err := s.removeFromChannelCreatedIndex(id); err != nil {
+		if err := s.removeFromChannelCreatedIndexLocked(id); err != nil {
 			return err
 		}
 	}
 
 	if f.Trigger.UserJoinedTeam != nil && f.Trigger.UserJoinedTeam.TeamID != "" {
-		if err := s.removeUserJoinedTeamTriggerIndex(f.Trigger.UserJoinedTeam.TeamID, id); err != nil {
+		if err := s.removeUserJoinedTeamTriggerIndexLocked(f.Trigger.UserJoinedTeam.TeamID, id); err != nil {
 			return err
 		}
 	}
@@ -398,12 +411,6 @@ func (s *KVStore) addToIndexLocked(id string) error {
 	return s.setIndex(ids)
 }
 
-func (s *KVStore) removeFromIndex(id string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeFromIndexLocked(id)
-}
-
 func (s *KVStore) removeFromIndexLocked(id string) error {
 	ids, err := s.getIndex()
 	if err != nil {
@@ -467,12 +474,6 @@ func (s *KVStore) addTriggerIndexLocked(channelID, flowID string) error {
 	}
 	ids = append(ids, flowID)
 	return s.setTriggerIndex(channelID, ids)
-}
-
-func (s *KVStore) removeTriggerIndex(channelID, flowID string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeTriggerIndexLocked(channelID, flowID)
 }
 
 func (s *KVStore) removeTriggerIndexLocked(channelID, flowID string) error {
@@ -542,12 +543,6 @@ func (s *KVStore) addMembershipTriggerIndexLocked(channelID, flowID string) erro
 	return s.setMembershipTriggerIndex(channelID, ids)
 }
 
-func (s *KVStore) removeMembershipTriggerIndex(channelID, flowID string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeMembershipTriggerIndexLocked(channelID, flowID)
-}
-
 func (s *KVStore) removeMembershipTriggerIndexLocked(channelID, flowID string) error {
 	ids, err := s.getMembershipTriggerIndex(channelID)
 	if err != nil {
@@ -615,12 +610,6 @@ func (s *KVStore) addChannelTriggerIndexLocked(channelID, flowID string) error {
 	return s.setChannelTriggerIndex(channelID, ids)
 }
 
-func (s *KVStore) removeChannelTriggerIndex(channelID, flowID string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeChannelTriggerIndexLocked(channelID, flowID)
-}
-
 func (s *KVStore) removeChannelTriggerIndexLocked(channelID, flowID string) error {
 	ids, err := s.getChannelTriggerIndex(channelID)
 	if err != nil {
@@ -682,12 +671,6 @@ func (s *KVStore) addToScheduleIndexLocked(id string) error {
 	return s.setScheduleIndex(ids)
 }
 
-func (s *KVStore) removeFromScheduleIndex(id string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeFromScheduleIndexLocked(id)
-}
-
 func (s *KVStore) removeFromScheduleIndexLocked(id string) error {
 	ids, err := s.getScheduleIndex()
 	if err != nil {
@@ -747,12 +730,6 @@ func (s *KVStore) addToChannelCreatedIndexLocked(id string) error {
 	}
 	ids = append(ids, id)
 	return s.setChannelCreatedIndex(ids)
-}
-
-func (s *KVStore) removeFromChannelCreatedIndex(id string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeFromChannelCreatedIndexLocked(id)
 }
 
 func (s *KVStore) removeFromChannelCreatedIndexLocked(id string) error {
@@ -825,12 +802,6 @@ func (s *KVStore) addUserJoinedTeamTriggerIndexLocked(teamID, flowID string) err
 	}
 	ids = append(ids, flowID)
 	return s.setUserJoinedTeamTriggerIndex(teamID, ids)
-}
-
-func (s *KVStore) removeUserJoinedTeamTriggerIndex(teamID, flowID string) error {
-	s.indexMu.Lock()
-	defer s.indexMu.Unlock()
-	return s.removeUserJoinedTeamTriggerIndexLocked(teamID, flowID)
 }
 
 func (s *KVStore) removeUserJoinedTeamTriggerIndexLocked(teamID, flowID string) error {

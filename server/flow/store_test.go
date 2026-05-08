@@ -940,3 +940,57 @@ func TestStore_SaveWithChannelLimit_AtomicUnderConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, limit, count)
 }
+
+// TestStore_DeleteSaveWithChannelLimit_NoStaleIndex covers the Delete /
+// SaveWithChannelLimit race: a concurrent Delete must not leave a stale
+// channel-trigger index entry that causes SaveWithChannelLimit to spuriously
+// reject a save below the limit.
+func TestStore_DeleteSaveWithChannelLimit_NoStaleIndex(t *testing.T) {
+	const limit = 1
+	const iterations = 200
+
+	for i := range iterations {
+		store, _ := setupStore(t)
+		require.NoError(t, store.Save(&model.Flow{
+			ID:      "f1",
+			Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		}))
+
+		var (
+			wg          sync.WaitGroup
+			deleteErr   error
+			saveErr     error
+			afterDelete int
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			deleteErr = store.Delete("f1")
+		}()
+		go func() {
+			defer wg.Done()
+			f := &model.Flow{
+				ID:      "f2",
+				Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+			}
+			saveErr = store.SaveWithChannelLimit(f, limit, "")
+		}()
+		wg.Wait()
+
+		require.NoError(t, deleteErr, "iteration %d", i)
+
+		// After both finish, ch1 must hold at most one flow ID — no stale entry.
+		ids, err := store.(*KVStore).getChannelTriggerIndex("ch1")
+		require.NoError(t, err)
+		afterDelete = len(ids)
+		assert.LessOrEqual(t, afterDelete, limit, "iteration %d: stale index entry, ids=%v", i, ids)
+
+		// Save must either succeed (Delete won the lock first) or be rejected
+		// with the sentinel (Save won the lock first while f1 was still
+		// indexed). It must never return any other error.
+		if saveErr != nil {
+			assert.True(t, errors.Is(saveErr, ErrChannelFlowLimitExceeded),
+				"iteration %d: unexpected error %v", i, saveErr)
+		}
+	}
+}
