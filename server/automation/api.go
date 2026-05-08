@@ -120,6 +120,12 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	var f model.Automation
 	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
@@ -130,11 +136,7 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 	f.ID = mmmodel.NewId()
 	f.CreatedAt = model.NowTimestamp()
 	f.UpdatedAt = f.CreatedAt
-	f.CreatedBy = r.Header.Get("Mattermost-User-ID")
-	if f.CreatedBy == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
+	f.CreatedBy = userID
 
 	if f.Name == "" {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "name is required", "")
@@ -214,6 +216,12 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	f, err := h.store.Get(id)
@@ -224,12 +232,6 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 	}
 	if f == nil {
 		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
@@ -246,6 +248,12 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	existing, err := h.store.Get(id)
@@ -271,12 +279,6 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	f.CreatedAt = existing.CreatedAt
 	f.CreatedBy = existing.CreatedBy
 	f.UpdatedAt = model.NowTimestamp()
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
-		return
-	}
 
 	// Only the creator (or a sysadmin acting on their behalf) may edit an automation.
 	// This is the security boundary that lets the downstream creator-anchored
@@ -369,6 +371,12 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Request) {
+	userID := r.Header.Get("Mattermost-User-ID")
+	if userID == "" {
+		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 
 	existing, err := h.store.Get(id)
@@ -379,12 +387,6 @@ func (h *APIHandler) handleDeleteAutomation(w http.ResponseWriter, r *http.Reque
 	}
 	if existing == nil {
 		httputil.WriteErrorJSON(w, http.StatusNotFound, "automation not found", "")
-		return
-	}
-
-	userID := r.Header.Get("Mattermost-User-ID")
-	if userID == "" {
-		httputil.WriteErrorJSON(w, http.StatusUnauthorized, "missing Mattermost-User-ID header", "")
 		return
 	}
 
