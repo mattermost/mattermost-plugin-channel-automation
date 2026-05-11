@@ -1,8 +1,8 @@
 import React, {useEffect} from 'react';
 import {Redirect, Route, Switch, useRouteMatch} from 'react-router-dom';
 
-import FlowEditorView from 'components/flow_editor_view';
-import FlowListView from 'components/flow_list_view';
+import AutomationEditorView from 'components/automation_editor_view';
+import AutomationListView from 'components/automation_list_view';
 import Sidebar from 'components/sidebar';
 
 import './layout.scss';
@@ -26,20 +26,20 @@ const MainApp: React.FC = () => {
                     <Switch>
                         <Route
                             exact={true}
-                            path={`${path}/workflows`}
-                            component={FlowListView}
+                            path={`${path}/automations`}
+                            component={AutomationListView}
                         />
                         <Route
                             exact={true}
-                            path={`${path}/workflows/add`}
-                            component={FlowEditorView}
+                            path={`${path}/automations/add`}
+                            component={AutomationEditorView}
                         />
                         <Route
                             exact={true}
-                            path={`${path}/workflows/:id/edit`}
-                            component={FlowEditorView}
+                            path={`${path}/automations/:id/edit`}
+                            component={AutomationEditorView}
                         />
-                        <Redirect to={`${url}/workflows`}/>
+                        <Redirect to={`${url}/automations`}/>
                     </Switch>
                 </div>
             </div>

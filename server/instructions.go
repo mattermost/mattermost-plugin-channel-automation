@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// channelAutomationInstructionsBase documents trigger types, actions, templates, and workflow
-// for create_automation and update_automation (returned by GET /automation-instructions).
+// channelAutomationInstructionsBase documents trigger types, actions, templates, and the
+// confirmation protocol for create_automation and update_automation (returned by GET /automation-instructions).
 const channelAutomationInstructionsBase = `Channel automations are trigger-action workflows that fire when events occur.
 
 PERMISSION PREFLIGHT — VERIFY BEFORE DOING ANYTHING ELSE:

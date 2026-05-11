@@ -10,8 +10,8 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow"
-	"github.com/mattermost/mattermost-plugin-channel-automation/server/flow/notifier"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/notifier"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/permissions"
 )
@@ -19,35 +19,35 @@ import (
 // WorkerPool processes work items from the queue using a bounded pool
 // of concurrent goroutines.
 type WorkerPool struct {
-	store        *Store
-	executor     *flow.FlowExecutor
-	flowStore    model.Store
-	historyStore model.ExecutionStore
-	notifier     notifier.FailureNotifier
-	api          plugin.API
-	maxWorkers   int
-	pollInterval time.Duration
-	notify       chan struct{}
-	stop         chan struct{}
-	wg           sync.WaitGroup
-	startOnce    sync.Once
-	stopOnce     sync.Once
+	store           *Store
+	executor        *automation.Executor
+	automationStore model.Store
+	historyStore    model.ExecutionStore
+	notifier        notifier.FailureNotifier
+	api             plugin.API
+	maxWorkers      int
+	pollInterval    time.Duration
+	notify          chan struct{}
+	stop            chan struct{}
+	wg              sync.WaitGroup
+	startOnce       sync.Once
+	stopOnce        sync.Once
 }
 
 // NewWorkerPool creates a WorkerPool. Call Start to begin processing.
 // notifier may be nil to disable failure notifications.
-func NewWorkerPool(store *Store, executor *flow.FlowExecutor, flowStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
+func NewWorkerPool(store *Store, executor *automation.Executor, automationStore model.Store, historyStore model.ExecutionStore, failureNotifier notifier.FailureNotifier, api plugin.API, maxWorkers int) *WorkerPool {
 	return &WorkerPool{
-		store:        store,
-		executor:     executor,
-		flowStore:    flowStore,
-		historyStore: historyStore,
-		notifier:     failureNotifier,
-		api:          api,
-		maxWorkers:   maxWorkers,
-		pollInterval: 30 * time.Second,
-		notify:       make(chan struct{}, 1),
-		stop:         make(chan struct{}),
+		store:           store,
+		executor:        executor,
+		automationStore: automationStore,
+		historyStore:    historyStore,
+		notifier:        failureNotifier,
+		api:             api,
+		maxWorkers:      maxWorkers,
+		pollInterval:    30 * time.Second,
+		notify:          make(chan struct{}, 1),
+		stop:            make(chan struct{}),
 	}
 }
 
@@ -133,7 +133,7 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			errMsg := fmt.Sprintf("panic: %v", r)
 			wp.api.LogError("Worker panicked",
 				"work_item_id", item.ID,
-				"flow_id", item.FlowID,
+				"automation_id", item.AutomationID,
 				"err", errMsg,
 			)
 			if err := wp.store.Fail(item.ID); err != nil {
@@ -145,11 +145,11 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		}
 	}()
 
-	f, err := wp.flowStore.Get(item.FlowID)
+	f, err := wp.automationStore.Get(item.AutomationID)
 	if err != nil {
-		wp.api.LogError("Failed to get flow for work item",
+		wp.api.LogError("Failed to get automation for work item",
 			"work_item_id", item.ID,
-			"flow_id", item.FlowID,
+			"automation_id", item.AutomationID,
 			"err", err.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -161,32 +161,32 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 
-	// Flow was deleted or disabled between enqueue and execute — silently complete.
+	// Automation was deleted or disabled between enqueue and execute — silently complete.
 	if f == nil || !f.Enabled {
 		if err := wp.store.Complete(item.ID); err != nil {
-			wp.api.LogError("Failed to complete work item for deleted/disabled flow",
+			wp.api.LogError("Failed to complete work item for deleted/disabled automation",
 				"work_item_id", item.ID,
-				"flow_id", item.FlowID,
+				"automation_id", item.AutomationID,
 				"err", err.Error(),
 			)
 		}
 		return
 	}
 
-	// Check that the flow creator is still an active user.
+	// Check that the automation creator is still an active user.
 	creator, appErr := wp.api.GetUser(f.CreatedBy)
 	if appErr != nil {
 		if appErr.StatusCode == http.StatusNotFound {
-			// Creator has been permanently deleted — disable the flow.
-			wp.disableFlow(f, item, "flow creator account has been deactivated or deleted")
+			// Creator has been permanently deleted — disable the automation.
+			wp.disableAutomation(f, item, "automation creator account has been deactivated or deleted")
 			return
 		}
 
-		// Transient API error — fail this execution but leave the flow enabled.
-		reason := fmt.Sprintf("failed to look up flow creator %q: %s", f.CreatedBy, appErr.Error())
-		wp.api.LogError("Failed to verify flow creator",
+		// Transient API error — fail this execution but leave the automation enabled.
+		reason := fmt.Sprintf("failed to look up automation creator %q: %s", f.CreatedBy, appErr.Error())
+		wp.api.LogError("Failed to verify automation creator",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
+			"automation_id", f.ID,
 			"created_by", f.CreatedBy,
 			"err", appErr.Error(),
 		)
@@ -200,21 +200,21 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 	if creator.DeleteAt != 0 {
-		// Creator has been deactivated — disable the flow.
-		wp.disableFlow(f, item, "flow creator account has been deactivated or deleted")
+		// Creator has been deactivated — disable the automation.
+		wp.disableAutomation(f, item, "automation creator account has been deactivated or deleted")
 		return
 	}
 
 	// Verify the creator still has the required permissions (e.g. channel
 	// admin, team admin, or system admin) — the same check performed at
-	// flow creation time.
-	if permErr := permissions.CheckFlowPermissions(wp.api, f.CreatedBy, f); permErr != nil {
+	// automation creation time.
+	if permErr := permissions.CheckAutomationPermissions(wp.api, f.CreatedBy, f); permErr != nil {
 		var appErr *mmmodel.AppError
 		if errors.As(permErr, &appErr) {
-			// Transient API error — fail this execution but leave the flow enabled.
-			wp.api.LogError("Failed to verify flow creator permissions",
+			// Transient API error — fail this execution but leave the automation enabled.
+			wp.api.LogError("Failed to verify automation creator permissions",
 				"work_item_id", item.ID,
-				"flow_id", f.ID,
+				"automation_id", f.ID,
 				"created_by", f.CreatedBy,
 				"err", permErr.Error(),
 			)
@@ -224,12 +224,12 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 					"err", storeErr.Error(),
 				)
 			}
-			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify flow creator permissions: %s", permErr.Error()), model.NowTimestamp())
+			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify automation creator permissions: %s", permErr.Error()), model.NowTimestamp())
 			return
 		}
 
-		// Creator lost the required permissions — disable the flow.
-		wp.disableFlow(f, item, fmt.Sprintf("flow creator no longer has the required permissions: %s", permErr.Error()))
+		// Creator lost the required permissions — disable the automation.
+		wp.disableAutomation(f, item, fmt.Sprintf("automation creator no longer has the required permissions: %s", permErr.Error()))
 		return
 	}
 
@@ -237,9 +237,9 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 	completedAt := model.NowTimestamp()
 
 	if execErr != nil {
-		wp.api.LogError("Flow execution failed",
+		wp.api.LogError("Automation execution failed",
 			"work_item_id", item.ID,
-			"flow_id", item.FlowID,
+			"automation_id", item.AutomationID,
 			"err", execErr.Error(),
 		)
 		if storeErr := wp.store.Fail(item.ID); storeErr != nil {
@@ -257,60 +257,60 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 			)
 		}
 
-		wp.api.LogInfo("Flow executed successfully",
+		wp.api.LogInfo("Automation executed successfully",
 			"work_item_id", item.ID,
-			"flow_id", item.FlowID,
+			"automation_id", item.AutomationID,
 		)
 	}
 
 	wp.saveExecutionRecord(item, ctx, execErr, completedAt)
 }
 
-func (wp *WorkerPool) disableFlow(f *model.Flow, item *model.WorkItem, reason string) {
-	wp.api.LogWarn("Disabling flow",
-		"flow_id", f.ID,
+func (wp *WorkerPool) disableAutomation(f *model.Automation, item *model.WorkItem, reason string) {
+	wp.api.LogWarn("Disabling automation",
+		"automation_id", f.ID,
 		"created_by", f.CreatedBy,
 		"reason", reason,
 	)
 
 	f.Enabled = false
-	if saveErr := wp.flowStore.Save(f); saveErr != nil {
-		wp.api.LogError("Failed to disable flow with inactive creator",
-			"flow_id", f.ID,
+	if saveErr := wp.automationStore.Save(f); saveErr != nil {
+		wp.api.LogError("Failed to disable automation with inactive creator",
+			"automation_id", f.ID,
 			"err", saveErr.Error(),
 		)
 	}
 
 	if storeErr := wp.store.Fail(item.ID); storeErr != nil {
-		wp.api.LogError("Failed to remove work item after disabling flow",
+		wp.api.LogError("Failed to remove work item after disabling automation",
 			"work_item_id", item.ID,
-			"flow_id", f.ID,
+			"automation_id", f.ID,
 			"err", storeErr.Error(),
 		)
 	}
 	wp.saveExecutionRecord(item, nil, fmt.Errorf("%s", reason), model.NowTimestamp())
 }
 
-// notifyFailure surfaces the failure to the flow creator via the configured
+// notifyFailure surfaces the failure to the automation creator via the configured
 // notifier (typically a DM from the plugin bot). Safe to call with a nil
-// notifier or nil flow.
-func (wp *WorkerPool) notifyFailure(f *model.Flow, item *model.WorkItem, execErr error) {
+// notifier or nil automation.
+func (wp *WorkerPool) notifyFailure(f *model.Automation, item *model.WorkItem, execErr error) {
 	if wp.notifier == nil || f == nil || execErr == nil {
 		wp.api.LogWarn("Skipping failure notification due to missing inputs",
 			"work_item_id", item.ID,
 			"notifier_nil", wp.notifier == nil,
-			"flow_nil", f == nil,
+			"automation_nil", f == nil,
 			"err_nil", execErr == nil,
 		)
 		return
 	}
 
 	details := notifier.FailureDetails{
-		FlowID:      f.ID,
-		FlowName:    f.Name,
-		CreatedBy:   f.CreatedBy,
-		ErrorMsg:    execErr.Error(),
-		ExecutionID: item.ID,
+		AutomationID:   f.ID,
+		AutomationName: f.Name,
+		CreatedBy:      f.CreatedBy,
+		ErrorMsg:       execErr.Error(),
+		ExecutionID:    item.ID,
 	}
 	if ch := item.TriggerData.Channel; ch != nil {
 		details.ChannelID = ch.Id
@@ -322,7 +322,7 @@ func (wp *WorkerPool) notifyFailure(f *model.Flow, item *model.WorkItem, execErr
 		}
 	}
 
-	var actionErr *flow.ActionError
+	var actionErr *automation.ActionError
 	if errors.As(execErr, &actionErr) {
 		details.ActionID = actionErr.ActionID
 		details.ActionType = actionErr.ActionType
@@ -332,20 +332,20 @@ func (wp *WorkerPool) notifyFailure(f *model.Flow, item *model.WorkItem, execErr
 	wp.notifier.NotifyFailure(details)
 }
 
-func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.FlowContext, execErr error, completedAt int64) {
+func (wp *WorkerPool) saveExecutionRecord(item *model.WorkItem, ctx *model.AutomationContext, execErr error, completedAt int64) {
 	if wp.historyStore == nil {
 		return
 	}
 
 	record := &model.ExecutionRecord{
-		ID:          item.ID,
-		FlowID:      item.FlowID,
-		FlowName:    item.FlowName,
-		Status:      "success",
-		TriggerData: item.TriggerData,
-		CreatedAt:   item.CreatedAt,
-		StartedAt:   item.StartedAt,
-		CompletedAt: completedAt,
+		ID:             item.ID,
+		AutomationID:   item.AutomationID,
+		AutomationName: item.AutomationName,
+		Status:         "success",
+		TriggerData:    item.TriggerData,
+		CreatedAt:      item.CreatedAt,
+		StartedAt:      item.StartedAt,
+		CompletedAt:    completedAt,
 	}
 	if execErr != nil {
 		record.Status = "failed"

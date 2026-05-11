@@ -1,7 +1,7 @@
 package pluginbridge
 
-// Flow represents a trigger-action workflow.
-type Flow struct {
+// Automation represents a trigger-action automation.
+type Automation struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
 	Enabled   bool     `json:"enabled"`
@@ -22,7 +22,7 @@ type UserJoinedTeamConfig struct {
 	UserType string `json:"user_type,omitempty"` // "user", "guest", or "" (both)
 }
 
-// Trigger defines when a flow should fire. Exactly one config pointer should be set.
+// Trigger defines when an automation should fire. Exactly one config pointer should be set.
 type Trigger struct {
 	MessagePosted     *MessagePostedConfig     `json:"message_posted,omitempty"`
 	Schedule          *ScheduleConfig          `json:"schedule,omitempty"`
@@ -50,7 +50,7 @@ type ScheduleConfig struct {
 	StartAt   int64  `json:"start_at,omitempty"` // UTC Unix milliseconds; must be in the future if set
 }
 
-// Action defines a single step in a flow. Exactly one config pointer should be set.
+// Action defines a single step in an automation. Exactly one config pointer should be set.
 type Action struct {
 	ID          string                   `json:"id"`
 	SendMessage *SendMessageActionConfig `json:"send_message,omitempty"`
@@ -80,7 +80,7 @@ type AIPromptActionConfig struct {
 	Guardrails   *Guardrails `json:"guardrails,omitempty"`
 	// RequestAs selects which user the AI completion request is attributed to.
 	// Allowed values: "" or "triggerer" (default — the user who triggered the
-	// automation, falling back to the flow creator when the trigger has no
-	// associated user) or "creator" (always the flow creator).
+	// automation, falling back to the automation creator when the trigger has
+	// no associated user) or "creator" (always the automation creator).
 	RequestAs string `json:"request_as,omitempty"`
 }

@@ -90,7 +90,7 @@ export interface AIToolInfo {
     description: string;
 }
 
-export interface Flow {
+export interface Automation {
     id: string;
     name: string;
     enabled: boolean;
