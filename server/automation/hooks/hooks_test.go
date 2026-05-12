@@ -16,8 +16,33 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
+
+// testTriggerRegistry is a tiny TriggerLookup backed by a map. It mirrors the
+// production wiring (which passes *automation.Registry into the hooks API)
+// without creating an import cycle through the automation package in tests.
+type testTriggerRegistry struct {
+	handlers map[string]model.TriggerHandler
+}
+
+func (r *testTriggerRegistry) GetTrigger(t string) (model.TriggerHandler, bool) {
+	h, ok := r.handlers[t]
+	return h, ok
+}
+
+func newTestTriggerRegistry() *testTriggerRegistry {
+	return &testTriggerRegistry{
+		handlers: map[string]model.TriggerHandler{
+			model.TriggerTypeMessagePosted:     &trigger.MessagePostedTrigger{},
+			model.TriggerTypeSchedule:          &trigger.ScheduleTrigger{},
+			model.TriggerTypeMembershipChanged: &trigger.MembershipChangedTrigger{},
+			model.TriggerTypeChannelCreated:    &trigger.ChannelCreatedTrigger{},
+			model.TriggerTypeUserJoinedTeam:    &trigger.UserJoinedTeamTrigger{},
+		},
+	}
+}
 
 var (
 	chAllow        = mmmodel.NewId()
@@ -85,7 +110,7 @@ func testRouter(t *testing.T, store *mockAutomationStore, api *plugintest.API) *
 	api.On("GetChannelMember", chAllow, mock.AnythingOfType("string")).Return(&mmmodel.ChannelMember{ChannelId: chAllow}, (*mmmodel.AppError)(nil)).Maybe()
 	r := mux.NewRouter()
 	apiRouter := r.PathPrefix("/api/v1").Subrouter()
-	NewAPIHandler(store, api).RegisterRoutes(apiRouter)
+	NewAPIHandler(store, api, newTestTriggerRegistry()).RegisterRoutes(apiRouter)
 	return r
 }
 

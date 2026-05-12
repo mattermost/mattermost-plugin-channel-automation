@@ -26,10 +26,19 @@ const (
 	headerMattermostUserID = "Mattermost-User-ID"
 )
 
+// TriggerLookup is the narrow subset of automation.Registry that hook
+// authorization needs: resolving a TriggerHandler from a trigger type. Kept
+// as an interface to avoid an import cycle with the automation package and
+// to make NewAPIHandler easy to fake in tests.
+type TriggerLookup interface {
+	GetTrigger(triggerType string) (model.TriggerHandler, bool)
+}
+
 // APIHandler serves tool hook callbacks for channel guardrails.
 type APIHandler struct {
-	store model.Store
-	api   plugin.API
+	store    model.Store
+	api      plugin.API
+	triggers TriggerLookup
 	// channelTeamCache memoizes channel_id -> team_id (or "" for DM/GM).
 	// Channel -> team is immutable in Mattermost so entries never expire.
 	// On plugin restart the cache rebuilds on demand.
@@ -47,9 +56,12 @@ type HookCtx struct {
 	API          plugin.API
 }
 
-// NewAPIHandler constructs a hooks API handler.
-func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
-	return &APIHandler{store: store, api: api}
+// NewAPIHandler constructs a hooks API handler. triggers is used by hook
+// authorization to delegate per-trigger-type "could this caller fire this
+// trigger?" checks to the registered TriggerHandler instead of switching on
+// trigger type here.
+func NewAPIHandler(store model.Store, api plugin.API, triggers TriggerLookup) *APIHandler {
+	return &APIHandler{store: store, api: api, triggers: triggers}
 }
 
 // HookURL returns the plugin-relative before-callback URL for a tool hook on
@@ -120,11 +132,12 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, automationID
 	return chs, teams
 }
 
-// When request_as is "creator", only the creator may invoke. Otherwise (default/triggerer),
-// the caller must be a system admin or a user who could legitimately fire this trigger
-// (mirrors the runtime trigger filters in server/automation/trigger): channel membership
-// for channel-scoped triggers, team membership for channel_created, and team membership
-// plus the user_joined_team user_type filter for user_joined_team.
+// authorizeHookCaller reports whether callerID may invoke a hook for the
+// given automation/action. The automation creator may always invoke. When
+// request_as is "creator", non-creators (including system admins) are
+// rejected. Otherwise the caller must be a system admin or pass the
+// trigger handler's CallerCanTrigger check, which mirrors the runtime
+// dispatch filters.
 func (h *APIHandler) authorizeHookCaller(callerID string, f *model.Automation, requestAs string) bool {
 	if callerID == "" || f.CreatedBy == "" {
 		return false
@@ -138,64 +151,23 @@ func (h *APIHandler) authorizeHookCaller(callerID string, f *model.Automation, r
 	return h.callerCanTriggerAutomation(callerID, f)
 }
 
-// callerCanTriggerAutomation reports whether callerID could fire the automation,
-// matching the same checks the trigger handlers apply at dispatch time. Schedule
-// triggers have no triggering user, so they are creator-only.
+// callerCanTriggerAutomation reports whether callerID could fire the
+// automation. System admins always pass. Otherwise the per-trigger-type
+// check is delegated to the registered TriggerHandler (which mirrors the
+// same membership/user_type filters applied at dispatch time). An unknown
+// trigger type or a missing handler returns false.
 func (h *APIHandler) callerCanTriggerAutomation(callerID string, f *model.Automation) bool {
 	if h.api.HasPermissionTo(callerID, mmmodel.PermissionManageSystem) {
 		return true
 	}
-	switch {
-	case f.Trigger.MessagePosted != nil:
-		return h.isChannelMember(f.Trigger.MessagePosted.ChannelID, callerID)
-	case f.Trigger.MembershipChanged != nil:
-		return h.isChannelMember(f.Trigger.MembershipChanged.ChannelID, callerID)
-	case f.Trigger.ChannelCreated != nil:
-		return h.isTeamMember(f.Trigger.ChannelCreated.TeamID, callerID)
-	case f.Trigger.UserJoinedTeam != nil:
-		cfg := f.Trigger.UserJoinedTeam
-		if !h.isTeamMember(cfg.TeamID, callerID) {
-			return false
-		}
-		return h.userMatchesUserType(callerID, cfg.UserType)
-	}
-	return false
-}
-
-func (h *APIHandler) isChannelMember(channelID, userID string) bool {
-	if channelID == "" || userID == "" {
+	if h.triggers == nil {
 		return false
 	}
-	member, appErr := h.api.GetChannelMember(channelID, userID)
-	return appErr == nil && member != nil
-}
-
-func (h *APIHandler) isTeamMember(teamID, userID string) bool {
-	if teamID == "" || userID == "" {
+	handler, ok := h.triggers.GetTrigger(f.Trigger.Type())
+	if !ok {
 		return false
 	}
-	member, appErr := h.api.GetTeamMember(teamID, userID)
-	return appErr == nil && member != nil && member.DeleteAt == 0
-}
-
-// userMatchesUserType applies the user_joined_team trigger's user_type filter
-// to the caller. Empty user_type accepts both users and guests; "user" rejects
-// guests; "guest" requires a guest. Validation rejects other values at save time.
-func (h *APIHandler) userMatchesUserType(userID, userType string) bool {
-	if userType == "" {
-		return true
-	}
-	user, appErr := h.api.GetUser(userID)
-	if appErr != nil || user == nil {
-		return false
-	}
-	switch userType {
-	case "guest":
-		return user.IsGuest()
-	case "user":
-		return !user.IsGuest()
-	}
-	return false
+	return handler.CallerCanTrigger(h.api, &f.Trigger, callerID)
 }
 
 // loadGuardrailAutomation loads the automation, guardrails, and ai_prompt request_as for the
@@ -292,7 +264,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 			"caller_id", callerID,
 		)
 		writeJSON(w, http.StatusForbidden, mcptool.BeforeHookResponse{
-			Error: "forbidden: hook caller must be the automation creator, a system admin, or a user who could fire this automation's trigger",
+			Error: "forbidden: the current user is not authorized to invoke this automation's tool hook",
 		})
 		return
 	}

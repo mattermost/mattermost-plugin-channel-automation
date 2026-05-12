@@ -38,6 +38,13 @@ func (t *ChannelCreatedTrigger) CandidateAutomationIDs(store model.Store, event 
 	return store.GetChannelCreatedAutomationIDs()
 }
 
+func (t *ChannelCreatedTrigger) CallerCanTrigger(api model.HookCallerAPI, trigger *model.Trigger, userID string) bool {
+	if trigger.ChannelCreated == nil {
+		return false
+	}
+	return isTeamMember(api, trigger.ChannelCreated.TeamID, userID)
+}
+
 func (t *ChannelCreatedTrigger) BuildTriggerData(api model.TriggerAPI, event *model.Event) (model.TriggerData, error) {
 	if event.Channel == nil {
 		return model.TriggerData{}, fmt.Errorf("channel_created event has no channel")
