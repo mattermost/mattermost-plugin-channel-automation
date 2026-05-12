@@ -25,8 +25,7 @@ var (
 	teamAutomation = mmmodel.NewId() // automation anchor team id
 )
 
-// creatorUserID is the default automation CreatedBy used by test helpers; the
-// hook handlers require the Mattermost-User-ID header to match it.
+// creatorUserID is the default automation CreatedBy used by test helpers.
 const creatorUserID = "user1"
 
 // mockAutomationStore implements model.Store for hook tests.
@@ -74,12 +73,16 @@ func testRouter(t *testing.T, store *mockAutomationStore, api *plugintest.API) *
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything,
 	).Return().Maybe()
-	// authorizeAutomationCreator emits a warning when a non-creator caller is rejected.
+	// authorizeHookCaller emits a warning when a caller is rejected (msg + automation_id + caller_id).
 	api.On("LogWarn",
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 	).Return().Maybe()
-	api.On("GetChannel", chAllow).Return(&mmmodel.Channel{Id: chAllow, TeamId: teamAutomation}, (*mmmodel.AppError)(nil)).Maybe()
+	api.On("HasPermissionTo", mock.AnythingOfType("string"), mmmodel.PermissionManageSystem).Return(false).Maybe()
+	api.On("GetChannel", chAllow).Return(&mmmodel.Channel{Id: chAllow, TeamId: teamAutomation, Type: mmmodel.ChannelTypeOpen}, (*mmmodel.AppError)(nil)).Maybe()
+	// Default channel-member stubs match the trigger semantics (membership only).
+	// Specific denials must be registered before the catch-all (first match wins).
+	api.On("GetChannelMember", chAllow, "someone-else").Return((*mmmodel.ChannelMember)(nil), mmmodel.NewAppError("GetChannelMember", "", nil, "", http.StatusNotFound)).Maybe()
+	api.On("GetChannelMember", chAllow, mock.AnythingOfType("string")).Return(&mmmodel.ChannelMember{ChannelId: chAllow}, (*mmmodel.AppError)(nil)).Maybe()
 	r := mux.NewRouter()
 	apiRouter := r.PathPrefix("/api/v1").Subrouter()
 	NewAPIHandler(store, api).RegisterRoutes(apiRouter)
@@ -115,8 +118,20 @@ func postBeforeAs(t *testing.T, r *mux.Router, automationID, actionID, callerUse
 	return rec.Code, resp
 }
 
+// stubTeamMemberForHookAuth wires GetTeamMember stubs that match the trigger-time
+// membership check used by callerCanTriggerAutomation for team-scoped triggers.
+func stubTeamMemberForHookAuth(api *plugintest.API, teamID string, memberUserIDs ...string) {
+	for _, uid := range memberUserIDs {
+		api.On("GetTeamMember", teamID, uid).Return(&mmmodel.TeamMember{TeamId: teamID, UserId: uid}, (*mmmodel.AppError)(nil)).Maybe()
+	}
+}
+
 func guardrailAutomation() *model.Automation {
-	return &model.Automation{
+	return guardrailAutomationWithRequestAs("")
+}
+
+func guardrailAutomationWithRequestAs(requestAs string) *model.Automation {
+	f := &model.Automation{
 		ID:        "auto1",
 		CreatedBy: creatorUserID,
 		Trigger: model.Trigger{
@@ -126,6 +141,7 @@ func guardrailAutomation() *model.Automation {
 			{
 				ID: "ai1",
 				AIPrompt: &model.AIPromptActionConfig{
+					RequestAs:    requestAs,
 					AllowedTools: []string{"search_posts"},
 					Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{
 						{ChannelID: chAllow, TeamID: teamAutomation},
@@ -134,6 +150,7 @@ func guardrailAutomation() *model.Automation {
 			},
 		},
 	}
+	return f
 }
 
 func TestHooks_Before_SearchPostsRequiresChannelID(t *testing.T) {
@@ -532,7 +549,7 @@ func TestHooks_Before_AllowedChannelsTruncatedWhenLarge(t *testing.T) {
 	}
 	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
 	api := &plugintest.API{}
-	api.On("GetChannel", ids[0]).Return(&mmmodel.Channel{Id: ids[0], TeamId: teamAutomation}, (*mmmodel.AppError)(nil))
+	api.On("GetChannel", ids[0]).Return(&mmmodel.Channel{Id: ids[0], TeamId: teamAutomation, Type: mmmodel.ChannelTypeOpen}, (*mmmodel.AppError)(nil))
 	r := testRouter(t, store, api)
 
 	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
@@ -706,12 +723,253 @@ func TestHooks_Before_GetTeamMembers_MessagePosted_WrongTeam(t *testing.T) {
 	assert.Contains(t, resp.Error, "not permitted by guardrails")
 }
 
-func TestHooks_Before_RejectsNonCreatorCaller(t *testing.T) {
+func TestHooks_Before_RejectsNonMemberNeitherCreator(t *testing.T) {
 	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
 	api := &plugintest.API{}
 	r := testRouter(t, store, api)
 
 	code, resp := postBeforeAs(t, r, "auto1", "ai1", "someone-else", mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_AllowsTriggerChannelMemberWhenRequestAsTriggerer(t *testing.T) {
+	triggerUser := "triggering-user-id"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomationWithRequestAs(model.AIPromptRequestAsTriggerer)}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", triggerUser, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   triggerUser,
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_AllowsTriggerChannelMemberWhenRequestAsUnset(t *testing.T) {
+	triggerUser := "triggering-user-id"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", triggerUser, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   triggerUser,
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_AllowsAnyChannelMemberInTriggererModeIgnoresBodyUserID(t *testing.T) {
+	triggerUser := "triggering-user-id"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	// Authorization uses Mattermost-User-ID only; body user_id is ignored.
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", triggerUser, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   "other-bridge-user-id",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_RejectsNonMemberCallerInTriggererMode(t *testing.T) {
+	const outsiderID = "outsider-channel-user"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomation()}}
+	api := &plugintest.API{}
+	api.On("GetChannelMember", chAllow, outsiderID).Return((*mmmodel.ChannelMember)(nil), mmmodel.NewAppError("GetChannelMember", "", nil, "", http.StatusNotFound))
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", outsiderID, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_RejectsNonCreatorWhenRequestAsCreator(t *testing.T) {
+	triggerUser := "triggering-user-id"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": guardrailAutomationWithRequestAs(model.AIPromptRequestAsCreator)}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", triggerUser, mcptool.BeforeHookRequest{
+		ToolName: "search_posts",
+		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_AllowsTeamMemberWhenRequestAsTriggerer_ChannelCreated(t *testing.T) {
+	team1 := mmmodel.NewId()
+	memberUser := "team-member-user"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationChannelCreatedTeam(team1)}}
+	api := &plugintest.API{}
+	stubTeamMemberForHookAuth(api, team1, memberUser)
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", memberUser, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   "ignored-body-user-id",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_RejectsNonTeamMemberWhenRequestAsTriggerer_ChannelCreated(t *testing.T) {
+	team1 := mmmodel.NewId()
+	outsider := "outsider-team-user"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationChannelCreatedTeam(team1)}}
+	api := &plugintest.API{}
+	api.On("GetTeamMember", team1, outsider).Return((*mmmodel.TeamMember)(nil), mmmodel.NewAppError("GetTeamMember", "", nil, "", http.StatusNotFound)).Maybe()
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", outsider, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_AllowsTeamMemberWhenRequestAsTriggerer_UserJoinedTeam(t *testing.T) {
+	team1 := mmmodel.NewId()
+	memberUser := "team-member-user-ujt"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationUserJoinedTeam(team1)}}
+	api := &plugintest.API{}
+	stubTeamMemberForHookAuth(api, team1, memberUser)
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", memberUser, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   "ignored-body-user-id",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_RejectsNonTeamMemberWhenRequestAsTriggerer_UserJoinedTeam(t *testing.T) {
+	team1 := mmmodel.NewId()
+	outsider := "outsider-team-user-ujt"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": automationUserJoinedTeam(team1)}}
+	api := &plugintest.API{}
+	api.On("GetTeamMember", team1, outsider).Return((*mmmodel.TeamMember)(nil), mmmodel.NewAppError("GetTeamMember", "", nil, "", http.StatusNotFound)).Maybe()
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", outsider, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+// userJoinedTeamWithUserType returns a guardrail automation whose user_joined_team
+// trigger filters by the supplied user_type ("", "user", or "guest").
+func userJoinedTeamWithUserType(teamID, userType string) *model.Automation {
+	f := automationUserJoinedTeam(teamID)
+	f.Trigger.UserJoinedTeam.UserType = userType
+	return f
+}
+
+func TestHooks_Before_UserJoinedTeam_UserTypeUser_RejectsGuestCaller(t *testing.T) {
+	team1 := mmmodel.NewId()
+	guestUser := "guest-team-member"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": userJoinedTeamWithUserType(team1, "user")}}
+	api := &plugintest.API{}
+	stubTeamMemberForHookAuth(api, team1, guestUser)
+	api.On("GetUser", guestUser).Return(&mmmodel.User{Id: guestUser, Roles: mmmodel.SystemGuestRoleId}, (*mmmodel.AppError)(nil))
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", guestUser, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_UserJoinedTeam_UserTypeGuest_AllowsGuestCaller(t *testing.T) {
+	team1 := mmmodel.NewId()
+	guestUser := "guest-team-member-2"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": userJoinedTeamWithUserType(team1, "guest")}}
+	api := &plugintest.API{}
+	stubTeamMemberForHookAuth(api, team1, guestUser)
+	api.On("GetUser", guestUser).Return(&mmmodel.User{Id: guestUser, Roles: mmmodel.SystemGuestRoleId}, (*mmmodel.AppError)(nil))
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", guestUser, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
+func TestHooks_Before_UserJoinedTeam_UserTypeGuest_RejectsRegularCaller(t *testing.T) {
+	team1 := mmmodel.NewId()
+	regularUser := "regular-team-member"
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": userJoinedTeamWithUserType(team1, "guest")}}
+	api := &plugintest.API{}
+	stubTeamMemberForHookAuth(api, team1, regularUser)
+	api.On("GetUser", regularUser).Return(&mmmodel.User{Id: regularUser, Roles: mmmodel.SystemUserRoleId}, (*mmmodel.AppError)(nil))
+	r := testRouter(t, store, api)
+
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", regularUser, mcptool.BeforeHookRequest{
+		ToolName: "get_team_info",
+		Args:     argsJSON(t, map[string]any{"team_id": team1}),
+		UserID:   creatorUserID,
+	})
+	require.Equal(t, http.StatusForbidden, code)
+	assert.Contains(t, resp.Error, "forbidden")
+}
+
+func TestHooks_Before_ScheduleTrigger_RejectsNonCreator(t *testing.T) {
+	scheduleAuto := &model.Automation{
+		ID:        "auto1",
+		CreatedBy: creatorUserID,
+		Trigger: model.Trigger{
+			Schedule: &model.ScheduleConfig{ChannelID: chAllow, Interval: "1h"},
+		},
+		Actions: []model.Action{
+			{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					AllowedTools: []string{"search_posts"},
+					Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{
+						{ChannelID: chAllow, TeamID: teamAutomation},
+					}},
+				},
+			},
+		},
+	}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": scheduleAuto}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	// A non-creator session user is rejected because schedule triggers have no
+	// "triggering user" semantics.
+	code, resp := postBeforeAs(t, r, "auto1", "ai1", "channel-member", mcptool.BeforeHookRequest{
 		ToolName: "search_posts",
 		Args:     argsJSON(t, map[string]any{"query": "hi", "channel_id": chAllow}),
 		UserID:   creatorUserID,
