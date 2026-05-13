@@ -23,6 +23,16 @@ type TriggerAPI interface {
 	LogWarn(msg string, keyValuePairs ...any)
 }
 
+// HookCallerAPI is the narrow subset of plugin.API that trigger handlers need
+// to evaluate whether a hook caller could legitimately fire the trigger
+// (channel/team membership, user_type filter). Kept separate from TriggerAPI
+// so hook authorization stays self-contained and unit-testable.
+type HookCallerAPI interface {
+	GetChannelMember(channelID, userID string) (*mmmodel.ChannelMember, *mmmodel.AppError)
+	GetTeamMember(teamID, userID string) (*mmmodel.TeamMember, *mmmodel.AppError)
+	GetUser(userID string) (*mmmodel.User, *mmmodel.AppError)
+}
+
 // TriggerHandler owns the lifecycle of a single trigger type: config
 // validation, matching events, resolving candidate automations, and building the
 // TriggerData passed to automation execution.
@@ -53,4 +63,11 @@ type TriggerHandler interface {
 	// a non-empty set and Matches returned true for at least one of them).
 	// An error aborts dispatch for the event.
 	BuildTriggerData(api TriggerAPI, event *Event) (TriggerData, error)
+
+	// CallerCanTrigger reports whether userID could legitimately fire this
+	// trigger, mirroring the runtime filters applied by Matches (channel/team
+	// membership and user_type). Used by the hooks API to authorize hook
+	// callbacks without duplicating per-type knowledge in the auth code.
+	// Triggers that have no triggering user (e.g. schedule) return false.
+	CallerCanTrigger(api HookCallerAPI, trigger *Trigger, userID string) bool
 }
