@@ -64,3 +64,11 @@ func (t *ScheduleTrigger) CandidateAutomationIDs(_ model.Store, _ *model.Event) 
 func (t *ScheduleTrigger) BuildTriggerData(_ model.TriggerAPI, _ *model.Event) (model.TriggerData, error) {
 	return model.TriggerData{}, fmt.Errorf("schedule trigger does not build data from events")
 }
+
+// CallerCanTrigger always returns false: schedule triggers have no triggering
+// user, so a hook caller can never qualify as a "user who could fire the
+// trigger". Hook callers must be the automation creator (or system admin) for
+// schedule-triggered automations.
+func (t *ScheduleTrigger) CallerCanTrigger(_ model.HookCallerAPI, _ *model.Trigger, _ string) bool {
+	return false
+}

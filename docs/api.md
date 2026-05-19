@@ -18,7 +18,16 @@ The list endpoint filters results to only automations the user has permission to
 
 ### MCP tool hook endpoints
 
-The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the automation's `created_by` and returns `403 Forbidden` on mismatch (or when the automation has no recorded creator). System admin status does not bypass this check.
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs. The automation's `created_by` may always invoke. Otherwise:
+
+- When the action's `request_as` is `"creator"`, **only** the automation creator may invoke. System admins and any other users are rejected.
+- When `request_as` is `"triggerer"` or unset, the caller must be a system admin **or** a user who could legitimately fire this trigger (mirroring the trigger filters in `server/automation/trigger`):
+  - `message_posted` / `membership_changed`: a member of the trigger channel.
+  - `channel_created`: a member of the trigger team.
+  - `user_joined_team`: a member of the trigger team that also satisfies the trigger's `user_type` filter (`"user"` excludes guests; `"guest"` requires a guest; empty accepts both).
+  - `schedule`: no triggering user, so only the creator or a system admin may invoke.
+
+Returns `403 Forbidden` when unauthorized or when the automation has no recorded creator.
 
 ## Endpoints
 

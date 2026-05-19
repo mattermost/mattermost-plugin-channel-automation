@@ -57,6 +57,17 @@ func (t *UserJoinedTeamTrigger) CandidateAutomationIDs(store model.Store, event 
 	return store.GetAutomationIDsForUserJoinedTeam(event.Team.Id)
 }
 
+func (t *UserJoinedTeamTrigger) CallerCanTrigger(api model.HookCallerAPI, trigger *model.Trigger, userID string) bool {
+	if trigger.UserJoinedTeam == nil {
+		return false
+	}
+	cfg := trigger.UserJoinedTeam
+	if !isTeamMember(api, cfg.TeamID, userID) {
+		return false
+	}
+	return userMatchesUserType(api, userID, cfg.UserType)
+}
+
 func (t *UserJoinedTeamTrigger) BuildTriggerData(api model.TriggerAPI, event *model.Event) (model.TriggerData, error) {
 	if event.Team == nil || event.Team.Id == "" {
 		return model.TriggerData{}, fmt.Errorf("user_joined_team event has no team")

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/mattermost/mattermost-plugin-agents/public/mcptool"
+	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
@@ -25,10 +26,19 @@ const (
 	headerMattermostUserID = "Mattermost-User-ID"
 )
 
+// TriggerLookup is the narrow subset of automation.Registry that hook
+// authorization needs: resolving a TriggerHandler from a trigger type. Kept
+// as an interface to avoid an import cycle with the automation package and
+// to make NewAPIHandler easy to fake in tests.
+type TriggerLookup interface {
+	GetTrigger(triggerType string) (model.TriggerHandler, bool)
+}
+
 // APIHandler serves tool hook callbacks for channel guardrails.
 type APIHandler struct {
-	store model.Store
-	api   plugin.API
+	store    model.Store
+	api      plugin.API
+	triggers TriggerLookup
 	// channelTeamCache memoizes channel_id -> team_id (or "" for DM/GM).
 	// Channel -> team is immutable in Mattermost so entries never expire.
 	// On plugin restart the cache rebuilds on demand.
@@ -44,12 +54,14 @@ type HookCtx struct {
 	// automation's trigger team (when resolvable).
 	AllowedTeams map[string]struct{}
 	API          plugin.API
-	UserID       string
 }
 
-// NewAPIHandler constructs a hooks API handler.
-func NewAPIHandler(store model.Store, api plugin.API) *APIHandler {
-	return &APIHandler{store: store, api: api}
+// NewAPIHandler constructs a hooks API handler. triggers is used by hook
+// authorization to delegate per-trigger-type "could this caller fire this
+// trigger?" checks to the registered TriggerHandler instead of switching on
+// trigger type here.
+func NewAPIHandler(store model.Store, api plugin.API, triggers TriggerLookup) *APIHandler {
+	return &APIHandler{store: store, api: api, triggers: triggers}
 }
 
 // HookURL returns the plugin-relative before-callback URL for a tool hook on
@@ -120,37 +132,63 @@ func (h *APIHandler) allowedSetsForGuardrails(gr *model.Guardrails, automationID
 	return chs, teams
 }
 
-// authorizeAutomationCreator returns true if the request is authenticated as the
-// automation's creator. Otherwise it writes a 403 JSON error and returns false.
-// The automation must have a non-empty CreatedBy; automations missing a creator are
-// treated as unauthorized to prevent accidental open access.
-func (h *APIHandler) authorizeAutomationCreator(w http.ResponseWriter, r *http.Request, f *model.Automation, errResp any) bool {
-	callerID := r.Header.Get(headerMattermostUserID)
-	if callerID == "" || f.CreatedBy == "" || callerID != f.CreatedBy {
-		h.api.LogWarn("hooks: unauthorized hook caller",
-			"automation_id", f.ID,
-			"caller_user_id", callerID,
-			"creator_user_id", f.CreatedBy,
-			"path", r.URL.Path,
-		)
-		writeJSON(w, http.StatusForbidden, errResp)
+// authorizeHookCaller reports whether callerID may invoke a hook for the
+// given automation/action. The automation creator may always invoke. When
+// request_as is "creator", non-creators (including system admins) are
+// rejected. Otherwise the caller must be a system admin or pass the
+// trigger handler's CallerCanTrigger check, which mirrors the runtime
+// dispatch filters.
+func (h *APIHandler) authorizeHookCaller(callerID string, f *model.Automation, requestAs string) bool {
+	if callerID == "" || f.CreatedBy == "" {
 		return false
 	}
-	return true
+	if callerID == f.CreatedBy {
+		return true
+	}
+	if requestAs == model.AIPromptRequestAsCreator {
+		return false
+	}
+	return h.callerCanTriggerAutomation(callerID, f)
 }
 
-// loadGuardrailAutomation loads the automation and the guardrails for the given action when
-// channel guardrails are configured.
-func (h *APIHandler) loadGuardrailAutomation(automationID, actionID string) (*model.Automation, *model.Guardrails, bool) {
+// callerCanTriggerAutomation reports whether callerID could fire the
+// automation. System admins always pass. Otherwise the per-trigger-type
+// check is delegated to the registered TriggerHandler (which mirrors the
+// same membership/user_type filters applied at dispatch time). An unknown
+// trigger type or a missing handler returns false.
+func (h *APIHandler) callerCanTriggerAutomation(callerID string, f *model.Automation) bool {
+	if h.api.HasPermissionTo(callerID, mmmodel.PermissionManageSystem) {
+		return true
+	}
+	if h.triggers == nil {
+		return false
+	}
+	handler, ok := h.triggers.GetTrigger(f.Trigger.Type())
+	if !ok {
+		return false
+	}
+	return handler.CallerCanTrigger(h.api, &f.Trigger, callerID)
+}
+
+// loadGuardrailAutomation loads the automation, guardrails, and ai_prompt request_as for the
+// given action when channel guardrails are configured.
+func (h *APIHandler) loadGuardrailAutomation(automationID, actionID string) (*model.Automation, *model.Guardrails, string, bool) {
 	f, err := h.store.Get(automationID)
 	if err != nil || f == nil {
-		return nil, nil, false
+		return nil, nil, "", false
 	}
-	gr := f.GuardrailsForAction(actionID)
-	if gr == nil || len(gr.Channels) == 0 {
-		return nil, nil, false
+	for i := range f.Actions {
+		act := &f.Actions[i]
+		if act.ID != actionID || act.AIPrompt == nil || act.AIPrompt.Guardrails == nil {
+			continue
+		}
+		gr := act.AIPrompt.Guardrails
+		if gr == nil || len(gr.Channels) == 0 {
+			continue
+		}
+		return f, gr, act.AIPrompt.RequestAs, true
 	}
-	return f, gr, true
+	return nil, nil, "", false
 }
 
 // automationAnchorTeamID returns the Mattermost team ID the automation is anchored to:
@@ -213,13 +251,21 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 	automationID := vars["automation_id"]
 	actionID := vars["action_id"]
 
-	f, gr, ok := h.loadGuardrailAutomation(automationID, actionID)
+	f, gr, requestAs, ok := h.loadGuardrailAutomation(automationID, actionID)
 	if !ok {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: "guardrails not found"})
 		return
 	}
 
-	if !h.authorizeAutomationCreator(w, r, f, mcptool.BeforeHookResponse{Error: "forbidden: only the automation creator may invoke hooks"}) {
+	callerID := r.Header.Get(headerMattermostUserID)
+	if !h.authorizeHookCaller(callerID, f, requestAs) {
+		h.api.LogWarn("hooks: unauthorized hook caller",
+			"automation_id", f.ID,
+			"caller_id", callerID,
+		)
+		writeJSON(w, http.StatusForbidden, mcptool.BeforeHookResponse{
+			Error: "forbidden: the current user is not authorized to invoke this automation's tool hook",
+		})
 		return
 	}
 
@@ -264,7 +310,6 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		AllowedCh:    allowedCh,
 		AllowedTeams: allowedTeams,
 		API:          h.api,
-		UserID:       req.UserID,
 	}
 	if err := entry.Before(ctx, argsMap); err != nil {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{Error: err.Error()})

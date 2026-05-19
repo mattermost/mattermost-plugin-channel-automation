@@ -44,6 +44,13 @@ func (t *MessagePostedTrigger) CandidateAutomationIDs(store model.Store, event *
 	return store.GetAutomationIDsForChannel(event.Post.ChannelId)
 }
 
+func (t *MessagePostedTrigger) CallerCanTrigger(api model.HookCallerAPI, trigger *model.Trigger, userID string) bool {
+	if trigger.MessagePosted == nil {
+		return false
+	}
+	return isChannelMember(api, trigger.MessagePosted.ChannelID, userID)
+}
+
 func (t *MessagePostedTrigger) BuildTriggerData(api model.TriggerAPI, event *model.Event) (model.TriggerData, error) {
 	if event.Post == nil {
 		return model.TriggerData{}, fmt.Errorf("message_posted event has no post")
