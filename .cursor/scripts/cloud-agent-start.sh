@@ -22,12 +22,12 @@ apply_docker_socket_acl() {
 
 if ! docker info >/dev/null 2>&1; then
     if command -v service >/dev/null 2>&1; then
-        sudo service docker start >/tmp/docker-service-start.log 2>&1 || true
+        sudo sh -c 'service docker start >/tmp/docker-service-start.log 2>&1' || true
     fi
 
     if ! pgrep -x dockerd >/dev/null 2>&1; then
         sudo rm -f /var/run/docker.pid
-        sudo nohup dockerd --host=unix:///var/run/docker.sock >/tmp/dockerd.log 2>&1 &
+        sudo sh -c 'nohup dockerd --host=unix:///var/run/docker.sock >/tmp/dockerd.log 2>&1 &'
     fi
 fi
 

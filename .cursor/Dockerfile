@@ -7,6 +7,7 @@ ARG NODE_VERSION=24.13.1
 ARG GO_VERSION=1.26.1
 ARG DOCKER_VERSION=28.5.2
 ARG DOCKER_COMPOSE_VERSION=v5.1.3
+ARG AGENT_BROWSER_VERSION=0.27.0
 ARG MATTERMOST_IMAGE=mattermostdevelopment/mattermost-enterprise-edition
 ARG MATTERMOST_IMAGE_TAG=master
 ARG MATTERMOST_IMAGE_ARCH=amd64
@@ -27,15 +28,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     curl \
+    fonts-liberation \
+    fonts-noto-color-emoji \
     fuse-overlayfs \
     git \
     iptables \
     jq \
+    libasound2t64 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libu2f-udev \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxkbcommon0 \
+    libxrandr2 \
+    libxshmfence1 \
+    libxss1 \
     make \
     openssh-client \
     procps \
     skopeo \
     sudo \
+    xdg-utils \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -67,6 +91,7 @@ RUN set -eux; \
     ln -sf /usr/local/node/bin/npx /usr/local/bin/npx; \
     ln -sf /usr/local/go/bin/go /usr/local/bin/go; \
     ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
+    npm install -g "agent-browser@${AGENT_BROWSER_VERSION}"; \
     mkdir -p /opt/cursor-prepulled; \
     skopeo copy --retry-times 3 --override-os linux --override-arch "${MATTERMOST_IMAGE_ARCH}" "docker://${MATTERMOST_IMAGE}:${MATTERMOST_IMAGE_TAG}" "docker-archive:/opt/cursor-prepulled/mattermost-enterprise-edition.tar:${MATTERMOST_IMAGE}:${MATTERMOST_IMAGE_TAG}"; \
     skopeo copy --retry-times 3 --override-os linux --override-arch "${postgres_image_arch}" "docker://${POSTGRES_IMAGE}:${POSTGRES_IMAGE_TAG}" "docker-archive:/opt/cursor-prepulled/postgres.tar:${POSTGRES_IMAGE}:${POSTGRES_IMAGE_TAG}"; \
@@ -82,3 +107,11 @@ RUN groupadd -f docker \
 
 USER ubuntu
 WORKDIR /workspace
+
+RUN set -eux; \
+    arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
+    case "${arch}" in \
+        amd64|x86_64) agent-browser install ;; \
+        arm64|aarch64) echo "Skipping browser install: Chrome for Testing does not publish Linux ARM64 builds."; agent-browser --version ;; \
+        *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
+    esac

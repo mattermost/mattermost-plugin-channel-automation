@@ -1,6 +1,6 @@
 # Cursor Cloud Agent Guide
 
-This repository uses a Dockerfile-backed Cursor Cloud Agent environment with Docker-in-Docker. The image includes Go, Node.js, Docker, Docker Compose, and cached archives for:
+This repository uses a Dockerfile-backed Cursor Cloud Agent environment with Docker-in-Docker and browser automation support. The image includes Go, Node.js, Docker, Docker Compose, `agent-browser`, and cached archives for:
 
 - `mattermostdevelopment/mattermost-enterprise-edition:master` (`linux/amd64`)
 - `postgres:16-alpine`
@@ -22,6 +22,19 @@ Skip flags for faster setup:
 - `CLOUD_AGENT_SKIP_GO_TOOLS=1` skips Go tool installation.
 - `CLOUD_AGENT_SKIP_WEBAPP_DEPS=1` skips `npm ci --prefix webapp`.
 - `CLOUD_AGENT_SKIP_IMAGE_LOAD=1` skips loading cached Docker image archives.
+
+## Repository Dependencies
+
+Cursor Cloud Agents clone `github.com/mattermost/mattermost-plugin-agents` as a sibling repository so changes spanning this plugin and the Agents plugin can be implemented together.
+
+When you need the sibling checkout, look in:
+
+```bash
+../mattermost-plugin-agents
+../../mattermost-plugin-agents
+```
+
+Do not clone it manually. If Cursor changes the checkout layout, locate it from the repository root before assuming a fixed `/agent/repos/...` path.
 
 ## Run Mattermost
 
@@ -123,9 +136,41 @@ make watch
 
 Use `make logs-watch` to follow plugin logs after deployment.
 
+## Bootstrap AI Agents
+
+Cloud agents may have access to `ANTHROPIC_API_KEY`. Use it when bootstrapping a local AI service or Mattermost agent provider for this plugin's `ai_prompt` automation actions.
+
+Do not print, commit, or paste the key into logs. Pass it as an environment variable or Mattermost secret/config value only, and prefer short-lived local test configuration.
+
+## Drive The Mattermost UI
+
+The Dockerfile installs `agent-browser` and Chrome runtime libraries so cloud agents can test Mattermost through the browser.
+
+After Mattermost is running and the plugin is deployed, open the UI:
+
+```bash
+agent-browser open http://localhost:8065
+```
+
+Log in with the admin account created above:
+
+- Username: `admin`
+- Password: `Password123`
+
+Useful checks:
+
+```bash
+agent-browser --version
+agent-browser skills get core --full
+agent-browser install
+```
+
+If browser automation fails, rerun `agent-browser install` and inspect the agent-browser output before changing app code.
+
 ## Troubleshooting
 
 - If Docker is unavailable, inspect `/tmp/docker-service-start.log` and `/tmp/dockerd.log`.
+- If browser automation fails, run `agent-browser install` to refresh browser assets.
 - If the plugin upload fails, confirm `MM_PLUGINSETTINGS_ENABLEUPLOADS=true` and the admin credentials are exported.
 - If Mattermost is unhealthy, run `docker logs mattermost` and `docker logs mm-postgres`.
 - To reset the local Mattermost stack, run `docker rm -f mattermost mm-postgres` and remove `/tmp/mattermost` or `mm-postgres-data` if persisted data is not needed.
