@@ -51,6 +51,13 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, `"creator"`)
 		assert.Contains(t, out.Instructions, "creator's permissions")
 	})
+
+	t.Run("documents message_posted bot and webhook behavior", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		assert.Contains(t, out.Instructions, "including bot and webhook posts")
+		assert.Contains(t, out.Instructions, "default automation bot")
+		assert.Contains(t, out.Instructions, "AI-generated agent replies")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {
