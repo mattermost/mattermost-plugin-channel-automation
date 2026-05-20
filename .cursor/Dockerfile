@@ -8,6 +8,7 @@ ARG GO_VERSION=1.26.1
 ARG DOCKER_VERSION=28.5.2
 ARG DOCKER_COMPOSE_VERSION=v5.1.3
 ARG AGENT_BROWSER_VERSION=0.27.0
+ARG AWS_CLI_VERSION=2.34.50
 ARG MATTERMOST_IMAGE=mattermostdevelopment/mattermost-enterprise-edition
 ARG MATTERMOST_IMAGE_TAG=master
 ARG MATTERMOST_IMAGE_ARCH=amd64
@@ -59,6 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     skopeo \
     sudo \
+    unzip \
     xdg-utils \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -71,8 +73,8 @@ RUN update-alternatives --set iptables /usr/sbin/iptables-legacy \
 RUN set -eux; \
     arch="${TARGETARCH:-$(dpkg --print-architecture)}"; \
     case "${arch}" in \
-        amd64|x86_64) docker_arch="x86_64"; node_arch="x64"; go_arch="amd64"; compose_arch="x86_64"; postgres_image_arch="amd64" ;; \
-        arm64|aarch64) docker_arch="aarch64"; node_arch="arm64"; go_arch="arm64"; compose_arch="aarch64"; postgres_image_arch="arm64" ;; \
+        amd64|x86_64) docker_arch="x86_64"; node_arch="x64"; go_arch="amd64"; compose_arch="x86_64"; aws_arch="x86_64"; postgres_image_arch="amd64" ;; \
+        arm64|aarch64) docker_arch="aarch64"; node_arch="arm64"; go_arch="arm64"; compose_arch="aarch64"; aws_arch="aarch64"; postgres_image_arch="arm64" ;; \
         *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker.tgz; \
@@ -86,6 +88,9 @@ RUN set -eux; \
     tar -xJf /tmp/node.tar.xz -C /usr/local/node --strip-components=1; \
     curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tar.gz; \
     tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}-${AWS_CLI_VERSION}.zip" -o /tmp/awscliv2.zip; \
+    unzip -q /tmp/awscliv2.zip -d /tmp; \
+    /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli; \
     ln -sf /usr/local/node/bin/node /usr/local/bin/node; \
     ln -sf /usr/local/node/bin/npm /usr/local/bin/npm; \
     ln -sf /usr/local/node/bin/npx /usr/local/bin/npx; \
@@ -95,7 +100,7 @@ RUN set -eux; \
     mkdir -p /opt/cursor-prepulled; \
     skopeo copy --retry-times 3 --override-os linux --override-arch "${MATTERMOST_IMAGE_ARCH}" "docker://${MATTERMOST_IMAGE}:${MATTERMOST_IMAGE_TAG}" "docker-archive:/opt/cursor-prepulled/mattermost-enterprise-edition.tar:${MATTERMOST_IMAGE}:${MATTERMOST_IMAGE_TAG}"; \
     skopeo copy --retry-times 3 --override-os linux --override-arch "${postgres_image_arch}" "docker://${POSTGRES_IMAGE}:${POSTGRES_IMAGE_TAG}" "docker-archive:/opt/cursor-prepulled/postgres.tar:${POSTGRES_IMAGE}:${POSTGRES_IMAGE_TAG}"; \
-    rm -rf /tmp/docker /tmp/docker.tgz /tmp/node.tar.xz /tmp/go.tar.gz
+    rm -rf /tmp/aws /tmp/awscliv2.zip /tmp/docker /tmp/docker.tgz /tmp/node.tar.xz /tmp/go.tar.gz
 
 RUN groupadd -f docker \
     && if ! id -u ubuntu >/dev/null 2>&1; then useradd -m -s /bin/bash -G sudo,docker ubuntu; fi \

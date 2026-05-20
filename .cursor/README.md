@@ -3,7 +3,7 @@
 This directory defines the checked-in environment for Cursor Cloud Agents.
 
 - `environment.json` selects the Dockerfile build, declares the Mattermost port, and requests the `mattermost-plugin-agents` sibling repository.
-- `Dockerfile` installs Go, Node.js, Docker-in-Docker support, Docker Compose, `agent-browser`, Chrome runtime libraries, and cached Mattermost/Postgres image archives.
+- `Dockerfile` installs Go, Node.js, Docker-in-Docker support, Docker Compose, AWS CLI, `agent-browser`, Chrome runtime libraries, and cached Mattermost/Postgres image archives.
 - `scripts/cloud-agent-install.sh` hydrates Go and webapp dependencies.
 - `scripts/cloud-agent-start.sh` starts `dockerd`, fixes socket permissions, loads cached images, and materializes `.cursor/AGENTS.md`.
 - `cursor.md` contains cloud-only instructions for running Mattermost and deploying this plugin.

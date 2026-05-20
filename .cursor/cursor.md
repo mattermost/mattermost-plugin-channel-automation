@@ -1,6 +1,6 @@
 # Cursor Cloud Agent Guide
 
-This repository uses a Dockerfile-backed Cursor Cloud Agent environment with Docker-in-Docker and browser automation support. The image includes Go, Node.js, Docker, Docker Compose, `agent-browser`, and cached archives for:
+This repository uses a Dockerfile-backed Cursor Cloud Agent environment with Docker-in-Docker and browser automation support. The image includes Go, Node.js, Docker, Docker Compose, AWS CLI, `agent-browser`, and cached archives for:
 
 - `mattermostdevelopment/mattermost-enterprise-edition:master` (`linux/amd64`)
 - `postgres:16-alpine`
@@ -167,10 +167,26 @@ agent-browser install
 
 If browser automation fails, rerun `agent-browser install` and inspect the agent-browser output before changing app code.
 
+## Upload Screenshot Artifacts
+
+AWS CLI is installed so cloud agents can upload browser screenshots and other artifacts when AWS credentials and an artifact S3 destination are available.
+
+Create screenshots with `agent-browser`, then upload them with `aws s3 cp`:
+
+```bash
+mkdir -p /tmp/artifacts
+agent-browser screenshot /tmp/artifacts/mattermost-channel-automation.png
+aws sts get-caller-identity
+aws s3 cp /tmp/artifacts/mattermost-channel-automation.png <artifact-s3-uri>/mattermost-channel-automation.png
+```
+
+Do not print AWS credentials or secret environment variables. If `aws sts get-caller-identity` fails, stop and report the missing AWS configuration instead of attempting to work around credentials.
+
 ## Troubleshooting
 
 - If Docker is unavailable, inspect `/tmp/docker-service-start.log` and `/tmp/dockerd.log`.
 - If browser automation fails, run `agent-browser install` to refresh browser assets.
+- If artifact uploads fail, run `aws sts get-caller-identity` and verify the target S3 URI before retrying.
 - If the plugin upload fails, confirm `MM_PLUGINSETTINGS_ENABLEUPLOADS=true` and the admin credentials are exported.
 - If Mattermost is unhealthy, run `docker logs mattermost` and `docker logs mm-postgres`.
 - To reset the local Mattermost stack, run `docker rm -f mattermost mm-postgres` and remove `/tmp/mattermost` or `mm-postgres-data` if persisted data is not needed.
