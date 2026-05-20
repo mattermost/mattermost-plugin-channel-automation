@@ -534,8 +534,9 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
 	api.On("GetChannel", "ch1").Return(
-		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -553,6 +554,7 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	api.AssertExpectations(t)
 }
 
 func TestAPI_CreateAutomation_TeamAdminWithoutChannelAdminAllowed(t *testing.T) {
@@ -582,6 +584,7 @@ func TestAPI_CreateAutomation_TeamAdminWithoutChannelAdminAllowed(t *testing.T) 
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
+	api.AssertExpectations(t)
 }
 
 func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {

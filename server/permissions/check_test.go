@@ -442,8 +442,9 @@ func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
 	)
 	api.On("GetChannel", "ch1").Return(
-		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
 	f := &model.Automation{
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
