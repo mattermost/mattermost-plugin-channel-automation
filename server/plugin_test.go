@@ -533,9 +533,11 @@ func requireNextWorkItem(t *testing.T, wqStore *workqueue.Store) *model.WorkItem
 func requireNoWorkItem(t *testing.T, wqStore *workqueue.Store) {
 	t.Helper()
 
-	item, err := wqStore.ClaimNext()
-	require.NoError(t, err)
-	assert.Nil(t, item)
+	assert.Never(t, func() bool {
+		item, err := wqStore.ClaimNext()
+		require.NoError(t, err)
+		return item != nil
+	}, 200*time.Millisecond, 10*time.Millisecond)
 }
 
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
