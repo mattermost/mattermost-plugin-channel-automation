@@ -66,3 +66,19 @@ func TestAgentBridgeClient_AgentCompletionWithAgentSystemPromptIncludesFlag(t *t
 	require.True(t, ok)
 	assert.Equal(t, "/hooks/tools/auto/action/before", searchPostsHook["before_callback"])
 }
+
+func TestAgentBridgeClient_AgentCompletionWithAgentSystemPromptNilBody(t *testing.T) {
+	api := &recordingPluginAPI{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+		},
+	}
+	client := NewAgentBridgeClient(api)
+
+	_, err := client.AgentCompletionWithAgentSystemPrompt("abcdefghijklmnopqrstuvwxyz", bridgeclient.CompletionRequest{
+		Posts: []bridgeclient.Post{{Role: "user", Message: "hello"}},
+	}, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty response body")
+}

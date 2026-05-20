@@ -64,6 +64,9 @@ func (c *AgentBridgeClient) AgentCompletionWithAgentSystemPrompt(agent string, r
 	if resp == nil {
 		return "", fmt.Errorf("failed to make interplugin request")
 	}
+	if resp.Body == nil {
+		return "", fmt.Errorf("failed to make interplugin request: empty response body")
+	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
