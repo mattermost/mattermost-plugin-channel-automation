@@ -296,35 +296,34 @@ func TestHandleGetClientConfig(t *testing.T) {
 	})
 }
 
-func TestMessageHasBeenPosted_SkipsAIGeneratedPosts(t *testing.T) {
+func TestMessageHasBeenPosted_SkipsAIGeneratedBotWebhookPosts(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 	saveMessagePostedAutomation(t, p)
 
 	post := &mmmodel.Post{
 		Id:        "post1",
-		UserId:    "human-user",
+		UserId:    "bot-user",
 		ChannelId: "ch1",
 		Message:   "AI-generated reply",
 	}
+	post.AddProp("from_bot", "true")
+	post.AddProp("from_webhook", "true")
 	post.AddProp("ai_generated_by", "some-bot-id")
 
 	p.MessageHasBeenPosted(nil, post)
 
-	item, _ := wqStore.ClaimNext()
-	assert.Nil(t, item)
+	requireNoWorkItem(t, wqStore)
 }
 
-func TestMessageHasBeenPosted_SkipsBotPosts(t *testing.T) {
+func TestMessageHasBeenPosted_SkipsDefaultAutomationBotPosts(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 	saveMessagePostedAutomation(t, p)
 
 	post := &mmmodel.Post{Id: "post1", UserId: "bot-id", ChannelId: "ch1", Message: "hi"}
-	post.AddProp("from_bot", "true")
 
 	p.MessageHasBeenPosted(nil, post)
 
-	item, _ := wqStore.ClaimNext()
-	assert.Nil(t, item)
+	requireNoWorkItem(t, wqStore)
 }
 
 func TestMessageHasBeenPosted_SkipsSystemMessages(t *testing.T) {
@@ -336,8 +335,7 @@ func TestMessageHasBeenPosted_SkipsSystemMessages(t *testing.T) {
 
 	p.MessageHasBeenPosted(nil, post)
 
-	item, _ := wqStore.ClaimNext()
-	assert.Nil(t, item)
+	requireNoWorkItem(t, wqStore)
 }
 
 func TestMessageHasBeenPosted_ProcessesWebhookPosts(t *testing.T) {
@@ -529,6 +527,14 @@ func requireNextWorkItem(t *testing.T, wqStore *workqueue.Store) *model.WorkItem
 		return item != nil
 	}, 2*time.Second, 10*time.Millisecond)
 	return item
+}
+
+func requireNoWorkItem(t *testing.T, wqStore *workqueue.Store) {
+	t.Helper()
+
+	item, err := wqStore.ClaimNext()
+	require.NoError(t, err)
+	assert.Nil(t, item)
 }
 
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
