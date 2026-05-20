@@ -14,7 +14,7 @@ import {getTriggerType} from 'types';
 
 type RequestAs = '' | 'triggerer' | 'creator';
 
-interface ActionForm {
+export interface ActionForm {
     id: string;
     type: string;
     channel_id: string;
@@ -232,7 +232,7 @@ function newActionForm(): ActionForm {
     return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', use_agent_system_prompt: false, prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
-function actionToForm(a: Action): ActionForm {
+export function actionToForm(a: Action): ActionForm {
     if (a.ai_prompt) {
         return {
             id: a.id,
@@ -268,6 +268,51 @@ function actionToForm(a: Action): ActionForm {
         };
     }
     return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', use_agent_system_prompt: false, prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
+}
+
+export function actionFormsToActions(actions: ActionForm[]): Action[] {
+    return actions.map((a): Action => {
+        if (a.type === 'ai_prompt') {
+            const action: Action = {
+                id: a.id,
+                ai_prompt: {
+                    prompt: a.prompt,
+                    provider_type: 'agent',
+                    provider_id: a.provider_id,
+                },
+            };
+            if (a.system_prompt.trim() && action.ai_prompt) {
+                action.ai_prompt.system_prompt = a.system_prompt;
+            }
+            if (a.use_agent_system_prompt && action.ai_prompt) {
+                action.ai_prompt.use_agent_system_prompt = true;
+            }
+            if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
+                action.ai_prompt.allowed_tools = a.allowed_tool_refs;
+            }
+            if (a.request_as && action.ai_prompt) {
+                action.ai_prompt.request_as = a.request_as;
+            }
+            if (a.guardrail_channel_ids.length > 0 && action.ai_prompt) {
+                action.ai_prompt.guardrails = {channel_ids: [...a.guardrail_channel_ids]};
+            }
+            return action;
+        }
+        const action: Action = {
+            id: a.id,
+            send_message: {
+                channel_id: a.channel_id,
+                body: a.body,
+            },
+        };
+        if (a.reply_to_post_id && action.send_message) {
+            action.send_message.reply_to_post_id = a.reply_to_post_id;
+        }
+        if (a.as_bot_id && action.send_message) {
+            action.send_message.as_bot_id = a.as_bot_id;
+        }
+        return action;
+    });
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -494,48 +539,7 @@ const AutomationEditorView: React.FC = () => {
             name,
             enabled,
             trigger,
-            actions: actions.map((a): Action => {
-                if (a.type === 'ai_prompt') {
-                    const action: Action = {
-                        id: a.id,
-                        ai_prompt: {
-                            prompt: a.prompt,
-                            provider_type: 'agent',
-                            provider_id: a.provider_id,
-                        },
-                    };
-                    if (a.system_prompt.trim() && action.ai_prompt) {
-                        action.ai_prompt.system_prompt = a.system_prompt;
-                    }
-                    if (a.use_agent_system_prompt && action.ai_prompt) {
-                        action.ai_prompt.use_agent_system_prompt = true;
-                    }
-                    if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
-                        action.ai_prompt.allowed_tools = a.allowed_tool_refs;
-                    }
-                    if (a.request_as && action.ai_prompt) {
-                        action.ai_prompt.request_as = a.request_as;
-                    }
-                    if (a.guardrail_channel_ids.length > 0 && action.ai_prompt) {
-                        action.ai_prompt.guardrails = {channel_ids: [...a.guardrail_channel_ids]};
-                    }
-                    return action;
-                }
-                const action: Action = {
-                    id: a.id,
-                    send_message: {
-                        channel_id: a.channel_id,
-                        body: a.body,
-                    },
-                };
-                if (a.reply_to_post_id && action.send_message) {
-                    action.send_message.reply_to_post_id = a.reply_to_post_id;
-                }
-                if (a.as_bot_id && action.send_message) {
-                    action.send_message.as_bot_id = a.as_bot_id;
-                }
-                return action;
-            }),
+            actions: actionFormsToActions(actions),
         };
         try {
             if (automationId) {
