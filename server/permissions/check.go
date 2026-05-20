@@ -15,7 +15,8 @@ import (
 // System admins are always allowed. For channel_created automations the user must be
 // a team admin on the trigger's team, and all literal channel references must
 // belong to that team. For other automations the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the automation.
+// (SchemeAdmin) or team admin on every literal channel referenced in the
+// automation.
 //
 // When no concrete channels can be verified (e.g. only templated or AI-only
 // actions on a non-channel_created trigger), we require system admin permission.
@@ -100,7 +101,13 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 			}
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
 		}
-		if ch == nil || (ch.Type != mmmodel.ChannelTypeDirect && ch.Type != mmmodel.ChannelTypeGroup) {
+		if ch == nil {
+			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+		}
+		if ch.TeamId != "" && api.HasPermissionToTeam(userID, ch.TeamId, mmmodel.PermissionManageTeam) {
+			continue
+		}
+		if ch.Type != mmmodel.ChannelTypeDirect && ch.Type != mmmodel.ChannelTypeGroup {
 			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
 		}
 	}

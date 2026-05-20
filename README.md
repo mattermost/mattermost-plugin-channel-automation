@@ -118,7 +118,7 @@ Sensitive user fields (email, password, auth data) are stripped from the templat
 
 ## API
 
-The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. Otherwise the user must be a channel admin on every channel referenced by the automation.
+The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. Otherwise the user must be a channel admin or team admin on every channel referenced by the automation.
 
 | Method   | Path                                        | Description                         |
 | -------- | ------------------------------------------- | ----------------------------------- |

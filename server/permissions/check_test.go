@@ -454,6 +454,27 @@ func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	api.AssertExpectations(t)
 }
 
+func TestCheckAutomationPermissions_RegularChannelTeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(true)
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}},
+		},
+	}
+	require.NoError(t, CheckAutomationPermissions(api, "user1", f))
+	api.AssertExpectations(t)
+}
+
 func TestCanEditAutomation_CreatorAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(false)

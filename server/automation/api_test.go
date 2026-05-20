@@ -555,6 +555,35 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "channel admin permissions")
 }
 
+func TestAPI_CreateAutomation_TeamAdminWithoutChannelAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannelMember", "ch1", "user1").Return(
+		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
+	)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Admin Automation",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
 func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
