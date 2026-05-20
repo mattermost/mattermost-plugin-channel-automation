@@ -535,8 +535,7 @@ func requireNoWorkItem(t *testing.T, wqStore *workqueue.Store) {
 
 	assert.Never(t, func() bool {
 		item, err := wqStore.ClaimNext()
-		require.NoError(t, err)
-		return item != nil
+		return err != nil || item != nil
 	}, 200*time.Millisecond, 10*time.Millisecond)
 }
 
