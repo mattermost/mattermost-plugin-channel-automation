@@ -51,6 +51,13 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, `"creator"`)
 		assert.Contains(t, out.Instructions, "creator's permissions")
 	})
+
+	t.Run("requires confirmation summary to include message body template", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		assert.Contains(t, out.Instructions, "include the exact\n   message body/template for every send_message action")
+		assert.Contains(t, out.Instructions, "preserving any template variables")
+		assert.Contains(t, out.Instructions, "message body/template, which tools")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {
