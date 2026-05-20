@@ -93,6 +93,46 @@ func TestMessagePostedTrigger_Matches_TopLevelPostMatchesWhenIncludeEnabled(t *t
 	assert.True(t, tr.Matches(trig, event))
 }
 
+func TestMessagePostedTrigger_Matches_SkipsDefaultAutomationBotPosts(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	event := &model.Event{
+		Type:                model.TriggerTypeMessagePosted,
+		AutomationBotUserID: "bot-id",
+		Post:                &mmmodel.Post{ChannelId: "ch1", UserId: "bot-id"},
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
+func TestMessagePostedTrigger_Matches_ProcessesAIGeneratedRootPosts(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	post := &mmmodel.Post{ChannelId: "ch1", UserId: "agent-bot"}
+	post.AddProp("ai_generated_by", "agent-bot")
+	event := &model.Event{
+		Type:                model.TriggerTypeMessagePosted,
+		AutomationBotUserID: "bot-id",
+		Post:                post,
+	}
+
+	assert.True(t, tr.Matches(trig, event))
+}
+
+func TestMessagePostedTrigger_Matches_SkipsAIGeneratedThreadReplies(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}}
+	post := &mmmodel.Post{ChannelId: "ch1", UserId: "agent-bot", RootId: "root1"}
+	post.AddProp("ai_generated_by", "agent-bot")
+	event := &model.Event{
+		Type:                model.TriggerTypeMessagePosted,
+		AutomationBotUserID: "bot-id",
+		Post:                post,
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
 func TestMessagePostedTrigger_Validate(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
 

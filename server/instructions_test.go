@@ -57,7 +57,8 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, "including bot and webhook posts")
 		assert.Contains(t, out.Instructions, "System posts")
 		assert.Contains(t, out.Instructions, "default automation bot")
-		assert.Contains(t, out.Instructions, "AI-generated agent replies")
+		assert.Contains(t, out.Instructions, "AI-generated root posts")
+		assert.Contains(t, out.Instructions, "AI-generated thread replies")
 	})
 }
 

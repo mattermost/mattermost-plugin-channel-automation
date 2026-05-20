@@ -164,19 +164,14 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *mmmodel.CommandArgs) (*
 
 // MessageHasBeenPosted is invoked after a message is posted.
 func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
-	if post.UserId == p.botUserID {
-		return
-	}
 	if post.IsSystemMessage() {
-		return
-	}
-	if post.GetProp("ai_generated_by") != nil {
 		return
 	}
 
 	p.dispatcher.Dispatch(&model.Event{
-		Type: model.TriggerTypeMessagePosted,
-		Post: post,
+		Type:                model.TriggerTypeMessagePosted,
+		Post:                post,
+		AutomationBotUserID: p.botUserID,
 	})
 }
 

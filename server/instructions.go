@@ -130,7 +130,7 @@ each of those things with only the tools listed? If any step requires a tool tha
 included, add it to your recommendation and explain why it's needed.
 
 TRIGGERS: Set exactly one trigger type inside the "trigger" object.
-- "message_posted": fires when a message is posted in the channel, including bot and webhook posts. System posts, posts from the default automation bot, and AI-generated agent replies are filtered to reduce self-triggered loops. High-traffic channels will trigger frequently.
+- "message_posted": fires when a message is posted in the channel, including bot and webhook posts. System posts and posts from the default automation bot are filtered to reduce self-triggered loops; AI-generated root posts are accepted, but AI-generated thread replies are filtered when thread replies are included. High-traffic channels will trigger frequently.
   {"trigger": {"message_posted": {"channel_id": "<channel-id>"}}}
 - "schedule": fires on a recurring schedule.
   - interval: Go duration string (minimum "1h"). Examples: "1h" (hourly), "24h" (daily), "168h" (weekly).
