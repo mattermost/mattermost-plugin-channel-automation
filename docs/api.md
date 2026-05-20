@@ -84,7 +84,7 @@ GET /automations
 GET /automations?channel_id=<channel-id>
 ```
 
-Returns all automations visible to the requesting user. System admins see all automations; other users only see automations where they have channel admin or team admin permissions on all referenced channels.
+Returns all automations visible to the requesting user. System admins see all automations; other users only see automations they are authorized to view under the trigger-specific rules above.
 
 **Query parameters:**
 
@@ -335,7 +335,7 @@ GET /automations/{automation_id}/executions
 GET /automations/{automation_id}/executions?limit=50
 ```
 
-Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation (system admin, channel admin, or team admin on all referenced channels).
+Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation under the trigger-specific rules above (or be a system admin).
 
 **Query parameters:**
 
