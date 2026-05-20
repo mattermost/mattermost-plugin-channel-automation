@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -54,11 +55,15 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 
 	t.Run("forbids out-of-band setup messages", func(t *testing.T) {
 		out := buildAutomationInstructionsResponse(nil)
+		instructions := strings.Join(strings.Fields(out.Instructions), " ")
 
-		assert.Contains(t, out.Instructions, "Keep all setup conversation in the current thread")
-		assert.Contains(t, out.Instructions, "Do not call dm, group_message, create_post")
-		assert.Contains(t, out.Instructions, "verifying usernames")
-		assert.Contains(t, out.Instructions, "present the resolved users in the current thread")
+		assert.Contains(t, instructions, "Keep all setup conversation in the current thread")
+		assert.Contains(t, instructions, "Do not call dm, group_message, create_post")
+		assert.Contains(t, instructions, "send any other out-of-band message")
+		assert.Contains(t, instructions, "verifying usernames")
+		assert.Contains(t, instructions, "confirming recipients")
+		assert.Contains(t, instructions, "read-only lookup tools such as search_users")
+		assert.Contains(t, instructions, "resolved users in the current thread")
 	})
 }
 
