@@ -59,7 +59,7 @@ Returns the client-relevant plugin configuration. Any authenticated user may cal
 GET /automation-instructions
 ```
 
-Returns documentation for agents/MCP: a single **`instructions`** string (the body returned by the `get_automation_instructions` tool), including an optional closing paragraph with a plain documentation URL when **Automation instructions URL** is set in plugin settings.
+Returns documentation for agents/MCP: a single **`instructions`** string (the body returned by the `get_automation_instructions` tool), including an optional closing paragraph with a plain documentation URL when **Automation instructions URL** is set in plugin settings. The instructions require setup-time confirmations, username resolution, and recipient verification to stay in the current conversation rather than sending DMs or other out-of-band messages.
 
 Any authenticated user may call this endpoint — no channel-admin check is performed (same as `GET /config`).
 
@@ -73,7 +73,7 @@ Any authenticated user may call this endpoint — no channel-admin check is perf
 
 | Field          | Type   | Description                                                                                                                                                                                                 |
 | -------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions` | string | Detailed documentation for triggers, actions, templates, `allowed_tools`, and the required user-confirmation workflow. If the plugin setting **Automation instructions URL** is set, a closing paragraph is appended with that URL so the model can mention it to users. |
+| `instructions` | string | Detailed documentation for triggers, actions, templates, `allowed_tools`, and the required user-confirmation workflow, including the rule that setup-time verification must stay in the current conversation and not use DMs or other out-of-band messages. If the plugin setting **Automation instructions URL** is set, a closing paragraph is appended with that URL so the model can mention it to users. |
 
 ---
 
