@@ -3,6 +3,7 @@ package automation
 import (
 	"fmt"
 
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
@@ -53,6 +54,12 @@ func (t *TriggerService) FindMatchingAutomations(event *model.Event) (model.Trig
 			continue
 		}
 		if !handler.Matches(&f.Trigger, event) {
+			continue
+		}
+		if event.Type == model.TriggerTypeMessagePosted &&
+			f.Trigger.MessagePosted != nil &&
+			f.Trigger.MessagePosted.IncludeThreadReplies &&
+			trigger.IsSendMessageThreadLoopPost(event.Post, trigger.SendMessageBotUserIDs(f, event.AutomationBotUserID)) {
 			continue
 		}
 		automations = append(automations, f)
