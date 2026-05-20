@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation"
+	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/action"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/trigger"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/workqueue"
@@ -171,7 +172,7 @@ func TestHandleGetAgentTools(t *testing.T) {
 
 		p := &Plugin{}
 		p.SetAPI(api)
-		p.bridgeClient = bridgeclient.NewClient(api)
+		p.bridgeClient = action.NewAgentBridgeClient(api)
 
 		router := mux.NewRouter()
 		router.HandleFunc("/api/v1/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)
@@ -198,7 +199,7 @@ func TestHandleGetAgentTools(t *testing.T) {
 
 		p := &Plugin{}
 		p.SetAPI(api)
-		p.bridgeClient = bridgeclient.NewClient(api)
+		p.bridgeClient = action.NewAgentBridgeClient(api)
 
 		router := mux.NewRouter()
 		router.HandleFunc("/api/v1/agents/{agent_id}/tools", p.handleGetAgentTools).Methods(http.MethodGet)

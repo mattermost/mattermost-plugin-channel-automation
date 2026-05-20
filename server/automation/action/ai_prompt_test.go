@@ -30,20 +30,30 @@ type mockBridgeClient struct {
 	agentTools    []bridgeclient.BridgeToolInfo
 	agentToolsErr error
 
-	lastAgent   string
-	lastService string
-	lastReq     bridgeclient.CompletionRequest
+	lastAgent                string
+	lastService              string
+	lastReq                  bridgeclient.CompletionRequest
+	lastUseAgentSystemPrompt bool
 }
 
 func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastAgent = agent
 	m.lastReq = req
+	m.lastUseAgentSystemPrompt = false
+	return m.agentResponse, m.agentErr
+}
+
+func (m *mockBridgeClient) AgentCompletionWithAgentSystemPrompt(agent string, req bridgeclient.CompletionRequest, useAgentSystemPrompt bool) (string, error) {
+	m.lastAgent = agent
+	m.lastReq = req
+	m.lastUseAgentSystemPrompt = useAgentSystemPrompt
 	return m.agentResponse, m.agentErr
 }
 
 func (m *mockBridgeClient) ServiceCompletion(service string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastService = service
 	m.lastReq = req
+	m.lastUseAgentSystemPrompt = false
 	return m.serviceResponse, m.serviceErr
 }
 
@@ -88,6 +98,7 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "AI says hello", output.Message)
 	assert.Equal(t, "ai-bot", bc.lastAgent)
+	assert.False(t, bc.lastUseAgentSystemPrompt)
 	// Posts: [trigger metadata (system), user-generated post content (user), user prompt (user)]
 	require.Len(t, bc.lastReq.Posts, 3)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
@@ -98,6 +109,69 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	assert.Contains(t, bc.lastReq.Posts[1].Message, "<user_data>")
 	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
 	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[2].Message)
+}
+
+func TestAIPromptAction_Execute_UseAgentSystemPrompt(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "AI says hello"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			UseAgentSystemPrompt: true,
+			Prompt:               "Summarize: {{.Trigger.Post.Message}}",
+			ProviderType:         "agent",
+			ProviderID:           "ai-bot",
+		},
+	}
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Message: "Hello world"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "AI says hello", output.Message)
+	assert.Equal(t, "ai-bot", bc.lastAgent)
+	assert.True(t, bc.lastUseAgentSystemPrompt)
+	require.Len(t, bc.lastReq.Posts, 3)
+	assert.Contains(t, bc.lastReq.Posts[0].Message, "<trigger_context>")
+	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[2].Message)
+}
+
+func TestAIPromptAction_Execute_UseAgentSystemPromptWithExplicitSystemPrompt(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "response"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			SystemPrompt:         "Automation-specific instructions for {{.Trigger.User.Username}}",
+			UseAgentSystemPrompt: true,
+			Prompt:               "Do the task",
+			ProviderType:         "agent",
+			ProviderID:           "ai-bot",
+		},
+	}
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			User: &model.SafeUser{Username: "alice"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.True(t, bc.lastUseAgentSystemPrompt)
+	require.Len(t, bc.lastReq.Posts, 4)
+	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
+	assert.Equal(t, "Automation-specific instructions for alice", bc.lastReq.Posts[0].Message)
 }
 
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {

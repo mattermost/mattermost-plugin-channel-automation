@@ -17,17 +17,26 @@ import (
 
 // mockBridgeClient implements action.BridgeClient for executor tests.
 type mockBridgeClient struct {
-	agentResponse string
-	lastReq       bridgeclient.CompletionRequest
+	agentResponse            string
+	lastReq                  bridgeclient.CompletionRequest
+	lastUseAgentSystemPrompt bool
 }
 
 func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastReq = req
+	m.lastUseAgentSystemPrompt = false
+	return m.agentResponse, nil
+}
+
+func (m *mockBridgeClient) AgentCompletionWithAgentSystemPrompt(_ string, req bridgeclient.CompletionRequest, useAgentSystemPrompt bool) (string, error) {
+	m.lastReq = req
+	m.lastUseAgentSystemPrompt = useAgentSystemPrompt
 	return m.agentResponse, nil
 }
 
 func (m *mockBridgeClient) ServiceCompletion(_ string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastReq = req
+	m.lastUseAgentSystemPrompt = false
 	return m.agentResponse, nil
 }
 

@@ -127,6 +127,14 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("use_agent_system_prompt with agent passes", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID:       "ask-ai",
+			AIPrompt: &AIPromptActionConfig{Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1", UseAgentSystemPrompt: true},
+		}})
+		require.NoError(t, err)
+	})
+
 	t.Run("guardrails requires allowed_tools", func(t *testing.T) {
 		err := ValidateActions([]Action{{
 			ID: "ask-ai",
@@ -255,6 +263,18 @@ func TestValidateActions(t *testing.T) {
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `allowed_tools is only supported with provider_type "agent"`)
+	})
+
+	t.Run("service with use_agent_system_prompt rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				UseAgentSystemPrompt: true,
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `use_agent_system_prompt is only supported with provider_type "agent"`)
 	})
 
 	t.Run("service with empty allowed_tools passes", func(t *testing.T) {

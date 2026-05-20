@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 	"github.com/mattermost/mattermost/server/public/pluginapi"
@@ -38,7 +37,7 @@ type Plugin struct {
 	workQueueStore *workqueue.Store
 	workerPool     *workqueue.WorkerPool
 
-	bridgeClient *bridgeclient.Client
+	bridgeClient *action.AgentBridgeClient
 
 	botUserID          string
 	registry           *automation.Registry
@@ -75,7 +74,7 @@ func (p *Plugin) OnActivate() error {
 	}
 	p.botUserID = botUserID
 
-	bc := bridgeclient.NewClient(p.API)
+	bc := action.NewAgentBridgeClient(p.API)
 	p.bridgeClient = bc
 
 	// TODO: Register tools in the bridge client

@@ -156,6 +156,9 @@ func ValidateActions(actions []Action) error {
 			// execute-time failure. Guardrails imply allowed_tools, so they
 			// are also agent-only.
 			if a.AIPrompt.ProviderType == AIProviderTypeService {
+				if a.AIPrompt.UseAgentSystemPrompt {
+					return fmt.Errorf("action %d: use_agent_system_prompt is only supported with provider_type %q", i, AIProviderTypeAgent)
+				}
 				if len(a.AIPrompt.AllowedTools) > 0 {
 					return fmt.Errorf("action %d: allowed_tools is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}

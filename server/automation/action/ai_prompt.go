@@ -23,6 +23,10 @@ type BridgeClient interface {
 	GetAgentTools(agentID, userID string) ([]bridgeclient.BridgeToolInfo, error)
 }
 
+type agentSystemPromptBridgeClient interface {
+	AgentCompletionWithAgentSystemPrompt(agent string, req bridgeclient.CompletionRequest, useAgentSystemPrompt bool) (string, error)
+}
+
 // AIPromptAction sends a rendered prompt to an AI agent or service and stores the response.
 type AIPromptAction struct {
 	api          plugin.API
@@ -135,7 +139,15 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	var response string
 	switch cfg.ProviderType {
 	case model.AIProviderTypeAgent:
-		response, err = a.bridgeClient.AgentCompletion(cfg.ProviderID, req)
+		if cfg.UseAgentSystemPrompt {
+			bc, ok := a.bridgeClient.(agentSystemPromptBridgeClient)
+			if !ok {
+				return nil, fmt.Errorf("agents plugin bridge client does not support use_agent_system_prompt")
+			}
+			response, err = bc.AgentCompletionWithAgentSystemPrompt(cfg.ProviderID, req, true)
+		} else {
+			response, err = a.bridgeClient.AgentCompletion(cfg.ProviderID, req)
+		}
 	case model.AIProviderTypeService:
 		response, err = a.bridgeClient.ServiceCompletion(cfg.ProviderID, req)
 	default:

@@ -27,6 +27,32 @@ updated, err     := client.UpdateAutomation(automation)
 err               = client.DeleteAutomation("automation-id")
 ```
 
+### Agent system prompts
+
+Set `UseAgentSystemPrompt` on an `ai_prompt` action when the automation should
+use the selected agent's configured system prompt from the Agents screen:
+
+```go
+created, err := client.CreateAutomation(&pluginbridge.Automation{
+    Name:    "summarize support posts",
+    Enabled: true,
+    Trigger: pluginbridge.Trigger{
+        MessagePosted: &pluginbridge.MessagePostedConfig{ChannelID: "channel-id"},
+    },
+    Actions: []pluginbridge.Action{
+        {
+            ID: "summarize",
+            AIPrompt: &pluginbridge.AIPromptActionConfig{
+                Prompt:               "Summarize the triggering post.",
+                ProviderType:         "agent",
+                ProviderID:           "agent-user-id",
+                UseAgentSystemPrompt: true,
+            },
+        },
+    },
+})
+```
+
 ### Switching users
 
 `AsUser` returns a copy of the client that makes requests on

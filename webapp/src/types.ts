@@ -65,6 +65,7 @@ export interface Guardrails {
 
 export interface AIPromptActionParams {
     system_prompt?: string;
+    use_agent_system_prompt?: boolean;
     prompt: string;
     provider_type: string;
     provider_id: string;

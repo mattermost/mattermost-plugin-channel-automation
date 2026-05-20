@@ -123,6 +123,37 @@ func TestCreateAutomation(t *testing.T) {
 	assert.Equal(t, "application/json", mock.lastRequest.Header.Get("Content-Type"))
 }
 
+func TestCreateAutomationAIPromptUseAgentSystemPrompt(t *testing.T) {
+	created := sampleAutomation()
+	mock := &mockPluginAPI{response: jsonResponse(http.StatusCreated, created)}
+	client := NewClient(mock, WithUser("user1"))
+
+	input := &Automation{
+		Name:    "test automation",
+		Enabled: true,
+		Trigger: Trigger{
+			MessagePosted: &MessagePostedConfig{ChannelID: "ch1"},
+		},
+		Actions: []Action{
+			{
+				ID: "ask",
+				AIPrompt: &AIPromptActionConfig{
+					Prompt:               "summarize",
+					ProviderType:         "agent",
+					ProviderID:           "bot1",
+					UseAgentSystemPrompt: true,
+				},
+			},
+		},
+	}
+	_, err := client.CreateAutomation(input)
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(mock.lastRequest.Body)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"use_agent_system_prompt":true`)
+}
+
 func TestUpdateAutomation(t *testing.T) {
 	updated := sampleAutomation()
 	updated.UpdatedAt = 2000

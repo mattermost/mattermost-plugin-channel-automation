@@ -181,6 +181,33 @@ func TestAutomationJSON_AIPrompt_AllowedToolsStringArray(t *testing.T) {
 	assert.Equal(t, []string{"search", "create_post"}, a.Actions[0].AIPrompt.AllowedTools)
 }
 
+func TestAutomationJSON_AIPrompt_UseAgentSystemPrompt(t *testing.T) {
+	const raw = `{
+		"id": "f1",
+		"name": "n",
+		"enabled": true,
+		"trigger": {"schedule": {"channel_id": "c1", "interval": "1h"}},
+		"actions": [{
+			"id": "a1",
+			"ai_prompt": {
+				"prompt": "p",
+				"provider_type": "agent",
+				"provider_id": "bot1",
+				"use_agent_system_prompt": true
+			}
+		}],
+		"created_at": 0,
+		"updated_at": 0,
+		"created_by": "u1"
+	}`
+	var a Automation
+	err := json.Unmarshal([]byte(raw), &a)
+	require.NoError(t, err)
+	require.Len(t, a.Actions, 1)
+	require.NotNil(t, a.Actions[0].AIPrompt)
+	assert.True(t, a.Actions[0].AIPrompt.UseAgentSystemPrompt)
+}
+
 func TestCollectTeamIDs_LiteralTeamID(t *testing.T) {
 	a := &Automation{
 		Trigger: Trigger{UserJoinedTeam: &UserJoinedTeamConfig{TeamID: "team1"}},
