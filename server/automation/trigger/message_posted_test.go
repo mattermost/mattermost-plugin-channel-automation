@@ -133,6 +133,19 @@ func TestMessagePostedTrigger_Matches_SkipsAIGeneratedThreadReplies(t *testing.T
 	assert.False(t, tr.Matches(trig, event))
 }
 
+func TestMessagePostedTrigger_Matches_SkipsAIGeneratedThreadRepliesWithoutAutomationBotID(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}}
+	post := &mmmodel.Post{ChannelId: "ch1", UserId: "agent-bot", RootId: "root1"}
+	post.AddProp("ai_generated_by", "agent-bot")
+	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: post,
+	}
+
+	assert.False(t, tr.Matches(trig, event))
+}
+
 func TestMessagePostedTrigger_Validate(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
 

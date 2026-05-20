@@ -34,13 +34,13 @@ func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Even
 // all posts from the plugin's default automation bot, and thread replies marked
 // with ai_generated_by (MCP/agent replies when IncludeThreadReplies is on).
 func isMessagePostedLoopPost(event *model.Event) bool {
-	if event.Post == nil || event.AutomationBotUserID == "" {
+	if event.Post == nil {
 		return false
 	}
-	if event.Post.UserId == event.AutomationBotUserID {
+	if event.Post.RootId != "" && event.Post.GetProp("ai_generated_by") != nil {
 		return true
 	}
-	if event.Post.RootId != "" && event.Post.GetProp("ai_generated_by") != nil {
+	if event.AutomationBotUserID != "" && event.Post.UserId == event.AutomationBotUserID {
 		return true
 	}
 	return false
