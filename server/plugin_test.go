@@ -333,26 +333,50 @@ func TestMessageHasBeenPosted_SkipsSystemMessages(t *testing.T) {
 	})
 }
 
-func TestMessageHasBeenPosted_SkipsWebhookPosts(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
+func TestMessageHasBeenPosted_ProcessesWebhookPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
-	post := &mmmodel.Post{UserId: "human-user", Message: "from webhook"}
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+
+	post := &mmmodel.Post{Id: "post1", UserId: "human-user", ChannelId: "ch1", Message: "from webhook"}
 	post.AddProp("from_webhook", "true")
 
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	p.MessageHasBeenPosted(nil, post)
+
+	require.Eventually(t, func() bool {
+		item, _ := wqStore.ClaimNext()
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
-func TestMessageHasBeenPosted_SkipsFromBotPosts(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
+func TestMessageHasBeenPosted_ProcessesFromBotPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
-	post := &mmmodel.Post{UserId: "human-user", Message: "from bot"}
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+
+	post := &mmmodel.Post{Id: "post1", UserId: "bot-user", ChannelId: "ch1", Message: "from bot"}
 	post.AddProp("from_bot", "true")
 
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	p.MessageHasBeenPosted(nil, post)
+
+	require.Eventually(t, func() bool {
+		item, _ := wqStore.ClaimNext()
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
 func TestChannelHasBeenCreated_SkipsNonPublicChannels(t *testing.T) {

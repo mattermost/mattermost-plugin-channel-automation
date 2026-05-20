@@ -164,17 +164,10 @@ func (p *Plugin) ExecuteCommand(c *plugin.Context, args *mmmodel.CommandArgs) (*
 
 // MessageHasBeenPosted is invoked after a message is posted.
 func (p *Plugin) MessageHasBeenPosted(_ *plugin.Context, post *mmmodel.Post) {
-	// Filter bot/system/webhook/AI posts to prevent loops and unintended triggers.
 	if post.UserId == p.botUserID {
 		return
 	}
 	if post.IsSystemMessage() {
-		return
-	}
-	if post.GetProp("from_webhook") == "true" {
-		return
-	}
-	if post.GetProp("from_bot") == "true" {
 		return
 	}
 	if post.GetProp("ai_generated_by") != nil {
