@@ -343,6 +343,7 @@ func TestMessageHasBeenPosted_ProcessesWebhookPosts(t *testing.T) {
 	saveMessagePostedAutomation(t, p)
 
 	post := &mmmodel.Post{Id: "post1", UserId: "human-user", ChannelId: "ch1", Message: "from webhook"}
+	post.AddProp("from_bot", "true")
 	post.AddProp("from_webhook", "true")
 
 	p.MessageHasBeenPosted(nil, post)
