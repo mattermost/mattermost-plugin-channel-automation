@@ -630,6 +630,8 @@ Current Unix Timestamp (ms): 1776868245000
 
 These are sourced from the plugin server clock at execution time (not template-accessible).
 
+While the LLM call is in flight, the action publishes a Mattermost `user_typing` event as the channel-automation bot so the standard webapp displays a "Channel Automation is typing…" footer. The indicator scopes to the thread root when the trigger is a thread reply, and to the channel otherwise. It is best-effort — publish failures are logged at debug level and never fail the action — and is skipped when the trigger has no associated channel (e.g. `schedule`).
+
 ---
 
 ## Template context

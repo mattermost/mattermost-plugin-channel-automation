@@ -1,9 +1,11 @@
 package action
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
@@ -12,6 +14,11 @@ import (
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/automation/hooks"
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
+
+// typingRepublishInterval is how often the typing indicator is re-published
+// while the LLM call is in flight. Mattermost's user_typing event TTL is 5s;
+// 4s leaves a safety margin so the indicator never visually blinks.
+const typingRepublishInterval = 4 * time.Second
 
 const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
 	"Do not take additional follow-up actions beyond what was explicitly requested."
@@ -27,11 +34,14 @@ type BridgeClient interface {
 type AIPromptAction struct {
 	api          plugin.API
 	bridgeClient BridgeClient
+	botUserID    string
 }
 
-// NewAIPromptAction creates an AIPromptAction with the given API and bridge client.
-func NewAIPromptAction(api plugin.API, bridgeClient BridgeClient) *AIPromptAction {
-	return &AIPromptAction{api: api, bridgeClient: bridgeClient}
+// NewAIPromptAction creates an AIPromptAction with the given API, bridge client,
+// and bot user ID. The bot user ID is used as the identity for the "user is
+// typing" indicator published while the LLM call is in flight.
+func NewAIPromptAction(api plugin.API, bridgeClient BridgeClient, botUserID string) *AIPromptAction {
+	return &AIPromptAction{api: api, bridgeClient: bridgeClient, botUserID: botUserID}
 }
 
 func (a *AIPromptAction) Type() string { return "ai_prompt" }
@@ -132,6 +142,8 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 			req.ToolHooks = toolHooks
 		}
 	}
+	stopTyping := a.startTypingIndicator(channelID, triggerParentID(ctx))
+
 	var response string
 	switch cfg.ProviderType {
 	case model.AIProviderTypeAgent:
@@ -139,8 +151,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	case model.AIProviderTypeService:
 		response, err = a.bridgeClient.ServiceCompletion(cfg.ProviderID, req)
 	default:
+		stopTyping()
 		return nil, fmt.Errorf("unsupported provider_type %q, must be %q or %q", cfg.ProviderType, model.AIProviderTypeAgent, model.AIProviderTypeService)
 	}
+	stopTyping()
 	if err != nil {
 		a.api.LogDebug("AI prompt action: completion failed",
 			"action_id", action.ID,
@@ -267,4 +281,60 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 	}
 
 	return metaContent, userContentStr
+}
+
+// triggerParentID returns the thread root ID for thread-reply triggers so the
+// typing indicator scopes to the thread. Returns empty for root posts and
+// non-message triggers, which lets the indicator show at channel scope.
+func triggerParentID(ctx *model.AutomationContext) string {
+	if ctx == nil || ctx.Trigger.Thread == nil {
+		return ""
+	}
+	return ctx.Trigger.Thread.RootID
+}
+
+// startTypingIndicator publishes a "user is typing" event as the bot, then
+// re-publishes every typingRepublishInterval until the returned stop function
+// is called. It is best-effort: failures are logged at debug level and never
+// fail the action. When channelID or botUserID is empty, it is a no-op.
+//
+// The caller must invoke the returned stop function exactly once.
+func (a *AIPromptAction) startTypingIndicator(channelID, parentID string) func() {
+	if channelID == "" || a.botUserID == "" {
+		return func() {}
+	}
+
+	a.publishTyping(channelID, parentID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		ticker := time.NewTicker(typingRepublishInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				a.publishTyping(channelID, parentID)
+			}
+		}
+	})
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			cancel()
+			wg.Wait()
+		})
+	}
+}
+
+func (a *AIPromptAction) publishTyping(channelID, parentID string) {
+	if appErr := a.api.PublishUserTyping(a.botUserID, channelID, parentID); appErr != nil {
+		a.api.LogDebug("AI prompt action: publish typing failed",
+			"channel_id", channelID,
+			"error", appErr.Error(),
+		)
+	}
 }

@@ -161,7 +161,7 @@ func TestExecutor_ChainedAIPromptThenSendMessage(t *testing.T) {
 
 	registry := NewRegistry()
 	registry.RegisterAction(action.NewSendMessageAction(api, "bot"))
-	registry.RegisterAction(action.NewAIPromptAction(api, bc))
+	registry.RegisterAction(action.NewAIPromptAction(api, bc, ""))
 
 	executor := NewExecutor(registry)
 

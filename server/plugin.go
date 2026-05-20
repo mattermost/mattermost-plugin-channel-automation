@@ -87,7 +87,7 @@ func (p *Plugin) OnActivate() error {
 	p.registry.RegisterTrigger(&trigger.ChannelCreatedTrigger{})
 	p.registry.RegisterTrigger(&trigger.UserJoinedTeamTrigger{})
 	p.registry.RegisterAction(action.NewSendMessageAction(p.API, p.botUserID))
-	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc))
+	p.registry.RegisterAction(action.NewAIPromptAction(p.API, bc, p.botUserID))
 
 	automationIndexMu, err := cluster.NewMutex(p.API, "automation_index_mutex")
 	if err != nil {
