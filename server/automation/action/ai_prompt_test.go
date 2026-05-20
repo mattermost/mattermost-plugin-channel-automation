@@ -36,6 +36,20 @@ type mockBridgeClient struct {
 	lastUseAgentSystemPrompt bool
 }
 
+type legacyBridgeClient struct{}
+
+func (m *legacyBridgeClient) AgentCompletion(string, bridgeclient.CompletionRequest) (string, error) {
+	return "legacy", nil
+}
+
+func (m *legacyBridgeClient) ServiceCompletion(string, bridgeclient.CompletionRequest) (string, error) {
+	return "legacy", nil
+}
+
+func (m *legacyBridgeClient) GetAgentTools(string, string) ([]bridgeclient.BridgeToolInfo, error) {
+	return nil, nil
+}
+
 func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastAgent = agent
 	m.lastReq = req
@@ -172,6 +186,27 @@ func TestAIPromptAction_Execute_UseAgentSystemPromptWithExplicitSystemPrompt(t *
 	require.Len(t, bc.lastReq.Posts, 4)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
 	assert.Equal(t, "Automation-specific instructions for alice", bc.lastReq.Posts[0].Message)
+}
+
+func TestAIPromptAction_Execute_UseAgentSystemPromptRequiresCapableBridgeClient(t *testing.T) {
+	api := newTestAPI()
+	a := NewAIPromptAction(api, &legacyBridgeClient{})
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			UseAgentSystemPrompt: true,
+			Prompt:               "Do the task",
+			ProviderType:         "agent",
+			ProviderID:           "ai-bot",
+		},
+	}
+	ctx := &model.AutomationContext{Trigger: model.TriggerData{}, Steps: make(map[string]model.StepOutput)}
+
+	output, err := a.Execute(act, ctx)
+	require.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "does not support use_agent_system_prompt")
 }
 
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {

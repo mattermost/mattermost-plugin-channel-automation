@@ -16,7 +16,7 @@ import (
 const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
 	"Do not take additional follow-up actions beyond what was explicitly requested."
 
-// BridgeClient is the interface for AI bridge operations, satisfied by *bridgeclient.Client.
+// BridgeClient is the interface for AI bridge operations.
 type BridgeClient interface {
 	AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error)
 	ServiceCompletion(service string, req bridgeclient.CompletionRequest) (string, error)

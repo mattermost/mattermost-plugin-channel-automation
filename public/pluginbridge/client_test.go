@@ -149,9 +149,17 @@ func TestCreateAutomationAIPromptUseAgentSystemPrompt(t *testing.T) {
 	_, err := client.CreateAutomation(input)
 	require.NoError(t, err)
 
+	assert.Equal(t, http.MethodPost, mock.lastRequest.Method)
+	assert.Equal(t, "/plugins/com.mattermost.channel-automation/api/v1/automations", mock.lastRequest.URL.Path)
+	assert.Equal(t, "application/json", mock.lastRequest.Header.Get("Content-Type"))
+
 	body, err := io.ReadAll(mock.lastRequest.Body)
 	require.NoError(t, err)
-	assert.Contains(t, string(body), `"use_agent_system_prompt":true`)
+	var posted Automation
+	require.NoError(t, json.Unmarshal(body, &posted))
+	require.Len(t, posted.Actions, 1)
+	require.NotNil(t, posted.Actions[0].AIPrompt)
+	assert.True(t, posted.Actions[0].AIPrompt.UseAgentSystemPrompt)
 }
 
 func TestUpdateAutomation(t *testing.T) {

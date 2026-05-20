@@ -33,8 +33,13 @@ func TestAgentBridgeClient_AgentCompletionWithAgentSystemPromptIncludesFlag(t *t
 	client := NewAgentBridgeClient(api)
 
 	completion, err := client.AgentCompletionWithAgentSystemPrompt("abcdefghijklmnopqrstuvwxyz", bridgeclient.CompletionRequest{
-		Posts:  []bridgeclient.Post{{Role: "user", Message: "hello"}},
-		UserID: "user1",
+		Posts:        []bridgeclient.Post{{Role: "user", Message: "hello"}},
+		UserID:       "user1",
+		ChannelID:    "channel1",
+		AllowedTools: []string{"search_posts"},
+		ToolHooks: map[string]bridgeclient.ToolHookConfig{
+			"search_posts": {BeforeCallback: "/hooks/tools/auto/action/before"},
+		},
 	}, true)
 	require.NoError(t, err)
 	assert.Equal(t, "done", completion)
@@ -51,5 +56,13 @@ func TestAgentBridgeClient_AgentCompletionWithAgentSystemPromptIncludesFlag(t *t
 	require.NoError(t, json.Unmarshal(body, &payload))
 	assert.Equal(t, true, payload["use_agent_system_prompt"])
 	assert.Equal(t, "user1", payload["user_id"])
-	assert.Contains(t, string(body), `"posts"`)
+	assert.Equal(t, "channel1", payload["channel_id"])
+	assert.Equal(t, []any{"search_posts"}, payload["allowed_tools"])
+	require.Len(t, payload["posts"], 1)
+
+	toolHooks, ok := payload["tool_hooks"].(map[string]any)
+	require.True(t, ok)
+	searchPostsHook, ok := toolHooks["search_posts"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "/hooks/tools/auto/action/before", searchPostsHook["before_callback"])
 }
