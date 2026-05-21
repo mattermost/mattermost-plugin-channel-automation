@@ -5,7 +5,8 @@ describe('schedule trigger', () => {
     const config = getTriggerConfig('schedule');
 
     it('formats interval-only schedules as starting immediately', () => {
-        expect(config?.formatSummary({
+        expect(config).toBeDefined();
+        expect(config!.formatSummary({
             schedule: {
                 channel_id: 'channel-id',
                 interval: '168h',
@@ -14,7 +15,8 @@ describe('schedule trigger', () => {
     });
 
     it('formats schedules with the exact UTC start time', () => {
-        expect(config?.formatSummary({
+        expect(config).toBeDefined();
+        expect(config!.formatSummary({
             schedule: {
                 channel_id: 'channel-id',
                 interval: '168h',

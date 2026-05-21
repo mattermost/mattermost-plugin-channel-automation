@@ -56,8 +56,9 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		out := buildAutomationInstructionsResponse(nil)
 		assert.Contains(t, out.Instructions, `For schedule triggers, vague recurrences`)
 		assert.Contains(t, out.Instructions, "ask for the exact day/date, time, and timezone")
-		assert.Contains(t, out.Instructions, "include the recurring interval and the exact first run day/date")
+		assert.Contains(t, out.Instructions, "recurring interval and the exact first run day/date")
 		assert.Contains(t, out.Instructions, "only omit it when the user explicitly wants the automation to start immediately")
+		assert.Contains(t, out.Instructions, "set start_at to that future timestamp")
 	})
 }
 
