@@ -187,7 +187,7 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have permission to manage one or more channels referenced by this automation`           |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to create automation`                                                                               |
 | 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
@@ -211,7 +211,7 @@ The automation object.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have permission to manage one or more channels referenced by this automation` |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to get automation`                                                                        |
 
@@ -267,7 +267,7 @@ The updated automation object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have permission to manage one or more channels referenced by this automation`           |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 404    | `automation not found`                                                                                      |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to update automation`                                                                               |
@@ -290,7 +290,7 @@ Deletes an automation by ID.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have permission to manage one or more channels referenced by this automation` |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to delete automation`                                                                     |
 
