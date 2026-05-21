@@ -618,6 +618,8 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
+For `message_posted` triggers, file attachments from the triggering post are forwarded to the bridge with the automatically injected user-generated trigger data. This lets vision-capable agents inspect image attachments such as screenshots, including posts whose only user content is an attached image.
+
 By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
 - `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
@@ -669,6 +671,7 @@ Action templates receive an `AutomationContext` object with the following struct
 | Channel ID | `{{.Trigger.Post.ChannelId}}` |                                                                                                                                                                  |
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |                                                                                                                                                                  |
 | Message    | `{{.Trigger.Post.Message}}`   | The raw post body. Slack-style attachment text is not appended.                                                                                                  |
+| File IDs   | `{{.Trigger.Post.FileIds}}`   | Mattermost file IDs attached to the post. For `ai_prompt` actions, these are forwarded to the AI plugin bridge with the trigger data user message.               |
 | User       | `{{.Trigger.Post.User}}`      | Populated only on thread-message posts (`{{range .Trigger.Thread.Messages}}{{.User.AuthorDisplay}}{{end}}`). Nil on the top-level triggering post — use `{{.Trigger.User}}` there. |
 | Create At  | `{{.Trigger.Post.CreateAt}}`  | Unix milliseconds. Populated only on thread-message posts.                                                                                                       |
 
