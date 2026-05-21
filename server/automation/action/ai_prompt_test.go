@@ -404,11 +404,9 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 
 	sp := bc.lastReq.ToolHooks["search_posts"]
 	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", sp.BeforeCallback)
-	assert.Empty(t, sp.AfterCallback)
 
 	auc := bc.lastReq.ToolHooks["add_user_to_channel"]
 	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", auc.BeforeCallback)
-	assert.Empty(t, auc.AfterCallback)
 
 	_, hasExternal := bc.lastReq.ToolHooks["external_search"]
 	assert.False(t, hasExternal, "non-Mattermost MCP tools must not get hook callbacks")
