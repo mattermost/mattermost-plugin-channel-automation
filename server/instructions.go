@@ -63,12 +63,14 @@ users rely on this structure to understand risk before they confirm):
    unless guardrails.channel_ids is non-empty — collect the channel_ids from the user up front.
    Exempt contexts (guardrails optional): DM with the bot itself, single-member private channel,
    or ai_prompt with no allowed_tools.
-4. OUTPUT: Where the automation will post results — name the specific channel(s).
+4. OUTPUT: Where the automation will post results — name the specific channel(s) and include the exact
+   message body/template for every send_message action, preserving any template variables so the user can
+   verify the content before it is saved.
 
 Format as that four-part numbered list (1–4), then ask the user to confirm. Only call create_automation after
 the user says yes.
 
-If the user's request is missing details (trigger channel, output channel, which tools),
+If the user's request is missing details (trigger channel, output channel, message body/template, which tools),
 ask clarifying questions BEFORE presenting the summary.
 
 MATTERMOST MCP CHANNEL GUARDRAILS — WHICH TOOL NAMES ARE CONSTRAINED:
