@@ -1,0 +1,19 @@
+{
+  "name": "Channel Automation Plugin Cloud Agent",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "repositoryDependencies": [
+    "github.com/mattermost/mattermost-plugin-agents"
+  ],
+  "install": "bash .cursor/scripts/cloud-agent-install.sh",
+  "start": "bash .cursor/scripts/cloud-agent-start.sh",
+  "ports": [
+    {
+      "name": "Mattermost",
+      "port": 8065
+    }
+  ]
+}
