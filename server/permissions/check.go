@@ -83,10 +83,10 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 			if chErr.StatusCode >= http.StatusInternalServerError {
 				return fmt.Errorf("failed to verify channel permissions: %w", chErr)
 			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
 		if ch == nil {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
 		// DM and GM channels have no channel-admin role: any participant may
 		// create an automation on a channel they belong to. The participant
@@ -97,12 +97,12 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 				if appErr.StatusCode >= http.StatusInternalServerError {
 					return fmt.Errorf("failed to verify channel permissions: %w", appErr)
 				}
-				return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+				return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 			}
 			continue
 		}
 		if !api.HasPermissionToChannel(userID, chID, mmmodel.PermissionManageChannelRoles) {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
 	}
 	return nil

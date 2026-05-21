@@ -8,7 +8,7 @@ All endpoints require a valid Mattermost session — the `Mattermost-User-ID` he
 
 All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the automation's trigger type:
 
-- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must have **`manage_channel_roles`** on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). This covers channel admins and team admins via Mattermost's scheme resolution. Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"`.
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): for regular public/private channels, the user must have **`manage_channel_roles`** on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). This covers channel admins and team admins via Mattermost's scheme resolution. For **DM** and **GM** channels, any channel participant may create an automation (no `manage_channel_roles` required). Returns `403 Forbidden` with `"you do not have permission to manage one or more channels referenced by this automation"`.
 - **`channel_created` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
 - **`user_joined_team` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
 
@@ -187,7 +187,7 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 403    | `you do not have permission to manage one or more channels referenced by this automation`           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to create automation`                                                                               |
 | 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
@@ -211,7 +211,7 @@ The automation object.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 403    | `you do not have permission to manage one or more channels referenced by this automation` |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to get automation`                                                                        |
 
@@ -267,7 +267,7 @@ The updated automation object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 403    | `you do not have permission to manage one or more channels referenced by this automation`           |
 | 404    | `automation not found`                                                                                      |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to update automation`                                                                               |
@@ -290,7 +290,7 @@ Deletes an automation by ID.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 403    | `you do not have permission to manage one or more channels referenced by this automation` |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to delete automation`                                                                     |
 

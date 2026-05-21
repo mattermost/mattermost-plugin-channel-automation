@@ -552,7 +552,7 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 	api.AssertExpectations(t)
 }
 
@@ -607,7 +607,7 @@ func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
@@ -634,7 +634,7 @@ func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
@@ -672,7 +672,7 @@ func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_UpdateAutomation_NonCreatorRejected(t *testing.T) {

@@ -448,7 +448,7 @@ func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	}
 	err := CheckAutomationPermissions(api, "user1", f)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "channel admin permissions")
+	assert.Contains(t, err.Error(), "permission to manage")
 	api.AssertExpectations(t)
 }
 
