@@ -51,6 +51,14 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, `"creator"`)
 		assert.Contains(t, out.Instructions, "creator's permissions")
 	})
+
+	t.Run("documents schedule timing clarification", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		assert.Contains(t, out.Instructions, `For schedule triggers, vague recurrences`)
+		assert.Contains(t, out.Instructions, "ask for the exact day/date, time, and timezone")
+		assert.Contains(t, out.Instructions, "include the recurring interval and the exact first run day/date")
+		assert.Contains(t, out.Instructions, "only omit it when the user explicitly wants the automation to start immediately")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {
