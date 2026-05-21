@@ -159,6 +159,9 @@ func ValidateActions(actions []Action) error {
 				if len(a.AIPrompt.AllowedTools) > 0 {
 					return fmt.Errorf("action %d: allowed_tools is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}
+				if a.AIPrompt.UseAgentSystemPrompt {
+					return fmt.Errorf("action %d: use_agent_system_prompt is only supported with provider_type %q", i, AIProviderTypeAgent)
+				}
 				if a.AIPrompt.Guardrails != nil {
 					return fmt.Errorf("action %d: guardrails is only supported with provider_type %q", i, AIProviderTypeAgent)
 				}

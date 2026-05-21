@@ -22,6 +22,7 @@ interface ActionForm {
     as_bot_id: string;
     body: string;
     system_prompt: string;
+    use_agent_system_prompt: boolean;
     prompt: string;
     provider_id: string;
     allowed_tool_refs: string[];
@@ -30,6 +31,8 @@ interface ActionForm {
     /** Parsed guardrail channel IDs (from guardrails.channel_ids). */
     guardrail_channel_ids: string[];
 }
+
+type ActionTextField = Exclude<keyof ActionForm, 'allowed_tool_refs' | 'guardrail_channel_ids' | 'use_agent_system_prompt'>;
 
 const styles = {
     formGroup: {
@@ -228,7 +231,7 @@ function normalizeAllowedTools(raw: unknown): string[] {
 }
 
 function newActionForm(): ActionForm {
-    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
+    return {id: '', type: 'send_message', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', use_agent_system_prompt: false, prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 function actionToForm(a: Action): ActionForm {
@@ -241,6 +244,7 @@ function actionToForm(a: Action): ActionForm {
             as_bot_id: '',
             body: '',
             system_prompt: a.ai_prompt.system_prompt ?? '',
+            use_agent_system_prompt: a.ai_prompt.use_agent_system_prompt ?? false,
             prompt: a.ai_prompt.prompt ?? '',
             provider_id: a.ai_prompt.provider_id ?? '',
             allowed_tool_refs: normalizeAllowedTools(a.ai_prompt.allowed_tools),
@@ -257,6 +261,7 @@ function actionToForm(a: Action): ActionForm {
             as_bot_id: a.send_message.as_bot_id ?? '',
             body: a.send_message.body,
             system_prompt: '',
+            use_agent_system_prompt: false,
             prompt: '',
             provider_id: '',
             allowed_tool_refs: [],
@@ -264,7 +269,7 @@ function actionToForm(a: Action): ActionForm {
             guardrail_channel_ids: [],
         };
     }
-    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
+    return {id: a.id, type: '', channel_id: '', reply_to_post_id: '', as_bot_id: '', body: '', system_prompt: '', use_agent_system_prompt: false, prompt: '', provider_id: '', allowed_tool_refs: [], request_as: '', guardrail_channel_ids: []};
 }
 
 const hintStyle: React.CSSProperties = {fontSize: 13, color: 'rgba(var(--center-channel-color-rgb), 0.56)', margin: 0};
@@ -452,7 +457,11 @@ const AutomationEditorView: React.FC = () => {
         });
     }, []);
 
-    const handleActionChange = useCallback((index: number, field: keyof ActionForm, value: string) => {
+    const handleActionChange = useCallback((index: number, field: ActionTextField, value: string) => {
+        setActions((prev) => prev.map((a, i) => (i === index ? {...a, [field]: value} : a)));
+    }, []);
+
+    const handleActionBoolChange = useCallback((index: number, field: 'use_agent_system_prompt', value: boolean) => {
         setActions((prev) => prev.map((a, i) => (i === index ? {...a, [field]: value} : a)));
     }, []);
 
@@ -503,6 +512,9 @@ const AutomationEditorView: React.FC = () => {
                     };
                     if (a.system_prompt.trim() && action.ai_prompt) {
                         action.ai_prompt.system_prompt = a.system_prompt;
+                    }
+                    if (a.use_agent_system_prompt && action.ai_prompt) {
+                        action.ai_prompt.use_agent_system_prompt = true;
                     }
                     if (a.allowed_tool_refs.length > 0 && action.ai_prompt) {
                         action.ai_prompt.allowed_tools = a.allowed_tool_refs;
@@ -747,6 +759,17 @@ Usage: {{(index .Steps "${action.id || '<action_id>'}").Message}}`}</pre>
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div style={styles.formGroup}>
+                                <label style={styles.label}>
+                                    <input
+                                        type='checkbox'
+                                        checked={action.use_agent_system_prompt}
+                                        onChange={(e) => handleActionBoolChange(index, 'use_agent_system_prompt', e.target.checked)}
+                                    />
+                                    {' Use agent system prompt'}
+                                </label>
+                                <p style={hintStyle}>{'Prepends the selected agent\'s configured system prompt when this automation runs, so future agent prompt updates apply without editing the automation.'}</p>
                             </div>
                             <div style={styles.formGroup}>
                                 <label

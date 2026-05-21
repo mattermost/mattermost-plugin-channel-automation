@@ -139,7 +139,7 @@ Creates a new automation. The server assigns `id`, `created_at`, `updated_at`, a
 
 For every `ai_prompt` action with `provider_type: "agent"`, the server confirms with the AI plugin bridge that the automation's creator has access to the chosen `provider_id`, regardless of whether `allowed_tools` is set. Inaccessible, deactivated, or non-existent agent IDs are rejected at create/update time instead of failing with an opaque 403 at execute time. The bridge is queried at most once per distinct `provider_id` per request, so the access check and the `allowed_tools` validation share a single bridge round-trip.
 
-`allowed_tools` and `guardrails` are only valid when `provider_type` is `"agent"`. The bridge rejects `allowed_tools` on service completion endpoints with HTTP 400; the server mirrors that rule at save time so the misconfiguration surfaces immediately.
+`allowed_tools`, `guardrails`, and `use_agent_system_prompt` are only valid when `provider_type` is `"agent"`. The bridge rejects agent-only fields on service completion endpoints with HTTP 400; the server mirrors those rules at save time so the misconfiguration surfaces immediately.
 
 For `ai_prompt` actions with `allowed_tools`, every entry must be a tool the action's agent actually exposes. Embedded Mattermost MCP tools are additionally validated against an explicit catalog: any embedded tool not in the catalog is rejected, and catalog entries marked not permitted (currently `create_post`, `dm`, `group_message`, and the automation-management tools `list_automations` / `get_automation_instructions` / `create_automation` / `update_automation` / `delete_automation`) are rejected. External (non-embedded) MCP tools are not subject to the catalog check.
 
@@ -186,6 +186,7 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
+| 400    | `action <i>: use_agent_system_prompt is only supported with provider_type "agent"`                          |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
@@ -266,6 +267,7 @@ The updated automation object.
 | 400    | `action <i>: invalid channel id ... in guardrails.channel_ids` (or duplicate / empty entry)                  |
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
+| 400    | `action <i>: use_agent_system_prompt is only supported with provider_type "agent"`                          |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
 | 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
 | 404    | `automation not found`                                                                                      |
@@ -547,6 +549,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | Field              | Type                            | Description                                                                                                             |
 | ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `system_prompt`    | string                          | _(optional)_ System prompt template (Go `text/template` syntax). Sent as the first message with role `"system"`.        |
+| `use_agent_system_prompt` | boolean                  | _(optional, agent only)_ When true, asks the AI plugin bridge to prepend the selected agent's stored system prompt and custom instructions before the automation's messages. Existing automations pick up later agent prompt edits without changing this automation. |
 | `prompt`           | string                          | The prompt template (Go `text/template` syntax)                                                                         |
 | `provider_type`    | string                          | Either `"agent"` or `"service"`                                                                                         |
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
@@ -554,7 +557,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
 | `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. |
 
-Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
+Requires an AI plugin (`mattermost-plugin-agents`) build that supports bridge `use_agent_system_prompt` to be installed and active when that field is set.
 
 #### Guardrails
 
@@ -627,7 +630,12 @@ By default, the completion request is attributed to the user who triggered the a
 
 The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 
-Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
+Requires an AI plugin (`mattermost-plugin-agents`) build that supports bridge `use_agent_system_prompt` to be installed and active when that field is set.
+
+When `use_agent_system_prompt` is true, the AI plugin bridge prepends the selected
+agent's current stored system prompt and custom instructions before the automation's
+messages. This is agent-only and is evaluated at execution time, so changes made on
+the Agents screen apply to existing automations the next time they run.
 
 In addition to the configured `system_prompt` and `prompt`, the action automatically
 injects a trusted trigger-context system message that includes the current date as

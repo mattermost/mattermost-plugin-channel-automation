@@ -265,6 +265,29 @@ func TestValidateActions(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("service with use_agent_system_prompt rejected", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-svc",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "service", ProviderID: "openai",
+				UseAgentSystemPrompt: true,
+			},
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `use_agent_system_prompt is only supported with provider_type "agent"`)
+	})
+
+	t.Run("agent with use_agent_system_prompt passes", func(t *testing.T) {
+		err := ValidateActions([]Action{{
+			ID: "ask-ai",
+			AIPrompt: &AIPromptActionConfig{
+				Prompt: "x", ProviderType: "agent", ProviderID: "bot1",
+				UseAgentSystemPrompt: true,
+			},
+		}})
+		require.NoError(t, err)
+	})
+
 	// Guardrails imply allowed_tools, which agents-only. Reject the
 	// combination explicitly so the error message names the actual issue
 	// (otherwise the user would see the secondary "guardrails requires

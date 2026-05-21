@@ -103,9 +103,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	)
 
 	req := bridgeclient.CompletionRequest{
-		Posts:     posts,
-		UserID:    userID,
-		ChannelID: channelID,
+		Posts:                posts,
+		UseAgentSystemPrompt: cfg.UseAgentSystemPrompt && cfg.ProviderType == model.AIProviderTypeAgent,
+		UserID:               userID,
+		ChannelID:            channelID,
 	}
 
 	if len(cfg.AllowedTools) > 0 {

@@ -51,6 +51,13 @@ func TestBuildAutomationInstructionsResponse(t *testing.T) {
 		assert.Contains(t, out.Instructions, `"creator"`)
 		assert.Contains(t, out.Instructions, "creator's permissions")
 	})
+
+	t.Run("documents the ai_prompt use_agent_system_prompt field", func(t *testing.T) {
+		out := buildAutomationInstructionsResponse(nil)
+		assert.Contains(t, out.Instructions, "use_agent_system_prompt")
+		assert.Contains(t, out.Instructions, "stored system prompt")
+		assert.Contains(t, out.Instructions, "agent only")
+	})
 }
 
 func TestHandleGetAutomationInstructions(t *testing.T) {

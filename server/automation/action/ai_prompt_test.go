@@ -88,6 +88,7 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	require.NotNil(t, output)
 	assert.Equal(t, "AI says hello", output.Message)
 	assert.Equal(t, "ai-bot", bc.lastAgent)
+	assert.False(t, bc.lastReq.UseAgentSystemPrompt)
 	// Posts: [trigger metadata (system), user-generated post content (user), user prompt (user)]
 	require.Len(t, bc.lastReq.Posts, 3)
 	assert.Equal(t, "system", bc.lastReq.Posts[0].Role)
@@ -98,6 +99,29 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	assert.Contains(t, bc.lastReq.Posts[1].Message, "<user_data>")
 	assert.Equal(t, "user", bc.lastReq.Posts[2].Role)
 	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[2].Message)
+}
+
+func TestAIPromptAction_Execute_ForwardsUseAgentSystemPrompt(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "AI says hello"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:               "Summarize this",
+			ProviderType:         "agent",
+			ProviderID:           "ai-bot",
+			UseAgentSystemPrompt: true,
+		},
+	}
+	ctx := &model.AutomationContext{Steps: make(map[string]model.StepOutput)}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "ai-bot", bc.lastAgent)
+	assert.True(t, bc.lastReq.UseAgentSystemPrompt)
 }
 
 func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
