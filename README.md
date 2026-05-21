@@ -118,7 +118,7 @@ Sensitive user fields (email, password, auth data) are stripped from the templat
 
 ## API
 
-The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. For channel-scoped triggers, non-system users must be a channel admin or team admin on every referenced channel. For team-scoped triggers (`channel_created`, `user_joined_team`), non-system users must be a team admin on the referenced team(s).
+The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. For channel-scoped triggers, non-system users must have `manage_channel_roles` on every referenced channel (channel admins and team admins satisfy this via scheme resolution). For team-scoped triggers (`channel_created`, `user_joined_team`), non-system users must be a team admin on the referenced team(s).
 
 | Method   | Path                                        | Description                         |
 | -------- | ------------------------------------------- | ----------------------------------- |

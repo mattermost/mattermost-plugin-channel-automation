@@ -8,7 +8,7 @@ All endpoints require a valid Mattermost session — the `Mattermost-User-ID` he
 
 All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the automation's trigger type:
 
-- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) or a **team admin** (`manage_team`) on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"`.
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must have **`manage_channel_roles`** on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). This covers channel admins and team admins via Mattermost's scheme resolution. Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"`.
 - **`channel_created` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
 - **`user_joined_team` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
 
