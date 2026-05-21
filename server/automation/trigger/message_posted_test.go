@@ -137,6 +137,22 @@ func TestMessagePostedTrigger_BuildTriggerData(t *testing.T) {
 		assert.Equal(t, *td.User, td.Post.User)
 	})
 
+	t.Run("preserves triggering post file ids", func(t *testing.T) {
+		api := newFakeTriggerAPI()
+		api.channels["ch1"] = &mmmodel.Channel{Id: "ch1", Name: "town-square", DisplayName: "Town Square"}
+		api.users["user1"] = &mmmodel.User{Id: "user1", Username: "alice"}
+
+		event := &model.Event{
+			Type: model.TriggerTypeMessagePosted,
+			Post: &mmmodel.Post{Id: "post1", ChannelId: "ch1", UserId: "user1", FileIds: []string{"file1", "file2"}},
+		}
+
+		td, err := tr.BuildTriggerData(api, event)
+		require.NoError(t, err)
+		require.NotNil(t, td.Post)
+		assert.Equal(t, []string{"file1", "file2"}, td.Post.FileIds)
+	})
+
 	t.Run("nil post errors", func(t *testing.T) {
 		_, err := tr.BuildTriggerData(newFakeTriggerAPI(), &model.Event{Type: model.TriggerTypeMessagePosted})
 		require.Error(t, err)
