@@ -55,9 +55,10 @@ func setupAPI(t *testing.T) (*mux.Router, model.Store, *plugintest.API) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
-	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", mock.Anything).Return(
+		&mmmodel.Channel{Type: mmmodel.ChannelTypeOpen}, nil,
 	).Maybe()
+	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true).Maybe()
 
 	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, nil, nil)
 	router := mux.NewRouter()
@@ -460,7 +461,7 @@ func TestAPI_UpdateAutomation_Unauthorized(t *testing.T) {
 }
 
 // setupAPIWithCustomMock creates an API handler with a custom plugintest.API
-// so callers can set their own GetChannelMember expectations.
+// so callers can set their own permission-check expectations.
 func setupAPIWithCustomMock(t *testing.T, api *plugintest.API) (*mux.Router, model.Store) {
 	t.Helper()
 
@@ -482,9 +483,10 @@ func setupAPIWithLimit(t *testing.T, limit int) (*mux.Router, model.Store) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
-	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", mock.Anything).Return(
+		&mmmodel.Channel{Type: mmmodel.ChannelTypeOpen}, nil,
 	).Maybe()
+	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true).Maybe()
 
 	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxAutomationsPerChannel: limit}, nil)
 	router := mux.NewRouter()
@@ -530,12 +532,10 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
-	)
 	api.On("GetChannel", "ch1").Return(
-		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -552,19 +552,45 @@ func TestAPI_CreateAutomation_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
+	api.AssertExpectations(t)
+}
+
+func TestAPI_CreateAutomation_TeamAdminWithoutChannelAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+
+	router, _ := setupAPIWithCustomMock(t, api)
+
+	body := `{
+		"name": "Team Admin Automation",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch1", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/automations", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusCreated, w.Code)
+	api.AssertExpectations(t)
 }
 
 func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
-	)
 	api.On("GetChannel", "ch1").Return(
 		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -581,16 +607,17 @@ func TestAPI_CreateAutomation_ActionPermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		nil, mmmodel.NewAppError("GetChannelMember", "not_found", nil, "", http.StatusNotFound),
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -607,24 +634,21 @@ func TestAPI_CreateAutomation_NotChannelMember(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	// Allow existing automation's channel.
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
-	// Deny new automation's channel.
-	api.On("GetChannelMember", "ch-new", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
-	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("GetChannel", "ch-new").Return(
 		&mmmodel.Channel{Id: "ch-new", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch-new", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	router, store := setupAPIWithCustomMock(t, api)
 
@@ -648,7 +672,7 @@ func TestAPI_UpdateAutomation_PermissionDenied(t *testing.T) {
 
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "channel admin permissions")
+	assert.Contains(t, w.Body.String(), "permission to manage")
 }
 
 func TestAPI_UpdateAutomation_NonCreatorRejected(t *testing.T) {
@@ -679,14 +703,14 @@ func TestAPI_UpdateAutomation_NonCreatorRejected(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "automation creator or a system admin")
-	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
-	// No GetChannelMember expectation — system admin should skip channel checks.
+	// No channel permission expectations — system admin should skip channel checks.
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -704,8 +728,7 @@ func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	// Verify GetChannelMember was never called.
-	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
@@ -739,7 +762,7 @@ func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
@@ -747,9 +770,10 @@ func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
 	// Only the trigger channel should be checked; the templated action channel is skipped.
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 
 	router, _ := setupAPIWithCustomMock(t, api)
 
@@ -767,8 +791,7 @@ func TestAPI_CreateAutomation_TemplatedChannelSkipped(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	// Verify GetChannelMember was only called for ch1.
-	api.AssertNumberOfCalls(t, "GetChannelMember", 1)
+	api.AssertNumberOfCalls(t, "HasPermissionToChannel", 1)
 }
 
 func TestAPI_CreateAutomation_ChannelCreated_NonTeamAdminDenied(t *testing.T) {
@@ -892,9 +915,10 @@ func TestAPI_ListAutomations_ChannelCreated_HiddenFromNonTeamAdmin(t *testing.T)
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 	api.On("GetTeam", "team1").Return(&mmmodel.Team{Id: "team1"}, nil)
 	api.On("HasPermissionToTeam", "user1", "team1", mmmodel.PermissionManageTeam).Return(false)
 
@@ -1535,9 +1559,10 @@ func setupAPIWithStore(t *testing.T, store model.Store, limit int) *mux.Router {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", mock.Anything, mmmodel.PermissionManageSystem).Return(false).Maybe()
-	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", mock.Anything).Return(
+		&mmmodel.Channel{Type: mmmodel.ChannelTypeOpen}, nil,
 	).Maybe()
+	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true).Maybe()
 
 	handler := NewAPIHandler(store, nil, api, newTestRegistry(), nil, &testConfig{maxAutomationsPerChannel: limit}, nil)
 	router := mux.NewRouter()
