@@ -42,6 +42,13 @@ func TestNewSafePost_PopulatesResolvedAuthor(t *testing.T) {
 	assert.Equal(t, SafeUser{Id: "user1", Username: "alice"}, safe.User)
 }
 
+func TestNewSafePost_PreservesFileIds(t *testing.T) {
+	post := &mmmodel.Post{Id: "post1", FileIds: []string{"file1", "file2"}}
+	safe := NewSafePost(post, nil)
+	require.NotNil(t, safe)
+	assert.Equal(t, []string{"file1", "file2"}, safe.FileIds)
+}
+
 func TestNewSafeThread_NilInput(t *testing.T) {
 	assert.Nil(t, NewSafeThread(nil, "root", nil))
 }

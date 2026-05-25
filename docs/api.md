@@ -18,7 +18,16 @@ The list endpoint filters results to only automations the user has permission to
 
 ### MCP tool hook endpoints
 
-The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the automation's `created_by` and returns `403 Forbidden` on mismatch (or when the automation has no recorded creator). System admin status does not bypass this check.
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs. The automation's `created_by` may always invoke. Otherwise:
+
+- When the action's `request_as` is `"creator"`, **only** the automation creator may invoke. System admins and any other users are rejected.
+- When `request_as` is `"triggerer"` or unset, the caller must be a system admin **or** a user who could legitimately fire this trigger (mirroring the trigger filters in `server/automation/trigger`):
+  - `message_posted` / `membership_changed`: a member of the trigger channel.
+  - `channel_created`: a member of the trigger team.
+  - `user_joined_team`: a member of the trigger team that also satisfies the trigger's `user_type` filter (`"user"` excludes guests; `"guest"` requires a guest; empty accepts both).
+  - `schedule`: no triggering user, so only the creator or a system admin may invoke.
+
+Returns `403 Forbidden` when unauthorized or when the automation has no recorded creator.
 
 ## Endpoints
 
@@ -609,6 +618,8 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
+For `message_posted` triggers, file attachments from the triggering post are forwarded to the bridge with the automatically injected user-generated trigger data. This lets vision-capable agents inspect image attachments such as screenshots, including posts whose only user content is an attached image.
+
 By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
 - `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
@@ -660,6 +671,7 @@ Action templates receive an `AutomationContext` object with the following struct
 | Channel ID | `{{.Trigger.Post.ChannelId}}` |                                                                                                                                                                  |
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |                                                                                                                                                                  |
 | Message    | `{{.Trigger.Post.Message}}`   | The raw post body. Slack-style attachment text is not appended.                                                                                                  |
+| File IDs   | `{{.Trigger.Post.FileIds}}`   | Mattermost file IDs attached to the post. For `ai_prompt` actions, these are forwarded to the AI plugin bridge with the trigger data user message.               |
 | User       | `{{.Trigger.Post.User}}`      | Populated only on thread-message posts (`{{range .Trigger.Thread.Messages}}{{.User.AuthorDisplay}}{{end}}`). Nil on the top-level triggering post — use `{{.Trigger.User}}` there. |
 | Create At  | `{{.Trigger.Post.CreateAt}}`  | Unix milliseconds. Populated only on thread-message posts.                                                                                                       |
 

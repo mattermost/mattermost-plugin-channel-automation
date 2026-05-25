@@ -6,7 +6,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/mattermost/mattermost-plugin-agents v1.14.1-0.20260423040559-be7acd5761d4
 	github.com/mattermost/mattermost-plugin-starter-template v0.5.1-0.20260301071036-fce92410a612
-	github.com/mattermost/mattermost/server/public v0.3.1-0.20260402155910-d9d71af83e3f
+	github.com/mattermost/mattermost/server/public v0.4.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0

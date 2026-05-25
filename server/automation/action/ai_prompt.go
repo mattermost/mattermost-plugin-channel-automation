@@ -70,13 +70,14 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 		posts = append(posts, bridgeclient.Post{Role: "system", Message: renderedSystem})
 	}
 	metadataMsg, userContentMsg := buildTriggerContext(ctx.Trigger, time.Now())
+	triggerFileIDs := triggerPostFileIDs(ctx.Trigger)
 	scopeMsg := completionScopeInstruction
 	if metadataMsg != "" {
 		scopeMsg = metadataMsg + "\n\n" + scopeMsg
 	}
 	posts = append(posts, bridgeclient.Post{Role: "system", Message: scopeMsg})
-	if userContentMsg != "" {
-		posts = append(posts, bridgeclient.Post{Role: "user", Message: userContentMsg})
+	if userContentMsg != "" || len(triggerFileIDs) > 0 {
+		posts = append(posts, bridgeclient.Post{Role: "user", Message: userContentMsg, FileIDs: triggerFileIDs})
 	}
 	posts = append(posts, bridgeclient.Post{Role: "user", Message: rendered})
 
@@ -157,6 +158,13 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	return &model.StepOutput{
 		Message: response,
 	}, nil
+}
+
+func triggerPostFileIDs(trigger model.TriggerData) []string {
+	if trigger.Post == nil || len(trigger.Post.FileIds) == 0 {
+		return nil
+	}
+	return append([]string(nil), trigger.Post.FileIds...)
 }
 
 // buildTriggerContext builds trigger context split into two parts:
