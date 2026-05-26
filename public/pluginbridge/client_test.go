@@ -193,7 +193,7 @@ func TestErrorNotFound(t *testing.T) {
 }
 
 func TestErrorForbidden(t *testing.T) {
-	mock := &mockPluginAPI{response: textResponse(http.StatusForbidden, "you do not have channel admin permissions on channel ch1\n")}
+	mock := &mockPluginAPI{response: textResponse(http.StatusForbidden, "you do not have permission to manage one or more channels referenced by this automation\n")}
 	client := NewClient(mock, WithUser("user1"))
 
 	_, err := client.CreateAutomation(sampleAutomation())

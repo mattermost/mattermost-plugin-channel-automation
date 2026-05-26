@@ -546,9 +546,8 @@ func TestWorkerPool_CreatorPermissionDemoted(t *testing.T) {
 	api.On("GetUser", "demoted-user").Return(&mmmodel.User{DeleteAt: 0}, nil)
 	// User is no longer a system admin.
 	api.On("HasPermissionTo", "demoted-user", mock.Anything).Return(false)
-	// User is no longer a channel admin.
-	api.On("GetChannelMember", "ch1", "demoted-user").Return(&mmmodel.ChannelMember{SchemeAdmin: false}, nil)
 	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil)
+	api.On("HasPermissionToChannel", "demoted-user", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)
@@ -597,8 +596,8 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	api.On("GetUser", "some-user").Return(&mmmodel.User{DeleteAt: 0}, nil)
 	// User is not a system admin.
 	api.On("HasPermissionTo", "some-user", mock.Anything).Return(false)
-	// GetChannelMember returns a 500 — transient infrastructure error.
-	api.On("GetChannelMember", "ch1", "some-user").Return(nil, mmmodel.NewAppError("GetChannelMember", "app.channel.get_member.app_error", nil, "", 500))
+	// GetChannel returns a 500 — transient infrastructure error.
+	api.On("GetChannel", "ch1").Return(nil, mmmodel.NewAppError("GetChannel", "app.channel.get.app_error", nil, "", 500))
 
 	registry := automation.NewRegistry()
 	registry.RegisterAction(act)

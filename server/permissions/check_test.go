@@ -438,19 +438,35 @@ func TestCheckAutomationPermissions_GMParticipantAllowed(t *testing.T) {
 func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: false}, nil,
-	)
 	api.On("GetChannel", "ch1").Return(
-		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	f := &model.Automation{
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
 	}
 	err := CheckAutomationPermissions(api, "user1", f)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "channel admin permissions")
+	assert.Contains(t, err.Error(), "permission to manage")
+	api.AssertExpectations(t)
+}
+
+func TestCheckAutomationPermissions_RegularChannelTeamAdminAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}},
+		},
+	}
+	require.NoError(t, CheckAutomationPermissions(api, "user1", f))
 	api.AssertExpectations(t)
 }
 
@@ -507,9 +523,10 @@ func TestCanEditAutomation_NilAutomationDenied(t *testing.T) {
 func TestCheckAutomationPermissions_NonChannelCreated_ChannelAdminRequired(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
-	api.On("GetChannelMember", "ch1", "user1").Return(
-		&mmmodel.ChannelMember{SchemeAdmin: true}, nil,
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 
 	f := &model.Automation{
 		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
