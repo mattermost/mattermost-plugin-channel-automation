@@ -40,7 +40,7 @@ func (h *APIHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/automations", h.handleListAutomations).Methods(http.MethodGet)
 	r.HandleFunc("/automations", h.handleCreateAutomation).Methods(http.MethodPost)
 	r.HandleFunc("/automations/{id}", h.handleGetAutomation).Methods(http.MethodGet)
-	r.HandleFunc("/automations/{id}", h.handleUpdateAutomation).Methods(http.MethodPut)
+	r.HandleFunc("/automations/{id}", h.handleUpdateAutomation).Methods(http.MethodPut, http.MethodPatch)
 	r.HandleFunc("/automations/{id}", h.handleDeleteAutomation).Methods(http.MethodDelete)
 }
 
@@ -256,16 +256,18 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
-	var f model.Automation
-	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+	var update model.AutomationUpdate
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, "invalid request body", "")
 		return
 	}
 
-	// Preserve immutable fields.
-	f.ID = id
-	f.CreatedAt = existing.CreatedAt
-	f.CreatedBy = existing.CreatedBy
+	// Copy the existing record and overlay mutable fields from the request.
+	// Update preserves Enabled when the payload omits it (a partial PUT
+	// must not silently disable a running automation), and leaves the
+	// immutable fields (ID, CreatedAt, CreatedBy) untouched.
+	f := *existing
+	f.Update(&update)
 	f.UpdatedAt = model.NowTimestamp()
 
 	// Only the creator (or a sysadmin acting on their behalf) may edit an automation.

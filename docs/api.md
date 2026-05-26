@@ -220,7 +220,8 @@ The automation object.
 ### Update automation
 
 ```
-PUT /automations/{id}
+PUT   /automations/{id}
+PATCH /automations/{id}
 ```
 
 Replaces an automation. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create automation](#create-automation); the agent access check uses the original `created_by` (not the editor), so a system admin editing on behalf of another user cannot bypass the original creator's bridge ACL.

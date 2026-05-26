@@ -286,6 +286,142 @@ func TestAPI_UpdateAutomation(t *testing.T) {
 	assert.Equal(t, "new-action", updated.Actions[0].ID)
 }
 
+func TestAPI_UpdateAutomation_PreservesEnabledWhenOmitted(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:        "f1",
+		Name:      "Original",
+		Enabled:   true,
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	// Payload intentionally omits "enabled" — e.g. a partial PUT from an MCP
+	// tool. Before the fix this silently flipped Enabled to false.
+	body := `{
+		"name": "Updated",
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&updated))
+	assert.True(t, updated.Enabled, "omitted enabled must preserve existing value")
+
+	stored, err := store.Get("f1")
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.True(t, stored.Enabled, "persisted Enabled must match preserved value")
+}
+
+func TestAPI_UpdateAutomation_ExplicitEnabledFalseDisables(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:        "f1",
+		Name:      "Original",
+		Enabled:   true,
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	// An explicit "enabled": false must still disable, so the probe must
+	// distinguish a present-but-false value from an absent field.
+	body := `{
+		"name": "Updated",
+		"enabled": false,
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	stored, err := store.Get("f1")
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.False(t, stored.Enabled, "explicit enabled=false must disable the automation")
+}
+
+func TestAPI_UpdateAutomation_PreservesDisabledWhenOmitted(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:        "f1",
+		Name:      "Original",
+		Enabled:   false,
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Updated",
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	stored, err := store.Get("f1")
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.False(t, stored.Enabled, "omitted enabled must preserve the existing (disabled) value")
+}
+
+func TestAPI_UpdateAutomation_AcceptsPATCH(t *testing.T) {
+	router, store, _ := setupAPI(t)
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:        "f1",
+		Name:      "Original",
+		Enabled:   true,
+		CreatedAt: 1000,
+		CreatedBy: "user1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	// PATCH and PUT share the handler — the verb difference is a hint to the
+	// caller about partial-update semantics. The same Enabled-preserves-on-omit
+	// behavior applies.
+	body := `{
+		"name": "Patched",
+		"trigger": {"message_posted": {"channel_id": "ch1"}},
+		"actions": [{"id": "a", "send_message": {"channel_id": "ch1", "body": "hi"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPatch, "/automations/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "user1")
+
+	router.ServeHTTP(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated model.Automation
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&updated))
+	assert.Equal(t, "Patched", updated.Name)
+	assert.True(t, updated.Enabled, "PATCH with omitted enabled must preserve existing value")
+}
+
 func TestAPI_UpdateAutomation_NotFound(t *testing.T) {
 	router, _, _ := setupAPI(t)
 
