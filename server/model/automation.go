@@ -22,6 +22,31 @@ type Automation struct {
 	CreatedBy string   `json:"created_by"`
 }
 
+// AutomationUpdate is the request payload for replacing the mutable fields of
+// an existing Automation. Enabled is a pointer so the server can distinguish
+// "omitted" (preserve the existing value) from "explicitly false" (disable) —
+// without this, a partial PUT that does not include "enabled" would decode to
+// the bool zero value and silently disable a running automation.
+type AutomationUpdate struct {
+	Name    string   `json:"name"`
+	Enabled *bool    `json:"enabled,omitempty"`
+	Trigger Trigger  `json:"trigger"`
+	Actions []Action `json:"actions"`
+}
+
+// Update overlays the mutable fields of an Automation from u. Immutable
+// fields (ID, CreatedAt, CreatedBy) and the caller-managed UpdatedAt are
+// left untouched. When u.Enabled is nil the existing Enabled value is
+// preserved.
+func (a *Automation) Update(u *AutomationUpdate) {
+	a.Name = u.Name
+	a.Trigger = u.Trigger
+	a.Actions = u.Actions
+	if u.Enabled != nil {
+		a.Enabled = *u.Enabled
+	}
+}
+
 // MessagePostedConfig holds trigger config for the message_posted trigger type.
 type MessagePostedConfig struct {
 	ChannelID            string `json:"channel_id"`

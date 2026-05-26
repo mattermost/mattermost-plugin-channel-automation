@@ -212,3 +212,77 @@ func TestCollectTeamIDs_NonTeamTrigger(t *testing.T) {
 	ids := CollectTeamIDs(a)
 	assert.Nil(t, ids)
 }
+
+func TestAutomation_Update_OverlaysMutableFields(t *testing.T) {
+	existing := &Automation{
+		ID:        "f1",
+		Name:      "Original",
+		Enabled:   true,
+		Trigger:   Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+		Actions:   []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+		CreatedAt: 1000,
+		UpdatedAt: 1000,
+		CreatedBy: "user1",
+	}
+
+	enabled := false
+	existing.Update(&AutomationUpdate{
+		Name:    "Renamed",
+		Enabled: &enabled,
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch2"}},
+		Actions: []Action{{ID: "b", SendMessage: &SendMessageActionConfig{ChannelID: "ch2", Body: "bye"}}},
+	})
+
+	assert.Equal(t, "Renamed", existing.Name)
+	assert.False(t, existing.Enabled)
+	require.NotNil(t, existing.Trigger.MessagePosted)
+	assert.Equal(t, "ch2", existing.Trigger.MessagePosted.ChannelID)
+	require.Len(t, existing.Actions, 1)
+	assert.Equal(t, "b", existing.Actions[0].ID)
+
+	// Immutable fields are untouched.
+	assert.Equal(t, "f1", existing.ID)
+	assert.Equal(t, int64(1000), existing.CreatedAt)
+	assert.Equal(t, int64(1000), existing.UpdatedAt, "Update must not touch UpdatedAt; the caller manages it")
+	assert.Equal(t, "user1", existing.CreatedBy)
+}
+
+func TestAutomation_Update_NilEnabledPreservesExisting(t *testing.T) {
+	existing := &Automation{
+		ID:      "f1",
+		Name:    "Original",
+		Enabled: true,
+		Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []Action{{ID: "a", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+	}
+
+	existing.Update(&AutomationUpdate{
+		Name:    "Renamed",
+		Trigger: existing.Trigger,
+		Actions: existing.Actions,
+		// Enabled intentionally nil.
+	})
+
+	assert.True(t, existing.Enabled, "nil Enabled must preserve existing value")
+	assert.Equal(t, "Renamed", existing.Name)
+}
+
+func TestAutomationUpdate_JSON_DistinguishesAbsentFromFalse(t *testing.T) {
+	t.Run("absent", func(t *testing.T) {
+		var u AutomationUpdate
+		require.NoError(t, json.Unmarshal([]byte(`{"name":"n"}`), &u))
+		assert.Nil(t, u.Enabled)
+	})
+	t.Run("explicit false", func(t *testing.T) {
+		var u AutomationUpdate
+		require.NoError(t, json.Unmarshal([]byte(`{"name":"n","enabled":false}`), &u))
+		require.NotNil(t, u.Enabled)
+		assert.False(t, *u.Enabled)
+	})
+	t.Run("explicit true", func(t *testing.T) {
+		var u AutomationUpdate
+		require.NoError(t, json.Unmarshal([]byte(`{"name":"n","enabled":true}`), &u))
+		require.NotNil(t, u.Enabled)
+		assert.True(t, *u.Enabled)
+	})
+}
