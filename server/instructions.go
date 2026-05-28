@@ -70,7 +70,8 @@ users rely on this structure to understand risk before they confirm):
 Format as that four-part numbered list (1–4), then ask the user to confirm. Only call create_automation after
 the user says yes.
 
-If the user's request is missing details (trigger channel, output channel, message body/template, which tools),
+If the user's request is missing details (trigger channel, output channel, message body/template, which tools,
+or for schedule triggers the first run day/date, time, and timezone when the recurrence is vague),
 ask clarifying questions BEFORE presenting the summary.
 
 MATTERMOST MCP CHANNEL GUARDRAILS — WHICH TOOL NAMES ARE CONSTRAINED:
@@ -141,7 +142,7 @@ TRIGGERS: Set exactly one trigger type inside the "trigger" object.
   {"trigger": {"message_posted": {"channel_id": "<channel-id>"}}}
 - "schedule": fires on a recurring schedule.
   - interval: Go duration string (minimum "1h"). Examples: "1h" (hourly), "24h" (daily), "168h" (weekly).
-  - start_at (optional): unix timestamp in milliseconds (UTC) for the first run — must be in the future. The automation fires at this time, then repeats every interval. If omitted, the first run happens immediately. Use this to schedule a daily recap at e.g. 9am.
+  - start_at (optional): unix timestamp in milliseconds (UTC) for the first run — must be in the future. The automation fires at this time, then repeats every interval. If omitted, the first run happens immediately; only omit start_at when the user explicitly wants the first run immediate. Vague recurrences such as "every day", "every week", or "every N days" are missing timing unless the user also specified when the first run should happen — ask for the exact day/date, time, and timezone, set start_at to that future timestamp, and in summary item 1 include the recurring interval and exact first run day/date, time, and timezone (or state that the first run is immediate).
   {"trigger": {"schedule": {"channel_id": "<channel-id>", "interval": "24h", "start_at": 1899936000000}}}
 - "membership_changed": fires when a member joins or leaves the channel.
   {"trigger": {"membership_changed": {"channel_id": "<channel-id>"}}}

@@ -14,6 +14,20 @@ const templateVariables = `{
   }
 }`;
 
+function formatUTCStartAt(startAt?: number): string {
+    if (!startAt) {
+        return '';
+    }
+    const d = new Date(startAt);
+    if (Number.isNaN(d.getTime())) {
+        return '';
+    }
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    return `${days[d.getUTCDay()]}, ${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
+
 const scheduleTrigger: TriggerConfig = {
     type: 'schedule',
     label: 'Schedule',
@@ -48,7 +62,11 @@ const scheduleTrigger: TriggerConfig = {
     },
 
     formatSummary(trigger: Trigger): string {
-        return `every ${trigger.schedule?.interval ?? '?'}`;
+        const startAt = formatUTCStartAt(trigger.schedule?.start_at);
+        if (startAt) {
+            return `every ${trigger.schedule?.interval ?? '?'} starting ${startAt}`;
+        }
+        return `every ${trigger.schedule?.interval ?? '?'} starting immediately`;
     },
 
     templateVariables,
