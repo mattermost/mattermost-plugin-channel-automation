@@ -19,7 +19,7 @@ import (
 // while the LLM call is in flight. Mattermost's user_typing event TTL is ~5s;
 // 1s keeps the indicator alive smoothly while minimising the window after
 // the action finishes where the indicator is still visible.
-const typingRepublishInterval = 1 * time.Second
+const typingRepublishInterval = 4 * time.Second
 
 const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
 	"Do not take additional follow-up actions beyond what was explicitly requested."
