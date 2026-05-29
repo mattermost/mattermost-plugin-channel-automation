@@ -14,8 +14,9 @@ import (
 // CheckAutomationPermissions verifies that userID has permission to manage the automation.
 // System admins are always allowed. For channel_created automations the user must be
 // a team admin on the trigger's team, and all literal channel references must
-// belong to that team. For other automations the user must be a channel admin
-// (SchemeAdmin) on every literal channel referenced in the automation.
+// belong to that team. For other automations the user must have
+// PermissionManageChannelRoles on every literal channel referenced in the
+// automation (which covers channel admins and team admins via scheme resolution).
 //
 // When no concrete channels can be verified (e.g. only templated or AI-only
 // actions on a non-channel_created trigger), we require system admin permission.
@@ -77,31 +78,31 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 		return fmt.Errorf("system admin permission is required for automations without explicit channel references")
 	}
 	for _, chID := range channelIDs {
-		member, appErr := api.GetChannelMember(chID, userID)
-		if appErr != nil {
-			// 4xx errors (not found, unauthorized) mean the user is not a member;
-			// 5xx errors are infrastructure failures that should surface differently.
-			if appErr.StatusCode >= http.StatusInternalServerError {
-				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
-			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
-		}
-		if member.SchemeAdmin {
-			continue
-		}
-		// DM and GM channels have no channel-admin role: any participant may
-		// create an automation on a channel they belong to. The participant
-		// could already read or post to it manually, so this grants no new
-		// access.
 		ch, chErr := api.GetChannel(chID)
 		if chErr != nil {
 			if chErr.StatusCode >= http.StatusInternalServerError {
 				return fmt.Errorf("failed to verify channel permissions: %w", chErr)
 			}
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
-		if ch == nil || (ch.Type != mmmodel.ChannelTypeDirect && ch.Type != mmmodel.ChannelTypeGroup) {
-			return fmt.Errorf("you do not have channel admin permissions on one or more channels referenced by this automation")
+		if ch == nil {
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
+		}
+		// DM and GM channels have no channel-admin role: any participant may
+		// create an automation on a channel they belong to. The participant
+		// could already read or post to it manually, so this grants no new
+		// access.
+		if ch.Type == mmmodel.ChannelTypeDirect || ch.Type == mmmodel.ChannelTypeGroup {
+			if _, appErr := api.GetChannelMember(chID, userID); appErr != nil {
+				if appErr.StatusCode >= http.StatusInternalServerError {
+					return fmt.Errorf("failed to verify channel permissions: %w", appErr)
+				}
+				return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
+			}
+			continue
+		}
+		if !api.HasPermissionToChannel(userID, chID, mmmodel.PermissionManageChannelRoles) {
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
 	}
 	return nil

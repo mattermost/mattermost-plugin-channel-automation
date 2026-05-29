@@ -116,6 +116,65 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	assert.Equal(t, "Summarize: Hello world", bc.lastReq.Posts[2].Message)
 }
 
+func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Summarize the attached screenshot",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Message: "Here is the bug", FileIds: []string{"file1", "file2"}},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	require.Len(t, bc.lastReq.Posts, 3)
+	assert.Equal(t, []string{"file1", "file2"}, bc.lastReq.Posts[1].FileIDs)
+	assert.Empty(t, bc.lastReq.Posts[2].FileIDs)
+}
+
+func TestAIPromptAction_Execute_ForwardsFileIDsForImageOnlyPost(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
+	a := NewAIPromptAction(api, bc)
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "Describe the attached screenshot",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Post: &model.SafePost{Id: "post1", FileIds: []string{"image-file-id"}},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	require.Len(t, bc.lastReq.Posts, 3)
+	assert.Equal(t, "user", bc.lastReq.Posts[1].Role)
+	assert.Empty(t, bc.lastReq.Posts[1].Message)
+	assert.Equal(t, []string{"image-file-id"}, bc.lastReq.Posts[1].FileIDs)
+	assert.Equal(t, "Describe the attached screenshot", bc.lastReq.Posts[2].Message)
+	assert.Empty(t, bc.lastReq.Posts[2].FileIDs)
+}
+
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{serviceResponse: "Service response"}

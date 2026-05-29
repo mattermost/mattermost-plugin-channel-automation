@@ -8,7 +8,7 @@ All endpoints require a valid Mattermost session — the `Mattermost-User-ID` he
 
 All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the automation's trigger type:
 
-- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): the user must be a **channel admin** (`SchemeAdmin`) on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). Returns `403 Forbidden` with `"you do not have channel admin permissions on one or more channels referenced by this automation"`.
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): for regular public/private channels, the user must have **`manage_channel_roles`** on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). This covers channel admins and team admins via Mattermost's scheme resolution. For **DM** and **GM** channels, any channel participant may create an automation (no `manage_channel_roles` required). Returns `403 Forbidden` with `"you do not have permission to manage one or more channels referenced by this automation"`.
 - **`channel_created` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
 - **`user_joined_team` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
 
@@ -18,7 +18,16 @@ The list endpoint filters results to only automations the user has permission to
 
 ### MCP tool hook endpoints
 
-The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs and **must only be called by the automation creator**: in addition to the global session check, the handler compares `Mattermost-User-ID` against the automation's `created_by` and returns `403 Forbidden` on mismatch (or when the automation has no recorded creator). System admin status does not bypass this check.
+The plugin exposes internal MCP tool hook callbacks at `POST /hooks/tools/{automation_id}/{action_id}/before`. This endpoint is invoked by the Mattermost AI plugin while an `ai_prompt` action runs. The automation's `created_by` may always invoke. Otherwise:
+
+- When the action's `request_as` is `"creator"`, **only** the automation creator may invoke. System admins and any other users are rejected.
+- When `request_as` is `"triggerer"` or unset, the caller must be a system admin **or** a user who could legitimately fire this trigger (mirroring the trigger filters in `server/automation/trigger`):
+  - `message_posted` / `membership_changed`: a member of the trigger channel.
+  - `channel_created`: a member of the trigger team.
+  - `user_joined_team`: a member of the trigger team that also satisfies the trigger's `user_type` filter (`"user"` excludes guests; `"guest"` requires a guest; empty accepts both).
+  - `schedule`: no triggering user, so only the creator or a system admin may invoke.
+
+Returns `403 Forbidden` when unauthorized or when the automation has no recorded creator.
 
 ## Endpoints
 
@@ -75,7 +84,7 @@ GET /automations
 GET /automations?channel_id=<channel-id>
 ```
 
-Returns all automations visible to the requesting user. System admins see all automations; other users only see automations where they have channel admin permissions on all referenced channels.
+Returns all automations visible to the requesting user. System admins see all automations; other users only see automations they are authorized to view under the trigger-specific rules above.
 
 **Query parameters:**
 
@@ -178,7 +187,7 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to create automation`                                                                               |
 | 502    | `action <i>: failed to list tools for agent "<id>": ...` (creator cannot access the agent, or the bridge returned an error) |
@@ -202,7 +211,7 @@ The automation object.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to get automation`                                                                        |
 
@@ -211,7 +220,8 @@ The automation object.
 ### Update automation
 
 ```
-PUT /automations/{id}
+PUT   /automations/{id}
+PATCH /automations/{id}
 ```
 
 Replaces an automation. The server preserves immutable fields (`id`, `created_at`, `created_by`) and updates `updated_at`. Each action must include a user-specified `id` (lowercase slug format). `allowed_tools` validation matches [Create automation](#create-automation); the agent access check uses the original `created_by` (not the editor), so a system admin editing on behalf of another user cannot bypass the original creator's bridge ACL.
@@ -258,7 +268,7 @@ The updated automation object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation`           |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 404    | `automation not found`                                                                                      |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to update automation`                                                                               |
@@ -281,7 +291,7 @@ Deletes an automation by ID.
 
 | Status | Body                                                                                              |
 | ------ | ------------------------------------------------------------------------------------------------- |
-| 403    | `you do not have channel admin permissions on one or more channels referenced by this automation` |
+| 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages |
 | 404    | `automation not found`                                                                            |
 | 500    | `failed to delete automation`                                                                     |
 
@@ -326,7 +336,7 @@ GET /automations/{automation_id}/executions
 GET /automations/{automation_id}/executions?limit=50
 ```
 
-Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation (system admin or channel admin on all referenced channels).
+Returns execution history records for a specific automation, ordered by most recent first. The user must have permission to view the automation under the trigger-specific rules above (or be a system admin).
 
 **Query parameters:**
 
@@ -609,6 +619,8 @@ The `body`, `channel_id`, and `reply_to_post_id` fields are rendered as Go templ
 
 Sends a rendered prompt to an AI agent or service via the Mattermost AI plugin bridge and stores the response.
 
+For `message_posted` triggers, file attachments from the triggering post are forwarded to the bridge with the automatically injected user-generated trigger data. This lets vision-capable agents inspect image attachments such as screenshots, including posts whose only user content is an attached image.
+
 By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
 - `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
@@ -662,6 +674,7 @@ Action templates receive an `AutomationContext` object with the following struct
 | Channel ID | `{{.Trigger.Post.ChannelId}}` |                                                                                                                                                                  |
 | Thread ID  | `{{.Trigger.Post.ThreadId}}`  |                                                                                                                                                                  |
 | Message    | `{{.Trigger.Post.Message}}`   | The raw post body. Slack-style attachment text is not appended.                                                                                                  |
+| File IDs   | `{{.Trigger.Post.FileIds}}`   | Mattermost file IDs attached to the post. For `ai_prompt` actions, these are forwarded to the AI plugin bridge with the trigger data user message.               |
 | User       | `{{.Trigger.Post.User}}`      | Populated only on thread-message posts (`{{range .Trigger.Thread.Messages}}{{.User.AuthorDisplay}}{{end}}`). Nil on the top-level triggering post — use `{{.Trigger.User}}` there. |
 | Create At  | `{{.Trigger.Post.CreateAt}}`  | Unix milliseconds. Populated only on thread-message posts.                                                                                                       |
 

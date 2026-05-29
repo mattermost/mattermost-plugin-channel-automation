@@ -68,7 +68,7 @@ An automation that asks an AI agent to classify incoming messages and posts the 
 | Type                 | Description                                                                                                             |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `message_posted`     | Fires when a user posts a message in the configured channel. Bot posts, system messages, and webhook posts are ignored. |
-| `schedule`           | Fires on a recurring interval. Minimum interval is 1 hour.                                                              |
+| `schedule`           | Fires on a recurring interval from a configured first run time, or immediately when no first run time is set. Minimum interval is 1 hour. |
 | `membership_changed` | Fires when a user joins or leaves the configured channel. Bot users are excluded.                                       |
 | `channel_created`    | Fires when a new public channel is created. Requires `team_id`.                                                         |
 | `user_joined_team`   | Fires when a user joins the configured team. Bot users are excluded. Provides the team's default channel (typically town-square). |
@@ -118,7 +118,7 @@ Sensitive user fields (email, password, auth data) are stripped from the templat
 
 ## API
 
-The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. Otherwise the user must be a channel admin on every channel referenced by the automation.
+The plugin exposes a REST API under `/plugins/com.mattermost.channel-automation/api/v1`. System admins are always allowed. For channel-scoped triggers, non-system users must have `manage_channel_roles` on every referenced channel (channel admins and team admins satisfy this via scheme resolution). For team-scoped triggers (`channel_created`, `user_joined_team`), non-system users must be a team admin on the referenced team(s).
 
 | Method   | Path                                        | Description                         |
 | -------- | ------------------------------------------- | ----------------------------------- |

@@ -91,6 +91,7 @@ type SafePost struct {
 	ChannelId string   `json:"channel_id"`
 	ThreadId  string   `json:"thread_id"`
 	Message   string   `json:"message"`
+	FileIds   []string `json:"file_ids,omitempty"`
 	User      SafeUser `json:"user"`
 	CreateAt  int64    `json:"create_at,omitempty"`
 }
@@ -156,6 +157,7 @@ func NewSafePost(p *mmmodel.Post, user *SafeUser) *SafePost {
 		ChannelId: p.ChannelId,
 		ThreadId:  threadId,
 		Message:   p.Message,
+		FileIds:   append([]string(nil), p.FileIds...),
 		User:      safePostUser(p.UserId, user),
 		CreateAt:  p.CreateAt,
 	}

@@ -35,7 +35,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	automationAPI := automation.NewAPIHandler(p.automationStore, p.historyStore, p.API, p.registry, p.scheduleManager, &configProvider{getConfig: p.getConfiguration}, p.bridgeClient)
 	automationAPI.RegisterRoutes(apiRouter)
 
-	hooksAPI := hooks.NewAPIHandler(p.automationStore, p.API)
+	hooksAPI := hooks.NewAPIHandler(p.automationStore, p.API, p.registry)
 	hooksAPI.RegisterRoutes(apiRouter)
 
 	execAPI := execution.NewAPIHandler(p.historyStore, p.automationStore, p.API)

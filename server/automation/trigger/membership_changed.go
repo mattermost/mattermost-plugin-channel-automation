@@ -47,6 +47,13 @@ func (t *MembershipChangedTrigger) CandidateAutomationIDs(store model.Store, eve
 	return store.GetAutomationIDsForMembershipChannel(event.Channel.Id)
 }
 
+func (t *MembershipChangedTrigger) CallerCanTrigger(api model.HookCallerAPI, trigger *model.Trigger, userID string) bool {
+	if trigger.MembershipChanged == nil {
+		return false
+	}
+	return isChannelMember(api, trigger.MembershipChanged.ChannelID, userID)
+}
+
 func (t *MembershipChangedTrigger) BuildTriggerData(_ model.TriggerAPI, event *model.Event) (model.TriggerData, error) {
 	if event.Channel == nil || event.User == nil {
 		return model.TriggerData{}, fmt.Errorf("membership_changed event missing channel or user")
