@@ -16,9 +16,10 @@ import (
 )
 
 // typingRepublishInterval is how often the typing indicator is re-published
-// while the LLM call is in flight. Mattermost's user_typing event TTL is 5s;
-// 4s leaves a safety margin so the indicator never visually blinks.
-const typingRepublishInterval = 4 * time.Second
+// while the LLM call is in flight. Mattermost's user_typing event TTL is ~5s;
+// 1s keeps the indicator alive smoothly while minimising the window after
+// the action finishes where the indicator is still visible.
+const typingRepublishInterval = 1 * time.Second
 
 const completionScopeInstruction = "Complete only the specific task described in the user prompt below, then provide your final response. " +
 	"Do not take additional follow-up actions beyond what was explicitly requested."
@@ -312,6 +313,14 @@ func (a *AIPromptAction) startTypingIndicator(channelID, parentID string) func()
 		ticker := time.NewTicker(typingRepublishInterval)
 		defer ticker.Stop()
 		for {
+			// Priority-select: check cancellation before blocking so that if
+			// both ctx.Done and ticker.C are ready simultaneously we always
+			// exit rather than publishing one extra event after stopTyping().
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			select {
 			case <-ctx.Done():
 				return
