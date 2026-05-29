@@ -1201,6 +1201,7 @@ func TestAIPromptAction_Execute_TypingErrorIsNonFatal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, output)
 	assert.Equal(t, "ok", output.Message)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
 }
 
 func TestAIPromptAction_Execute_TypingStopsAfterCompletion(t *testing.T) {
@@ -1227,10 +1228,8 @@ func TestAIPromptAction_Execute_TypingStopsAfterCompletion(t *testing.T) {
 		done <- err
 	}()
 
-	// Wait until the LLM call is in flight. By this point the initial
-	// synchronous PublishUserTyping has already fired (and possibly a few
-	// ticker fires, depending on scheduling — though typingRepublishInterval
-	// is 4s so in practice not).
+	// Wait until the LLM call is in flight; by this point the initial
+	// synchronous PublishUserTyping has already fired.
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
@@ -1238,7 +1237,7 @@ func TestAIPromptAction_Execute_TypingStopsAfterCompletion(t *testing.T) {
 	}
 
 	// Release the LLM call; Execute should return promptly and stop the
-	// typing goroutine via the deferred stopTyping() call.
+	// typing goroutine via defer stopTyping().
 	close(block)
 
 	select {
@@ -1249,12 +1248,10 @@ func TestAIPromptAction_Execute_TypingStopsAfterCompletion(t *testing.T) {
 	}
 
 	callsAtCompletion := countTypingCalls(api)
-	// Sleep well past one re-publish interval would be 4s+ which is too slow
-	// for a unit test; 100ms is enough to catch a leaked goroutine that
-	// publishes on every tick — but since the ticker fires at 4s we can't
-	// observe a "stop". Instead we assert no NEW calls accrue after the
-	// returned action: the call count is stable.
-	time.Sleep(100 * time.Millisecond)
+	require.Greater(t, callsAtCompletion, 0, "expected at least one typing publish before completion")
+	// Sleep past one full republish interval so a leaked goroutine would fire
+	// at least once more, then assert the count is stable.
+	time.Sleep(typingRepublishInterval + 100*time.Millisecond)
 	assert.Equal(t, callsAtCompletion, countTypingCalls(api),
 		"PublishUserTyping should not be called after Execute returns")
 }
