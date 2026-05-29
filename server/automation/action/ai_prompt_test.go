@@ -119,7 +119,7 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -147,7 +147,7 @@ func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
 func TestAIPromptAction_Execute_ForwardsFileIDsForImageOnlyPost(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
