@@ -1265,3 +1265,62 @@ func countTypingCalls(api *plugintest.API) int {
 	}
 	return n
 }
+
+func TestAIPromptAction_Execute_UsesCustomBotFromNextSendMessage(t *testing.T) {
+	const customBotID = "custom-bot-id"
+	api := newTestAPI()
+	api.On("PublishUserTyping", customBotID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+		// Simulate executor: full action list with ai_prompt first so
+		// typingBotID can find itself and scan the following send_message.
+		Actions: []model.Action{
+			*act,
+			{
+				ID: "send1",
+				SendMessage: &model.SendMessageActionConfig{
+					ChannelID: "C1",
+					Body:      "reply",
+					AsBotID:   customBotID,
+				},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", customBotID, "C1", "")
+	api.AssertNotCalled(t, "PublishUserTyping", testBotUserID, mock.Anything, mock.Anything)
+}
+
+func TestAIPromptAction_Execute_FallsBackToDefaultBotWhenNoCustomBot(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+		// Next send_message has no AsBotID — should fall back to default bot.
+		Actions: []model.Action{
+			*act,
+			{
+				ID:          "send1",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "reply"},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+}

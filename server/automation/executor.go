@@ -40,6 +40,7 @@ func (e *Executor) Execute(f *model.Automation, triggerData model.TriggerData) (
 		CreatedBy:    f.CreatedBy,
 		Trigger:      triggerData,
 		Steps:        make(map[string]model.StepOutput),
+		Actions:      f.Actions,
 	}
 
 	for _, action := range f.Actions {

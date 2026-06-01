@@ -13,6 +13,9 @@ type AutomationContext struct {
 	CreatedBy    string                `json:"created_by"`
 	Trigger      TriggerData           `json:"trigger"`
 	Steps        map[string]StepOutput `json:"steps"`
+	// Actions holds the full ordered action list for the automation.
+	// Set by the executor once before execution starts; not serialized.
+	Actions []Action `json:"-"`
 }
 
 // TriggerData holds the data from the event that triggered the automation.

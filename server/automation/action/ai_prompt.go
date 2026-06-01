@@ -144,7 +144,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 			req.ToolHooks = toolHooks
 		}
 	}
-	stopTyping := a.startTypingIndicator(channelID, triggerParentID(ctx))
+	stopTyping := a.startTypingIndicator(typingUserID(a.botUserID, action.ID, ctx), channelID, triggerParentID(ctx))
 	defer stopTyping()
 
 	var response string
@@ -301,18 +301,36 @@ func triggerParentID(ctx *model.AutomationContext) string {
 	return ctx.Trigger.Thread.RootID
 }
 
-// startTypingIndicator publishes a "user is typing" event as the bot, then
+// typingUserID returns the user ID to publish typing events as.
+// It scans the actions that follow currentActionID and returns the AsBotID of
+// the first send_message that has one set, so the typing identity matches the
+// user that will post the response. Falls back to defaultID otherwise.
+func typingUserID(defaultID, currentActionID string, ctx *model.AutomationContext) string {
+	found := false
+	for _, a := range ctx.Actions {
+		if a.ID == currentActionID {
+			found = true
+			continue
+		}
+		if found && a.SendMessage != nil && a.SendMessage.AsBotID != "" {
+			return a.SendMessage.AsBotID
+		}
+	}
+	return defaultID
+}
+
+// startTypingIndicator publishes a "user is typing" event as userTypingID, then
 // re-publishes every typingRepublishInterval until the returned stop function
 // is called. It is best-effort: failures are logged at debug level and never
-// fail the action. When channelID or botUserID is empty, it is a no-op.
+// fail the action. When channelID or userTypingID is empty, it is a no-op.
 //
 // The caller must invoke the returned stop function exactly once.
-func (a *AIPromptAction) startTypingIndicator(channelID, parentID string) func() {
-	if channelID == "" || a.botUserID == "" {
+func (a *AIPromptAction) startTypingIndicator(userTypingID, channelID, parentID string) func() {
+	if channelID == "" || userTypingID == "" {
 		return func() {}
 	}
 
-	a.publishTyping(channelID, parentID)
+	a.publishTyping(userTypingID, channelID, parentID)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
@@ -320,19 +338,18 @@ func (a *AIPromptAction) startTypingIndicator(channelID, parentID string) func()
 		ticker := time.NewTicker(typingRepublishInterval)
 		defer ticker.Stop()
 		for {
-			// Priority-select: check cancellation before blocking so that if
-			// both ctx.Done and ticker.C are ready simultaneously we always
-			// exit rather than publishing one extra event after stopTyping().
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				a.publishTyping(channelID, parentID)
+				// Re-check cancellation after the tick fires so that a
+				// concurrent stopTyping() always wins over a simultaneous tick.
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					a.publishTyping(userTypingID, channelID, parentID)
+				}
 			}
 		}
 	})
@@ -346,8 +363,8 @@ func (a *AIPromptAction) startTypingIndicator(channelID, parentID string) func()
 	}
 }
 
-func (a *AIPromptAction) publishTyping(channelID, parentID string) {
-	if appErr := a.api.PublishUserTyping(a.botUserID, channelID, parentID); appErr != nil {
+func (a *AIPromptAction) publishTyping(userTypingID, channelID, parentID string) {
+	if appErr := a.api.PublishUserTyping(userTypingID, channelID, parentID); appErr != nil {
 		a.api.LogDebug("AI prompt action: publish typing failed",
 			"channel_id", channelID,
 			"error", appErr.Error(),
