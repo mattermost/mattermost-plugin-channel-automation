@@ -1365,6 +1365,83 @@ func TestAIPromptAction_Execute_PublishesTypingAtChannelScopeForRootPostWithoutT
 	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
 }
 
+func TestAIPromptAction_Execute_TypingScopeFollowsNextSendMessageOnly(t *testing.T) {
+	// Two ai_prompt → send_message pairs in one automation. The first
+	// send_message posts the first prompt's response at channel scope; only
+	// the second send_message replies in a thread. Typing for the first
+	// ai_prompt must follow its own send_message (channel scope), not be
+	// pulled into the thread by an unrelated later send_message.
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	first := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1"},
+			Post:    &model.SafePost{Id: "rootp", ThreadId: "rootp", ChannelId: "C1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+		Actions: []model.Action{
+			*first,
+			{
+				ID:          "send1",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "channel reply"},
+			},
+			{ID: "ai2", AIPrompt: &model.AIPromptActionConfig{Prompt: "p", ProviderType: "agent", ProviderID: "ai"}},
+			{
+				ID: "send2",
+				SendMessage: &model.SendMessageActionConfig{
+					ChannelID:     "C1",
+					ReplyToPostID: "{{.Trigger.Post.ThreadId}}",
+					Body:          "thread reply",
+				},
+			},
+		},
+	}
+
+	_, err := a.Execute(first, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+	api.AssertNotCalled(t, "PublishUserTyping", testBotUserID, "C1", "rootp")
+}
+
+func TestAIPromptAction_Execute_TypingBotIDFollowsNextSendMessageOnly(t *testing.T) {
+	// First send_message has no AsBotID (default bot); a later send_message
+	// uses a custom bot. typingUserID must use the default for the first
+	// ai_prompt, not the unrelated later send_message's bot.
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	first := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+		Actions: []model.Action{
+			*first,
+			{
+				ID:          "send1",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "default bot"},
+			},
+			{ID: "ai2", AIPrompt: &model.AIPromptActionConfig{Prompt: "p", ProviderType: "agent", ProviderID: "ai"}},
+			{
+				ID:          "send2",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "custom bot", AsBotID: "later-bot"},
+			},
+		},
+	}
+
+	_, err := a.Execute(first, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+	api.AssertNotCalled(t, "PublishUserTyping", "later-bot", mock.Anything, mock.Anything)
+}
+
 func TestAIPromptAction_Execute_FallsBackToDefaultBotWhenNoCustomBot(t *testing.T) {
 	api := newTestAPI()
 	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
