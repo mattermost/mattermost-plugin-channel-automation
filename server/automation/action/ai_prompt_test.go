@@ -1299,6 +1299,72 @@ func TestAIPromptAction_Execute_UsesCustomBotFromNextSendMessage(t *testing.T) {
 	api.AssertNotCalled(t, "PublishUserTyping", testBotUserID, mock.Anything, mock.Anything)
 }
 
+func TestAIPromptAction_Execute_PublishesTypingInThreadForRootPostWhenSendMessageReplies(t *testing.T) {
+	// User posts a root post; the automation auto-replies into the thread
+	// via reply_to_post_id. The typing indicator must follow the reply into
+	// the thread (parent = trigger post Id), not stay at channel scope.
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "rootp").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1"},
+			Post:    &model.SafePost{Id: "rootp", ThreadId: "rootp", ChannelId: "C1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+		Actions: []model.Action{
+			*act,
+			{
+				ID: "send1",
+				SendMessage: &model.SendMessageActionConfig{
+					ChannelID:     "C1",
+					ReplyToPostID: "{{.Trigger.Post.ThreadId}}",
+					Body:          "reply",
+				},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "rootp")
+	api.AssertNotCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+}
+
+func TestAIPromptAction_Execute_PublishesTypingAtChannelScopeForRootPostWithoutThreadedReply(t *testing.T) {
+	// Root-post trigger with a send_message that posts at channel scope
+	// (no reply_to_post_id): typing must stay at channel scope to match.
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1"},
+			Post:    &model.SafePost{Id: "rootp", ThreadId: "rootp", ChannelId: "C1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+		Actions: []model.Action{
+			*act,
+			{
+				ID:          "send1",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "reply"},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+}
+
 func TestAIPromptAction_Execute_FallsBackToDefaultBotWhenNoCustomBot(t *testing.T) {
 	api := newTestAPI()
 	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
