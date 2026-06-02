@@ -30,6 +30,15 @@ type mockBridgeClient struct {
 	agentTools    []bridgeclient.BridgeToolInfo
 	agentToolsErr error
 
+	// agentBlock, when non-nil, makes AgentCompletion block on receive from
+	// the channel before returning. Tests can use this to keep the LLM call
+	// in flight while asserting typing-indicator behavior, then close the
+	// channel to release it.
+	agentBlock <-chan struct{}
+	// agentStarted, when non-nil, is closed when AgentCompletion is entered.
+	// Tests can use this to synchronize with the in-flight call.
+	agentStarted chan<- struct{}
+
 	lastAgent   string
 	lastService string
 	lastReq     bridgeclient.CompletionRequest
@@ -38,6 +47,13 @@ type mockBridgeClient struct {
 func (m *mockBridgeClient) AgentCompletion(agent string, req bridgeclient.CompletionRequest) (string, error) {
 	m.lastAgent = agent
 	m.lastReq = req
+	if m.agentStarted != nil {
+		close(m.agentStarted)
+		m.agentStarted = nil
+	}
+	if m.agentBlock != nil {
+		<-m.agentBlock
+	}
 	return m.agentResponse, m.agentErr
 }
 
@@ -59,14 +75,14 @@ func newTestAPI() *plugintest.API {
 }
 
 func TestAIPromptAction_Type(t *testing.T) {
-	a := NewAIPromptAction(nil, nil)
+	a := NewAIPromptAction(nil, nil, "")
 	assert.Equal(t, "ai_prompt", a.Type())
 }
 
 func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "AI says hello"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -103,7 +119,7 @@ func TestAIPromptAction_Execute_AgentSuccess(t *testing.T) {
 func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -131,7 +147,7 @@ func TestAIPromptAction_Execute_ForwardsTriggerPostFileIDs(t *testing.T) {
 func TestAIPromptAction_Execute_ForwardsFileIDsForImageOnlyPost(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "AI saw the screenshot"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -162,7 +178,7 @@ func TestAIPromptAction_Execute_ForwardsFileIDsForImageOnlyPost(t *testing.T) {
 func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{serviceResponse: "Service response"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -198,7 +214,7 @@ func TestAIPromptAction_Execute_ServiceSuccess(t *testing.T) {
 func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "refined output"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai2",
@@ -229,7 +245,7 @@ func TestAIPromptAction_Execute_TemplateWithStepOutputs(t *testing.T) {
 func TestAIPromptAction_Execute_MissingConfig(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	tests := []struct {
 		name     string
@@ -273,7 +289,7 @@ func TestAIPromptAction_Execute_MissingConfig(t *testing.T) {
 
 func TestAIPromptAction_Execute_NilBridgeClient(t *testing.T) {
 	api := newTestAPI()
-	a := NewAIPromptAction(api, nil)
+	a := NewAIPromptAction(api, nil, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -294,7 +310,7 @@ func TestAIPromptAction_Execute_NilBridgeClient(t *testing.T) {
 func TestAIPromptAction_Execute_BridgeClientError(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentErr: fmt.Errorf("connection refused")}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -316,7 +332,7 @@ func TestAIPromptAction_Execute_BridgeClientError(t *testing.T) {
 func TestAIPromptAction_Execute_BadTemplate(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -349,7 +365,7 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 			{Name: "external_search"}, // non-MM tool, no hooks
 		},
 	}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	chID := mmmodel.NewId()
 	act := &model.Action{
@@ -396,7 +412,7 @@ func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T
 		agentResponse: "ok",
 		agentTools:    []bridgeclient.BridgeToolInfo{mmTool("search_posts")},
 	}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai-step",
@@ -421,7 +437,7 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 		agentResponse: "tool result",
 		agentTools:    []bridgeclient.BridgeToolInfo{{Name: "search"}},
 	}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -448,7 +464,7 @@ func TestAIPromptAction_Execute_AllowedTools(t *testing.T) {
 func TestAIPromptAction_Execute_AllowedTools_RejectedAtRuntime(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{}}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -470,7 +486,7 @@ func TestAIPromptAction_Execute_AllowedTools_RejectedAtRuntime(t *testing.T) {
 func TestAIPromptAction_Execute_AllowedTools_DemotedToolRejected(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{mmTool("create_post")}}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -491,7 +507,7 @@ func TestAIPromptAction_Execute_AllowedTools_DemotedToolRejected(t *testing.T) {
 func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -515,7 +531,7 @@ func TestAIPromptAction_Execute_NoToolFields(t *testing.T) {
 func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "response"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -554,7 +570,7 @@ func TestAIPromptAction_Execute_SystemPromptRendered(t *testing.T) {
 func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "response"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -586,7 +602,7 @@ func TestAIPromptAction_Execute_EmptySystemPromptNoUserSystemPost(t *testing.T) 
 func TestAIPromptAction_Execute_BadSystemPromptTemplate(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -702,7 +718,7 @@ func TestBuildTriggerContext(t *testing.T) {
 func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "done"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -769,7 +785,7 @@ func TestAIPromptAction_Execute_TriggerContextInjected(t *testing.T) {
 func TestAIPromptAction_Execute_ThreadContext_InjectsTranscriptAndMetadata(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -824,7 +840,7 @@ func TestAIPromptAction_Execute_ThreadContext_InjectsTranscriptAndMetadata(t *te
 func TestAIPromptAction_Execute_ThreadContext_DisclosesTruncationToModel(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -865,7 +881,7 @@ func TestAIPromptAction_Execute_ThreadContext_DisclosesTruncationToModel(t *test
 func TestAIPromptAction_Execute_ThreadContext_NotInjectedWhenAbsent(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{agentResponse: "ok"}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -904,7 +920,7 @@ func TestAIPromptAction_Execute_UserIDFromTrigger(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			api := newTestAPI()
 			bc := &mockBridgeClient{agentResponse: "ok"}
-			a := NewAIPromptAction(api, bc)
+			a := NewAIPromptAction(api, bc, "")
 
 			act := &model.Action{
 				ID: "ai1",
@@ -948,7 +964,7 @@ func TestAIPromptAction_Execute_UserIDFallbackToCreatedBy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			api := newTestAPI()
 			bc := &mockBridgeClient{agentResponse: "ok"}
-			a := NewAIPromptAction(api, bc)
+			a := NewAIPromptAction(api, bc, "")
 
 			act := &model.Action{
 				ID: "ai1",
@@ -1034,7 +1050,7 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			api := newTestAPI()
 			bc := &mockBridgeClient{agentResponse: "ok"}
-			a := NewAIPromptAction(api, bc)
+			a := NewAIPromptAction(api, bc, "")
 
 			act := &model.Action{
 				ID: "ai1",
@@ -1056,7 +1072,7 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
-	a := NewAIPromptAction(api, bc)
+	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
 		ID: "ai1",
@@ -1072,4 +1088,239 @@ func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, output)
 	assert.Contains(t, err.Error(), `unsupported provider_type "unknown"`)
+}
+
+// ---- Typing indicator tests ----
+
+const testBotUserID = "bot-user-id"
+
+func validAIPromptAction() *model.Action {
+	return &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+		},
+	}
+}
+
+func TestAIPromptAction_Execute_PublishesTypingForChannel(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1", Name: "general"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(validAIPromptAction(), ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+}
+
+func TestAIPromptAction_Execute_PublishesTypingForThread(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "rootp").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1"},
+			Thread:  &model.SafeThread{RootID: "rootp", PostCount: 1},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(validAIPromptAction(), ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "rootp")
+}
+
+func TestAIPromptAction_Execute_SkipsTypingWhenNoChannel(t *testing.T) {
+	api := newTestAPI()
+	// Deliberately do NOT stub PublishUserTyping: AssertNotCalled below would
+	// still pass if a Return wasn't set, but leaving it unstubbed catches
+	// accidental publishes via panic on an unexpected call.
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Schedule: &model.ScheduleInfo{Interval: "1h"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(validAIPromptAction(), ctx)
+	require.NoError(t, err)
+	api.AssertNotCalled(t, "PublishUserTyping", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAIPromptAction_Execute_SkipsTypingWhenNoBotUserID(t *testing.T) {
+	api := newTestAPI()
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, "")
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{
+			Channel: &model.SafeChannel{Id: "C1"},
+		},
+		Steps: make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(validAIPromptAction(), ctx)
+	require.NoError(t, err)
+	api.AssertNotCalled(t, "PublishUserTyping", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAIPromptAction_Execute_TypingErrorIsNonFatal(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(
+		mmmodel.NewAppError("publish", "boom", nil, "", 500),
+	)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(validAIPromptAction(), ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "ok", output.Message)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
+}
+
+func TestAIPromptAction_Execute_TypingStopsAfterCompletion(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	block := make(chan struct{})
+	started := make(chan struct{})
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentBlock:    block,
+		agentStarted:  started,
+	}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Execute(validAIPromptAction(), ctx)
+		done <- err
+	}()
+
+	// Wait until the LLM call is in flight; by this point the initial
+	// synchronous PublishUserTyping has already fired.
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("AgentCompletion was never entered")
+	}
+
+	// Release the LLM call; Execute should return promptly and stop the
+	// typing goroutine via defer stopTyping().
+	close(block)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Execute did not return after LLM call was released")
+	}
+
+	callsAtCompletion := countTypingCalls(api)
+	require.Greater(t, callsAtCompletion, 0, "expected at least one typing publish before completion")
+	// Sleep past one full republish interval so a leaked goroutine would fire
+	// at least once more, then assert the count is stable.
+	time.Sleep(typingRepublishInterval + 100*time.Millisecond)
+	assert.Equal(t, callsAtCompletion, countTypingCalls(api),
+		"PublishUserTyping should not be called after Execute returns")
+}
+
+func countTypingCalls(api *plugintest.API) int {
+	n := 0
+	for _, c := range api.Calls {
+		if c.Method == "PublishUserTyping" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAIPromptAction_Execute_UsesCustomBotFromNextSendMessage(t *testing.T) {
+	const customBotID = "custom-bot-id"
+	api := newTestAPI()
+	api.On("PublishUserTyping", customBotID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+		// Simulate executor: full action list with ai_prompt first so
+		// typingBotID can find itself and scan the following send_message.
+		Actions: []model.Action{
+			*act,
+			{
+				ID: "send1",
+				SendMessage: &model.SendMessageActionConfig{
+					ChannelID: "C1",
+					Body:      "reply",
+					AsBotID:   customBotID,
+				},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", customBotID, "C1", "")
+	api.AssertNotCalled(t, "PublishUserTyping", testBotUserID, mock.Anything, mock.Anything)
+}
+
+func TestAIPromptAction_Execute_FallsBackToDefaultBotWhenNoCustomBot(t *testing.T) {
+	api := newTestAPI()
+	api.On("PublishUserTyping", testBotUserID, "C1", "").Return(nil)
+
+	bc := &mockBridgeClient{agentResponse: "ok"}
+	a := NewAIPromptAction(api, bc, testBotUserID)
+
+	act := validAIPromptAction()
+	ctx := &model.AutomationContext{
+		Trigger: model.TriggerData{Channel: &model.SafeChannel{Id: "C1"}},
+		Steps:   make(map[string]model.StepOutput),
+		// Next send_message has no AsBotID — should fall back to default bot.
+		Actions: []model.Action{
+			*act,
+			{
+				ID:          "send1",
+				SendMessage: &model.SendMessageActionConfig{ChannelID: "C1", Body: "reply"},
+			},
+		},
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	api.AssertCalled(t, "PublishUserTyping", testBotUserID, "C1", "")
 }
