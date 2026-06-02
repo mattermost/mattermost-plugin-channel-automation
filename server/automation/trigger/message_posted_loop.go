@@ -1,21 +1,22 @@
 package trigger
 
 import (
-	"slices"
-
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-// SendMessageBotUserIDs returns distinct bot user IDs used by send_message actions.
-// Empty AsBotID resolves to defaultBotUserID (the plugin default automation bot).
-func SendMessageBotUserIDs(automation *model.Automation, defaultBotUserID string) []string {
-	if automation == nil {
-		return nil
+// IsSendMessageLoopPost reports whether post is authored by a bot that would post
+// via the automation's send_message actions (explicit as_bot_id or defaultBotUserID
+// when as_bot_id is omitted). Applies to root posts and thread replies.
+//
+// Loop detection does not use the ai_generated_by post prop: that marker is only
+// set on MCP create_post output, which automations cannot invoke, so it cannot
+// indicate a self-trigger from this plugin.
+func IsSendMessageLoopPost(post *mmmodel.Post, automation *model.Automation, defaultBotUserID string) bool {
+	if post == nil || automation == nil {
+		return false
 	}
-	seen := make(map[string]struct{})
-	var ids []string
 	for _, act := range automation.Actions {
 		if act.SendMessage == nil {
 			continue
@@ -24,23 +25,9 @@ func SendMessageBotUserIDs(automation *model.Automation, defaultBotUserID string
 		if botID == "" {
 			botID = defaultBotUserID
 		}
-		if botID == "" {
-			continue
+		if botID != "" && botID == post.UserId {
+			return true
 		}
-		if _, ok := seen[botID]; ok {
-			continue
-		}
-		seen[botID] = struct{}{}
-		ids = append(ids, botID)
 	}
-	return ids
-}
-
-// IsSendMessageThreadLoopPost reports whether post is a thread reply authored by a
-// bot that would post via the automation's send_message actions.
-func IsSendMessageThreadLoopPost(post *mmmodel.Post, botUserIDs []string) bool {
-	if post == nil || post.RootId == "" {
-		return false
-	}
-	return slices.Contains(botUserIDs, post.UserId)
+	return false
 }

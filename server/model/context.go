@@ -110,6 +110,7 @@ type SafeUser struct {
 	FirstName   string `json:"first_name"`
 	LastName    string `json:"last_name"`
 	IsGuestUser bool   `json:"is_guest,omitempty"`
+	IsBot       bool   `json:"is_bot,omitempty"`
 }
 
 // IsGuest returns whether the user has the guest role.
@@ -260,6 +261,7 @@ func NewSafeUser(u *mmmodel.User) *SafeUser {
 		FirstName:   u.FirstName,
 		LastName:    u.LastName,
 		IsGuestUser: u.IsGuest(),
+		IsBot:       u.IsBot,
 	}
 }
 

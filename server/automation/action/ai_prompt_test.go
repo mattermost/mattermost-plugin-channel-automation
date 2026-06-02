@@ -960,6 +960,18 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 			want: "automation-creator-id",
 		},
 		{
+			name:      "triggerer falls back to creator when trigger user is bot",
+			requestAs: "triggerer",
+			ctx: &model.AutomationContext{
+				CreatedBy: "automation-creator-id",
+				Trigger: model.TriggerData{
+					User: &model.SafeUser{Id: "bot-trigger-id", IsBot: true},
+				},
+				Steps: make(map[string]model.StepOutput),
+			},
+			want: "automation-creator-id",
+		},
+		{
 			name:      "empty defaults to triggerer behavior",
 			requestAs: "",
 			ctx: &model.AutomationContext{

@@ -93,9 +93,63 @@ func TestTriggerService_FindMatchingAutomations_SkipsSendMessageBotThreadReplies
 	}))
 
 	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: &mmmodel.Post{ChannelId: "ch1", UserId: "custom-bot", RootId: "root1"},
+	}
+
+	_, automations, err := svc.FindMatchingAutomations(event)
+	require.NoError(t, err)
+	assert.Empty(t, automations)
+}
+
+func TestTriggerService_FindMatchingAutomations_SkipsSendMessageBotRootPosts(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:      "f1",
+		Name:    "Custom Bot Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{
+			ID: "a1",
+			SendMessage: &model.SendMessageActionConfig{
+				ChannelID: "ch1",
+				AsBotID:   "custom-bot",
+				Body:      "hello",
+			},
+		}},
+	}))
+
+	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: &mmmodel.Post{ChannelId: "ch1", UserId: "custom-bot"},
+	}
+
+	_, automations, err := svc.FindMatchingAutomations(event)
+	require.NoError(t, err)
+	assert.Empty(t, automations)
+}
+
+func TestTriggerService_FindMatchingAutomations_SkipsDefaultAutomationBotPosts(t *testing.T) {
+	store, _ := setupStore(t)
+	svc := NewTriggerService(store, newTestRegistry())
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:      "f1",
+		Name:    "Default Bot Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{
+			ID:          "a1",
+			SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"},
+		}},
+	}))
+
+	event := &model.Event{
 		Type:                model.TriggerTypeMessagePosted,
 		AutomationBotUserID: "default-bot",
-		Post:                &mmmodel.Post{ChannelId: "ch1", UserId: "custom-bot", RootId: "root1"},
+		Post:                &mmmodel.Post{ChannelId: "ch1", UserId: "default-bot"},
 	}
 
 	_, automations, err := svc.FindMatchingAutomations(event)

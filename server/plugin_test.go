@@ -296,7 +296,7 @@ func TestHandleGetClientConfig(t *testing.T) {
 	})
 }
 
-func TestMessageHasBeenPosted_ProcessesAIGeneratedRootPosts(t *testing.T) {
+func TestMessageHasBeenPosted_ProcessesBotRootPosts(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 	saveMessagePostedAutomation(t, p)
 
@@ -304,11 +304,10 @@ func TestMessageHasBeenPosted_ProcessesAIGeneratedRootPosts(t *testing.T) {
 		Id:        "post1",
 		UserId:    "bot-user",
 		ChannelId: "ch1",
-		Message:   "AI-generated root post",
+		Message:   "bot root post",
 	}
 	post.AddProp("from_bot", "true")
 	post.AddProp("from_webhook", "true")
-	post.AddProp("ai_generated_by", "some-bot-id")
 
 	p.MessageHasBeenPosted(nil, post)
 
@@ -316,6 +315,40 @@ func TestMessageHasBeenPosted_ProcessesAIGeneratedRootPosts(t *testing.T) {
 	assert.Equal(t, "f1", item.AutomationID)
 	require.NotNil(t, item.TriggerData.Post)
 	assert.Equal(t, "post1", item.TriggerData.Post.Id)
+}
+
+func TestMessageHasBeenPosted_ProcessesThreadRepliesFromNonSendMessageBot(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}},
+		Actions: []model.Action{{
+			ID: "a1",
+			SendMessage: &model.SendMessageActionConfig{
+				ChannelID: "ch1",
+				AsBotID:   "custom-bot",
+				Body:      "reply",
+			},
+		}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+
+	post := &mmmodel.Post{
+		Id:        "post1",
+		UserId:    "other-agent-bot",
+		ChannelId: "ch1",
+		RootId:    "root1",
+		Message:   "thread reply from another bot",
+	}
+	post.AddProp("from_bot", "true")
+
+	p.MessageHasBeenPosted(nil, post)
+
+	item := requireNextWorkItem(t, wqStore)
+	assert.Equal(t, "f1", item.AutomationID)
 }
 
 func TestMessageHasBeenPosted_SkipsSendMessageBotThreadReplies(t *testing.T) {
@@ -345,34 +378,6 @@ func TestMessageHasBeenPosted_SkipsSendMessageBotThreadReplies(t *testing.T) {
 		Message:   "thread reply from send_message bot",
 	}
 	post.AddProp("from_bot", "true")
-
-	p.MessageHasBeenPosted(nil, post)
-
-	requireNoWorkItem(t, wqStore)
-}
-
-func TestMessageHasBeenPosted_SkipsAIGeneratedThreadReplies(t *testing.T) {
-	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
-
-	f := &model.Automation{
-		ID:      "f1",
-		Name:    "Test Automation",
-		Enabled: true,
-		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}},
-		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
-	}
-	require.NoError(t, p.automationStore.Save(f))
-
-	post := &mmmodel.Post{
-		Id:        "post1",
-		UserId:    "bot-user",
-		ChannelId: "ch1",
-		RootId:    "root1",
-		Message:   "AI-generated thread reply",
-	}
-	post.AddProp("from_bot", "true")
-	post.AddProp("from_webhook", "true")
-	post.AddProp("ai_generated_by", "some-bot-id")
 
 	p.MessageHasBeenPosted(nil, post)
 
