@@ -144,7 +144,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 			req.ToolHooks = toolHooks
 		}
 	}
-	stopTyping := a.startTypingIndicator(typingUserID(a.botUserID, action.ID, ctx), channelID, triggerParentID(ctx))
+	stopTyping := a.startTypingIndicator(typingUserID(ctx, a.botUserID, action.ID), channelID, triggerParentID(ctx, action.ID))
 	defer stopTyping()
 
 	var response string
@@ -291,32 +291,54 @@ func buildTriggerContext(trigger model.TriggerData, now time.Time) (metadata str
 	return metaContent, userContentStr
 }
 
-// triggerParentID returns the thread root ID for thread-reply triggers so the
-// typing indicator scopes to the thread. Returns empty for root posts and
-// non-message triggers, which lets the indicator show at channel scope.
-func triggerParentID(ctx *model.AutomationContext) string {
-	if ctx == nil || ctx.Trigger.Thread == nil {
+// triggerParentID returns the thread root ID to scope the typing indicator to.
+func triggerParentID(ctx *model.AutomationContext, currentActionID string) string {
+	if ctx == nil {
 		return ""
 	}
-	return ctx.Trigger.Thread.RootID
+	if ctx.Trigger.Thread != nil && ctx.Trigger.Thread.RootID != "" {
+		return ctx.Trigger.Thread.RootID
+	}
+	if ctx.Trigger.Post == nil || ctx.Trigger.Post.ThreadId == "" {
+		return ""
+	}
+	next := nextSendMessageAfter(ctx, currentActionID)
+	if next != nil && next.ReplyToPostID != "" {
+		return ctx.Trigger.Post.ThreadId
+	}
+	return ""
 }
 
 // typingUserID returns the user ID to publish typing events as.
-// It scans the actions that follow currentActionID and returns the AsBotID of
-// the first send_message that has one set, so the typing identity matches the
-// user that will post the response. Falls back to defaultID otherwise.
-func typingUserID(defaultID, currentActionID string, ctx *model.AutomationContext) string {
-	found := false
-	for _, a := range ctx.Actions {
-		if a.ID == currentActionID {
-			found = true
-			continue
-		}
-		if found && a.SendMessage != nil && a.SendMessage.AsBotID != "" {
-			return a.SendMessage.AsBotID
-		}
+// It returns the AsBotID of the next send_message after currentActionID — the
+// action that posts this prompt's response — so the typing identity matches
+// the user that will post the message. Falls back to defaultID when there is
+// no following send_message or when its AsBotID is empty.
+func typingUserID(ctx *model.AutomationContext, defaultID, currentActionID string) string {
+	if next := nextSendMessageAfter(ctx, currentActionID); next != nil && next.AsBotID != "" {
+		return next.AsBotID
 	}
 	return defaultID
+}
+
+func nextSendMessageAfter(ctx *model.AutomationContext, currentActionID string) *model.SendMessageActionConfig {
+	if ctx == nil {
+		return nil
+	}
+	found := false
+	for i := range ctx.Actions {
+		a := &ctx.Actions[i]
+		if !found {
+			if a.ID == currentActionID {
+				found = true
+			}
+			continue
+		}
+		if a.SendMessage != nil {
+			return a.SendMessage
+		}
+	}
+	return nil
 }
 
 // startTypingIndicator publishes a "user is typing" event as userTypingID, then
