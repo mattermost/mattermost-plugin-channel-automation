@@ -93,6 +93,28 @@ func TestMessagePostedTrigger_Matches_TopLevelPostMatchesWhenIncludeEnabled(t *t
 	assert.True(t, tr.Matches(trig, event))
 }
 
+func TestMessagePostedTrigger_Matches_ProcessesBotRootPosts(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}}
+	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: &mmmodel.Post{ChannelId: "ch1", UserId: "agent-bot"},
+	}
+
+	assert.True(t, tr.Matches(trig, event))
+}
+
+func TestMessagePostedTrigger_Matches_ProcessesBotThreadReplies(t *testing.T) {
+	tr := &trigger.MessagePostedTrigger{}
+	trig := &model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}}
+	event := &model.Event{
+		Type: model.TriggerTypeMessagePosted,
+		Post: &mmmodel.Post{ChannelId: "ch1", UserId: "agent-bot", RootId: "root1"},
+	}
+
+	assert.True(t, tr.Matches(trig, event))
+}
+
 func TestMessagePostedTrigger_Validate(t *testing.T) {
 	tr := &trigger.MessagePostedTrigger{}
 

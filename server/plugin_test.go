@@ -296,63 +296,150 @@ func TestHandleGetClientConfig(t *testing.T) {
 	})
 }
 
-func TestMessageHasBeenPosted_SkipsAIGeneratedPosts(t *testing.T) {
-	// Plugin has nil triggerService — if the early return doesn't fire,
-	// we'll get a nil-pointer panic, proving the filter works.
-	p := &Plugin{botUserID: "bot-id"}
+func TestMessageHasBeenPosted_ProcessesBotRootPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	saveMessagePostedAutomation(t, p)
 
 	post := &mmmodel.Post{
-		UserId:  "human-user",
-		Message: "AI-generated reply",
+		Id:        "post1",
+		UserId:    "bot-user",
+		ChannelId: "ch1",
+		Message:   "bot root post",
 	}
-	post.AddProp("ai_generated_by", "some-bot-id")
+	post.AddProp("from_bot", "true")
+	post.AddProp("from_webhook", "true")
 
-	// Should return immediately without touching triggerService.
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	p.MessageHasBeenPosted(nil, post)
+
+	item := requireNextWorkItem(t, wqStore)
+	assert.Equal(t, "f1", item.AutomationID)
+	require.NotNil(t, item.TriggerData.Post)
+	assert.Equal(t, "post1", item.TriggerData.Post.Id)
 }
 
-func TestMessageHasBeenPosted_SkipsBotPosts(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
+func TestMessageHasBeenPosted_ProcessesThreadRepliesFromNonSendMessageBot(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
 
-	post := &mmmodel.Post{UserId: "bot-id", Message: "hi"}
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}},
+		Actions: []model.Action{{
+			ID: "a1",
+			SendMessage: &model.SendMessageActionConfig{
+				ChannelID: "ch1",
+				AsBotID:   "custom-bot",
+				Body:      "reply",
+			},
+		}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
 
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	post := &mmmodel.Post{
+		Id:        "post1",
+		UserId:    "other-agent-bot",
+		ChannelId: "ch1",
+		RootId:    "root1",
+		Message:   "thread reply from another bot",
+	}
+	post.AddProp("from_bot", "true")
+
+	p.MessageHasBeenPosted(nil, post)
+
+	item := requireNextWorkItem(t, wqStore)
+	assert.Equal(t, "f1", item.AutomationID)
+}
+
+func TestMessageHasBeenPosted_SkipsSendMessageBotThreadReplies(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1", IncludeThreadReplies: true}},
+		Actions: []model.Action{{
+			ID: "a1",
+			SendMessage: &model.SendMessageActionConfig{
+				ChannelID: "ch1",
+				AsBotID:   "custom-bot",
+				Body:      "reply",
+			},
+		}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+
+	post := &mmmodel.Post{
+		Id:        "post1",
+		UserId:    "custom-bot",
+		ChannelId: "ch1",
+		RootId:    "root1",
+		Message:   "thread reply from send_message bot",
+	}
+	post.AddProp("from_bot", "true")
+
+	p.MessageHasBeenPosted(nil, post)
+
+	requireNoWorkItem(t, wqStore)
+}
+
+func TestMessageHasBeenPosted_SkipsDefaultAutomationBotPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	saveMessagePostedAutomation(t, p)
+
+	post := &mmmodel.Post{Id: "post1", UserId: "bot-id", ChannelId: "ch1", Message: "hi"}
+
+	p.MessageHasBeenPosted(nil, post)
+
+	requireNoWorkItem(t, wqStore)
 }
 
 func TestMessageHasBeenPosted_SkipsSystemMessages(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	saveMessagePostedAutomation(t, p)
 
-	post := &mmmodel.Post{UserId: "human-user", Type: mmmodel.PostTypeJoinChannel}
-
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
-}
-
-func TestMessageHasBeenPosted_SkipsWebhookPosts(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
-
-	post := &mmmodel.Post{UserId: "human-user", Message: "from webhook"}
+	post := &mmmodel.Post{Id: "post1", UserId: "human-user", ChannelId: "ch1", Type: mmmodel.PostTypeJoinChannel}
 	post.AddProp("from_webhook", "true")
 
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	p.MessageHasBeenPosted(nil, post)
+
+	requireNoWorkItem(t, wqStore)
 }
 
-func TestMessageHasBeenPosted_SkipsFromBotPosts(t *testing.T) {
-	p := &Plugin{botUserID: "bot-id"}
+func TestMessageHasBeenPosted_ProcessesWebhookPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	saveMessagePostedAutomation(t, p)
 
-	post := &mmmodel.Post{UserId: "human-user", Message: "from bot"}
+	post := &mmmodel.Post{Id: "post1", UserId: "human-user", ChannelId: "ch1", Message: "from webhook"}
+	post.AddProp("from_bot", "true")
+	post.AddProp("from_webhook", "true")
+
+	p.MessageHasBeenPosted(nil, post)
+
+	item := requireNextWorkItem(t, wqStore)
+	assert.Equal(t, "f1", item.AutomationID)
+	require.NotNil(t, item.TriggerData.Post)
+	assert.Equal(t, "post1", item.TriggerData.Post.Id)
+	assert.Equal(t, "ch1", item.TriggerData.Post.ChannelId)
+	assert.Equal(t, "human-user", item.TriggerData.Post.User.Id)
+}
+
+func TestMessageHasBeenPosted_ProcessesFromBotPosts(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+	saveMessagePostedAutomation(t, p)
+
+	post := &mmmodel.Post{Id: "post1", UserId: "bot-user", ChannelId: "ch1", Message: "from bot"}
 	post.AddProp("from_bot", "true")
 
-	assert.NotPanics(t, func() {
-		p.MessageHasBeenPosted(nil, post)
-	})
+	p.MessageHasBeenPosted(nil, post)
+
+	item := requireNextWorkItem(t, wqStore)
+	assert.Equal(t, "f1", item.AutomationID)
+	require.NotNil(t, item.TriggerData.Post)
+	assert.Equal(t, "post1", item.TriggerData.Post.Id)
+	assert.Equal(t, "ch1", item.TriggerData.Post.ChannelId)
+	assert.Equal(t, "bot-user", item.TriggerData.Post.User.Id)
 }
 
 func TestChannelHasBeenCreated_SkipsNonPublicChannels(t *testing.T) {
@@ -446,6 +533,8 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 		}
 	}
 	api.On("GetChannel", mock.Anything).Return(&mmmodel.Channel{Id: "ch1", Name: "test", DisplayName: "Test"}, nil)
+	api.On("GetUser", "human-user").Return(&mmmodel.User{Id: "human-user", Username: "humanuser"}, nil).Maybe()
+	api.On("GetUser", "bot-user").Return(&mmmodel.User{Id: "bot-user", Username: "botuser", IsBot: true}, nil).Maybe()
 	api.On("GetUser", mock.Anything).Return(&mmmodel.User{Id: "user1", Username: "testuser"}, nil)
 	api.On("GetTeam", mock.Anything).Return(&mmmodel.Team{Id: "team1", Name: "testteam", DisplayName: "Test Team"}, nil).Maybe()
 	api.On("GetChannelByName", mock.Anything, mmmodel.DefaultChannelName, false).Return(&mmmodel.Channel{Id: "town-square-id", Name: mmmodel.DefaultChannelName}, nil).Maybe()
@@ -482,6 +571,41 @@ func setupPluginForHookTest(t *testing.T, triggerType string) (*Plugin, *workque
 	p.dispatcher = automation.NewDispatcher(api, triggerService, wqStore, wp)
 
 	return p, wqStore
+}
+
+func saveMessagePostedAutomation(t *testing.T, p *Plugin) {
+	t.Helper()
+
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+}
+
+func requireNextWorkItem(t *testing.T, wqStore *workqueue.Store) *model.WorkItem {
+	t.Helper()
+
+	var item *model.WorkItem
+	require.Eventually(t, func() bool {
+		var err error
+		item, err = wqStore.ClaimNext()
+		require.NoError(t, err)
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
+	return item
+}
+
+func requireNoWorkItem(t *testing.T, wqStore *workqueue.Store) {
+	t.Helper()
+
+	assert.Never(t, func() bool {
+		item, err := wqStore.ClaimNext()
+		return err != nil || item != nil
+	}, 200*time.Millisecond, 10*time.Millisecond)
 }
 
 func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {

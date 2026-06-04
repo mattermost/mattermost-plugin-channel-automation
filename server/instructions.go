@@ -138,7 +138,7 @@ each of those things with only the tools listed? If any step requires a tool tha
 included, add it to your recommendation and explain why it's needed.
 
 TRIGGERS: Set exactly one trigger type inside the "trigger" object.
-- "message_posted": fires when a human user posts a message in the channel. Bot messages are automatically filtered out, so there is no risk of bot-triggered loops. High-traffic channels will trigger frequently.
+- "message_posted": fires when a message is posted in the channel, including bot and webhook posts. System posts are filtered. Posts authored by any bot the automation would post as via send_message (including the default automation bot when as_bot_id is omitted) are filtered for both root posts and thread replies to prevent self-triggered loops. High-traffic channels will trigger frequently.
   {"trigger": {"message_posted": {"channel_id": "<channel-id>"}}}
 - "schedule": fires on a recurring schedule.
   - interval: Go duration string (minimum "1h"). Examples: "1h" (hourly), "24h" (daily), "168h" (weekly).
@@ -179,7 +179,9 @@ Action types:
        - "triggerer" (default, also used when omitted): the user who triggered the automation
          (e.g. the post author for message_posted, the joiner for membership_changed); falls
          back to the automation creator when the trigger has no associated user (schedule and
-         channel_created triggers always attribute to the creator).
+         channel_created triggers always attribute to the creator) or when the trigger user is
+         a bot or webhook author (so tool calls use the creator's credentials and channel access
+         instead of the bot's).
        - "creator": always the automation creator, regardless of who triggered the run.
      The agent runs with the resolved user's permissions, so picking "creator" in a shared
      channel lets every triggerer exercise the creator's access — only choose "creator" when

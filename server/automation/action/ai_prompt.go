@@ -99,7 +99,8 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 
 	userID := ctx.CreatedBy
 	userIDSource := model.AIPromptRequestAsCreator
-	if cfg.RequestAs != model.AIPromptRequestAsCreator && ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
+	if cfg.RequestAs != model.AIPromptRequestAsCreator &&
+		ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" && !ctx.Trigger.User.IsBot {
 		userID = ctx.Trigger.User.Id
 		userIDSource = model.AIPromptRequestAsTriggerer
 	}

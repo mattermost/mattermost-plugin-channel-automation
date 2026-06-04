@@ -24,7 +24,26 @@ func (t *MessagePostedTrigger) Matches(trigger *model.Trigger, event *model.Even
 	if event.Post.RootId != "" && !trigger.MessagePosted.IncludeThreadReplies {
 		return false
 	}
+	if isMessagePostedLoopPost(event) {
+		return false
+	}
 	return true
+}
+
+// isMessagePostedLoopPost reports posts that should not re-trigger automations:
+// all posts from the plugin's default automation bot, and thread replies marked
+// with ai_generated_by (MCP/agent replies when IncludeThreadReplies is on).
+func isMessagePostedLoopPost(event *model.Event) bool {
+	if event.Post == nil {
+		return false
+	}
+	if event.Post.RootId != "" && event.Post.GetProp("ai_generated_by") != nil {
+		return true
+	}
+	if event.AutomationBotUserID != "" && event.Post.UserId == event.AutomationBotUserID {
+		return true
+	}
+	return false
 }
 
 func (t *MessagePostedTrigger) Validate(trigger *model.Trigger, _ *model.Trigger) error {

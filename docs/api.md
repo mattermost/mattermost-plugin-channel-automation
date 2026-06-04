@@ -581,7 +581,9 @@ Omit `guardrails` or use an empty `channel_ids` list for no channel restriction.
 
 ### `message_posted`
 
-Fires when a new message is posted in the specified channel. By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
+Fires when a new message is posted in the specified channel, including bot and webhook posts. System posts are not dispatched. Posts authored by any bot the automation would post as via `send_message` (including the plugin default automation bot when `as_bot_id` is omitted) are skipped to prevent self-triggered loops; this applies to root posts and thread replies.
+
+By default, posts that are thread replies (i.e. have a `root_id`) are ignored; set `include_thread_replies: true` to fire on replies as well.
 
 When `include_thread_replies: true` is set and the firing post is itself a reply, the trigger handler additionally fetches the parent thread (root + replies, sorted oldest first, with each author's user pre-resolved) and exposes it at `{{.Trigger.Thread}}`. The `ai_prompt` action automatically renders this thread as a transcript inside its `<user_data>` block; other actions can consume it via templates. The thread fetch is best-effort: a failure logs a warning and the automation continues with `{{.Trigger.Thread}}` left nil. Root-post fires never trigger a thread fetch.
 
@@ -623,7 +625,7 @@ For `message_posted` triggers, file attachments from the triggering post are for
 
 By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
-- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
+- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator when the trigger has no associated user or when the trigger user is a bot (including webhook authors).
 - `"creator"` — always use the automation creator, even when a triggering user is available.
 
 The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.

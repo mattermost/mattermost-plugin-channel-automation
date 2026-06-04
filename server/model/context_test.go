@@ -272,6 +272,16 @@ func TestNewSafeUser_StripsSensitiveFields(t *testing.T) {
 	assert.Equal(t, "User", safe.LastName)
 }
 
+func TestNewSafeUser_PropagatesIsBot(t *testing.T) {
+	safe := NewSafeUser(&mmmodel.User{Id: "bot1", Username: "mybot", IsBot: true})
+	require.NotNil(t, safe)
+	assert.True(t, safe.IsBot)
+
+	safe = NewSafeUser(&mmmodel.User{Id: "u1", Username: "human"})
+	require.NotNil(t, safe)
+	assert.False(t, safe.IsBot)
+}
+
 func TestNewSafeUser_PreservesDisplayFields(t *testing.T) {
 	user := &mmmodel.User{
 		Id:        "u1",
