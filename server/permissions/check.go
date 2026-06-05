@@ -12,23 +12,26 @@ import (
 )
 
 // CheckAutomationPermissions verifies that userID has permission to manage the automation.
-// System admins are always allowed. For channel_created automations the user must be
-// a team admin on the trigger's team, and all literal channel references must
-// belong to that team. For other automations the user must have
-// PermissionManageChannelRoles on every literal channel referenced in the
-// automation (which covers channel admins and team admins via scheme resolution).
+// For channel_created automations the user must be a team admin on the trigger's team
+// (system admins bypass), and all literal channel references must belong to that team.
+// For user_joined_team automations the user must be a team admin on the referenced teams
+// (system admins bypass). For other automations every user, including system admins, must
+// be a member of each literal channel referenced in the automation; non-admins must also
+// hold PermissionManageChannelRoles on public/private channels (which covers channel
+// admins and team admins via scheme resolution).
 //
 // When no concrete channels can be verified (e.g. only templated or AI-only
 // actions on a non-channel_created trigger), we require system admin permission.
 func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automation) error {
-	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
-		return nil
-	}
+	isAdmin := api.HasPermissionTo(userID, mmmodel.PermissionManageSystem)
 
 	// channel_created and user_joined_team automations use team-level authorization.
 	// We call GetTeam first because HasPermissionToTeam is boolean-only and
 	// cannot distinguish infrastructure failures from genuine permission denials.
 	if f.Trigger.ChannelCreated != nil {
+		if isAdmin {
+			return nil
+		}
 		teamID := f.Trigger.ChannelCreated.TeamID
 		if _, appErr := api.GetTeam(teamID); appErr != nil {
 			if appErr.StatusCode >= http.StatusInternalServerError {
@@ -55,6 +58,9 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 	}
 
 	if f.Trigger.UserJoinedTeam != nil {
+		if isAdmin {
+			return nil
+		}
 		teamIDs := model.CollectTeamIDs(f)
 		if len(teamIDs) == 0 {
 			return fmt.Errorf("system admin permission is required for automations without explicit team references")
@@ -75,6 +81,9 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 
 	channelIDs := model.CollectChannelIDs(f)
 	if len(channelIDs) == 0 {
+		if isAdmin {
+			return nil
+		}
 		return fmt.Errorf("system admin permission is required for automations without explicit channel references")
 	}
 	for _, chID := range channelIDs {
@@ -88,24 +97,33 @@ func CheckAutomationPermissions(api plugin.API, userID string, f *model.Automati
 		if ch == nil {
 			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
-		// DM and GM channels have no channel-admin role: any participant may
-		// create an automation on a channel they belong to. The participant
-		// could already read or post to it manually, so this grants no new
-		// access.
-		if ch.Type == mmmodel.ChannelTypeDirect || ch.Type == mmmodel.ChannelTypeGroup {
-			if _, appErr := api.GetChannelMember(chID, userID); appErr != nil {
-				if appErr.StatusCode >= http.StatusInternalServerError {
-					return fmt.Errorf("failed to verify channel permissions: %w", appErr)
-				}
-				return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
+		// Membership is required for everyone (including sysadmins): a user
+		// should not manage automations in a channel they have not joined.
+		if _, appErr := api.GetChannelMember(chID, userID); appErr != nil {
+			if appErr.StatusCode >= http.StatusInternalServerError {
+				return fmt.Errorf("failed to verify channel permissions: %w", appErr)
 			}
+			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
+		}
+		// DM and GM channels have no channel-admin role: membership alone suffices.
+		if ch.Type == mmmodel.ChannelTypeDirect || ch.Type == mmmodel.ChannelTypeGroup {
 			continue
 		}
-		if !api.HasPermissionToChannel(userID, chID, mmmodel.PermissionManageChannelRoles) {
+		if !isAdmin && !api.HasPermissionToChannel(userID, chID, mmmodel.PermissionManageChannelRoles) {
 			return fmt.Errorf("you do not have permission to manage one or more channels referenced by this automation")
 		}
 	}
 	return nil
+}
+
+// CanViewAutomation reports whether userID may read an automation via GET or list.
+// System admins may view any automation regardless of channel membership. Other
+// users must satisfy CheckAutomationPermissions.
+func CanViewAutomation(api plugin.API, userID string, f *model.Automation) error {
+	if api.HasPermissionTo(userID, mmmodel.PermissionManageSystem) {
+		return nil
+	}
+	return CheckAutomationPermissions(api, userID, f)
 }
 
 // CanEditAutomation returns nil when userID is permitted to modify or delete the

@@ -83,7 +83,7 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 	if !isAdmin {
 		visible := make([]*model.Automation, 0, len(automations))
 		for _, a := range automations {
-			permErr := permissions.CheckAutomationPermissions(h.api, userID, a)
+			permErr := permissions.CanViewAutomation(h.api, userID, a)
 			if permErr == nil {
 				visible = append(visible, a)
 				continue
@@ -223,7 +223,7 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := permissions.CheckAutomationPermissions(h.api, userID, f); err != nil {
+	if err := permissions.CanViewAutomation(h.api, userID, f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

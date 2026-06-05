@@ -6,15 +6,17 @@ Base URL: `{siteUrl}/plugins/com.mattermost.channel-automation/api/v1`
 
 All endpoints require a valid Mattermost session — the `Mattermost-User-ID` header must be present. Returns `401 Unauthorized` if missing.
 
-All endpoints additionally check permissions. **System admins** (`manage_system`) are always allowed. For non-admins, authorization depends on the automation's trigger type:
+All endpoints additionally check permissions. **Create and update** operations always use the manage rules below. **Read** operations (GET single automation, list, and execution history) use the same rules for non-admins, but **system admins** may view any automation without channel membership.
 
-- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): for regular public/private channels, the user must have **`manage_channel_roles`** on every literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). This covers channel admins and team admins via Mattermost's scheme resolution. For **DM** and **GM** channels, any channel participant may create an automation (no `manage_channel_roles` required). Returns `403 Forbidden` with `"you do not have permission to manage one or more channels referenced by this automation"`.
-- **`channel_created` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
-- **`user_joined_team` trigger**: the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
+Authorization for manage operations depends on the automation's trigger type:
+
+- **Channel-scoped triggers** (`message_posted`, `schedule`, `membership_changed`): for **create and update**, every user, including **system admins**, must be a **member of** each literal channel referenced in the automation (the trigger channel and any literal `send_message.channel_id`). For regular public/private channels, non-admins must also have **`manage_channel_roles`** on those channels (which covers channel admins and team admins via Mattermost's scheme resolution). System admins skip the `manage_channel_roles` requirement on manage operations but still must be channel members. For **DM** and **GM** channels, channel membership alone is sufficient (no `manage_channel_roles` required). Returns `403 Forbidden` with `"you do not have permission to manage one or more channels referenced by this automation"`.
+- **`channel_created` trigger**: **system admins** are always allowed. Otherwise the user must be a **team admin** (`manage_team`) on the trigger's `team_id`, and every literal channel referenced in the automation must belong to that team. Returns `403 Forbidden` with either `"you must be a team admin on the team specified in the channel_created trigger"` or `"channel <id> does not belong to the team specified in the channel_created trigger"`.
+- **`user_joined_team` trigger**: **system admins** are always allowed. Otherwise the user must be a **team admin** (`manage_team`) on the trigger's `team_id`. Returns `403 Forbidden` with `"you must be a team admin on all teams referenced by this automation"`.
 
 In practice, validation (`ValidateSendMessageChannel`) already requires `send_message.channel_id` to be either the literal trigger channel ID or the template `{{.Trigger.Channel.Id}}`, so for channel-scoped triggers the set of literal channels checked collapses to the trigger channel, and for `channel_created` any literal `send_message.channel_id` must belong to `team_id`.
 
-The list endpoint filters results to only automations the user has permission to view under the rules above.
+The list endpoint filters results to only automations the user has permission to view. System admins see all automations; other users see only those they could manage under the rules above.
 
 ### MCP tool hook endpoints
 
