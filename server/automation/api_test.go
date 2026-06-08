@@ -905,16 +905,15 @@ func TestAPI_CreateAutomation_SystemAdminBypass(t *testing.T) {
 	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
+func TestAPI_UpdateAutomation_SystemAdminMemberAllowed(t *testing.T) {
 	api := &plugintest.API{}
 	expectLogCalls(api)
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
-	// The automation's creator is also a sysadmin so the creator-anchored config
-	// validity check skips channel admin lookups too.
 	api.On("HasPermissionTo", "creator1", mmmodel.PermissionManageSystem).Return(true)
 	api.On("GetChannel", "ch-new").Return(
 		&mmmodel.Channel{Id: "ch-new", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("GetChannelMember", "ch-new", "admin1").Return(&mmmodel.ChannelMember{}, nil)
 	api.On("GetChannelMember", "ch-new", "creator1").Return(&mmmodel.ChannelMember{}, nil)
 
 	router, store := setupAPIWithCustomMock(t, api)
@@ -940,6 +939,44 @@ func TestAPI_UpdateAutomation_SystemAdminBypass(t *testing.T) {
 	router.ServeHTTP(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
 
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestAPI_UpdateAutomation_SystemAdminNotMemberDenied(t *testing.T) {
+	api := &plugintest.API{}
+	expectLogCalls(api)
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+	api.On("GetChannel", "ch-new").Return(
+		&mmmodel.Channel{Id: "ch-new", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch-new", "admin1").Return(nil, &mmmodel.AppError{
+		Message:    "channel member not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	router, store := setupAPIWithCustomMock(t, api)
+
+	require.NoError(t, store.Save(&model.Automation{
+		ID:        "f1",
+		Name:      "Original",
+		CreatedBy: "creator1",
+		Trigger:   model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}))
+
+	body := `{
+		"name": "Updated by admin",
+		"enabled": true,
+		"trigger": {"message_posted": {"channel_id": "ch-new"}},
+		"actions": [{"id": "send-message", "send_message": {"channel_id": "ch-new", "body": "hello"}}]
+	}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPut, "/automations/f1", bytes.NewBufferString(body))
+	r.Header.Set("Mattermost-User-ID", "admin1")
+
+	router.ServeHTTP(w, r)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "permission to manage")
 	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
 }
 
