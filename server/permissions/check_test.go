@@ -8,12 +8,13 @@ import (
 	mmmodel "github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin/plugintest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/mattermost/mattermost-plugin-channel-automation/server/model"
 )
 
-func TestCheckAutomationPermissions_SystemAdminBypass(t *testing.T) {
+func TestCheckAutomationPermissions_SystemAdminBypassesTeamScopedTriggers(t *testing.T) {
 	api := &plugintest.API{}
 	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
 
@@ -23,6 +24,47 @@ func TestCheckAutomationPermissions_SystemAdminBypass(t *testing.T) {
 
 	err := CheckAutomationPermissions(api, "admin1", f)
 	require.NoError(t, err)
+}
+
+func TestCheckAutomationPermissions_SystemAdminMemberAllowed(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch1", "admin1").Return(&mmmodel.ChannelMember{}, nil)
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{
+			{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}},
+		},
+	}
+
+	err := CheckAutomationPermissions(api, "admin1", f)
+	require.NoError(t, err)
+	api.AssertExpectations(t)
+}
+
+func TestCheckAutomationPermissions_SysadminNotMemberDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch1", "admin1").Return(nil, &mmmodel.AppError{
+		Message:    "channel member not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := CheckAutomationPermissions(api, "admin1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "permission to manage")
+	api.AssertExpectations(t)
 }
 
 func TestCheckAutomationPermissions_ChannelCreated_TeamAdminAllowed(t *testing.T) {
@@ -441,6 +483,7 @@ func TestCheckAutomationPermissions_RegularChannelNonAdminDenied(t *testing.T) {
 	api.On("GetChannel", "ch1").Return(
 		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("GetChannelMember", "ch1", "user1").Return(&mmmodel.ChannelMember{}, nil)
 	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	f := &model.Automation{
@@ -458,6 +501,7 @@ func TestCheckAutomationPermissions_RegularChannelTeamAdminAllowed(t *testing.T)
 	api.On("GetChannel", "ch1").Return(
 		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("GetChannelMember", "ch1", "user1").Return(&mmmodel.ChannelMember{}, nil)
 	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 
 	f := &model.Automation{
@@ -467,6 +511,41 @@ func TestCheckAutomationPermissions_RegularChannelTeamAdminAllowed(t *testing.T)
 		},
 	}
 	require.NoError(t, CheckAutomationPermissions(api, "user1", f))
+	api.AssertExpectations(t)
+}
+
+func TestCanViewAutomation_SystemAdminBypassesMembership(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "admin1", mmmodel.PermissionManageSystem).Return(true)
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := CanViewAutomation(api, "admin1", f)
+	require.NoError(t, err)
+	api.AssertNotCalled(t, "GetChannel", mock.Anything)
+	api.AssertNotCalled(t, "GetChannelMember", mock.Anything, mock.Anything)
+}
+
+func TestCanViewAutomation_NonAdminUsesManageCheck(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch1", "user1").Return(nil, &mmmodel.AppError{
+		Message:    "channel member not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := CanViewAutomation(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "permission to manage")
 	api.AssertExpectations(t)
 }
 
@@ -526,6 +605,7 @@ func TestCheckAutomationPermissions_NonChannelCreated_ChannelAdminRequired(t *te
 	api.On("GetChannel", "ch1").Return(
 		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("GetChannelMember", "ch1", "user1").Return(&mmmodel.ChannelMember{}, nil)
 	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(true)
 
 	f := &model.Automation{
@@ -537,4 +617,48 @@ func TestCheckAutomationPermissions_NonChannelCreated_ChannelAdminRequired(t *te
 
 	err := CheckAutomationPermissions(api, "user1", f)
 	require.NoError(t, err)
+}
+
+func TestCheckAutomationPermissions_RegularChannelHasRoleButNotMemberDenied(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch1", "user1").Return(nil, &mmmodel.AppError{
+		Message:    "channel member not found",
+		StatusCode: http.StatusNotFound,
+	})
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := CheckAutomationPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "permission to manage")
+	api.AssertNotCalled(t, "HasPermissionToChannel", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestCheckAutomationPermissions_GetChannelMemberServerError(t *testing.T) {
+	api := &plugintest.API{}
+	api.On("HasPermissionTo", "user1", mmmodel.PermissionManageSystem).Return(false)
+	api.On("GetChannel", "ch1").Return(
+		&mmmodel.Channel{Id: "ch1", TeamId: "team1", Type: mmmodel.ChannelTypeOpen}, nil,
+	)
+	api.On("GetChannelMember", "ch1", "user1").Return(nil, &mmmodel.AppError{
+		Message:    "database error",
+		StatusCode: http.StatusInternalServerError,
+	})
+
+	f := &model.Automation{
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+	}
+
+	err := CheckAutomationPermissions(api, "user1", f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to verify channel permissions")
+
+	var appErr *mmmodel.AppError
+	assert.True(t, errors.As(err, &appErr), "error should wrap AppError for 5xx classification")
 }

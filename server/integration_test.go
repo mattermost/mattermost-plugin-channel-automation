@@ -435,4 +435,24 @@ func TestIntegration(t *testing.T) {
 		_ = resp.Body.Close()
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
+
+	t.Run("Permissions_TeamAdminNotMemberDenied", func(t *testing.T) {
+		user := th.CreateUser()
+		client := mmmodel.NewAPIv4Client(th.ServerURL)
+		_, _, err := client.Login(context.Background(), user.Username, "Password1!")
+		require.NoError(t, err)
+		token := client.AuthToken
+
+		// Team admin on the test team, but not a member of the test channel.
+		_, err = th.AdminClient.UpdateTeamMemberSchemeRoles(context.Background(), th.Team.Id, user.Id, &mmmodel.SchemeRoles{
+			SchemeUser:  true,
+			SchemeAdmin: true,
+		})
+		require.NoError(t, err)
+
+		body := validAutomationBody(th.Channel.Id)
+		resp := doRequest(t, http.MethodPost, pluginURL(th.ServerURL, "/automations"), token, body)
+		_ = resp.Body.Close()
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
 }

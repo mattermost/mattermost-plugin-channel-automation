@@ -76,6 +76,7 @@ func setupAPIHandler(t *testing.T) (*mux.Router, *Store, *mockAutomationStore, *
 	api.On("GetChannel", mock.Anything).Return(
 		&mmmodel.Channel{Type: mmmodel.ChannelTypeOpen}, nil,
 	).Maybe()
+	api.On("GetChannelMember", mock.Anything, mock.Anything).Return(&mmmodel.ChannelMember{}, nil).Maybe()
 	api.On("HasPermissionToChannel", mock.Anything, mock.Anything, mmmodel.PermissionManageChannelRoles).Return(true).Maybe()
 
 	handler := NewAPIHandler(execStore, automationStore, api)
@@ -188,6 +189,7 @@ func TestExecutionAPI_ListByAutomation_RequiresAutomationPermission(t *testing.T
 	api.On("GetChannel", "ch1").Return(
 		&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypeOpen}, nil,
 	)
+	api.On("GetChannelMember", "ch1", "user1").Return(&mmmodel.ChannelMember{}, nil)
 	api.On("HasPermissionToChannel", "user1", "ch1", mmmodel.PermissionManageChannelRoles).Return(false)
 
 	router, _, automationStore := setupAPIHandlerWithCustomMock(t, api)

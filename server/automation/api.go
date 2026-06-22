@@ -83,7 +83,7 @@ func (h *APIHandler) handleListAutomations(w http.ResponseWriter, r *http.Reques
 	if !isAdmin {
 		visible := make([]*model.Automation, 0, len(automations))
 		for _, a := range automations {
-			permErr := permissions.CheckAutomationPermissions(h.api, userID, a)
+			permErr := permissions.CanViewAutomation(h.api, userID, a)
 			if permErr == nil {
 				visible = append(visible, a)
 				continue
@@ -223,7 +223,7 @@ func (h *APIHandler) handleGetAutomation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := permissions.CheckAutomationPermissions(h.api, userID, f); err != nil {
+	if err := permissions.CanViewAutomation(h.api, userID, f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
@@ -304,12 +304,22 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// New automation configuration must remain admissible for the creator (covers
-	// the sysadmin-edit case: catches references the creator cannot manage).
-	if err := permissions.CheckAutomationPermissions(h.api, existing.CreatedBy, &f); err != nil {
-		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
+	// The editor must be allowed to manage the new configuration (membership
+	// and role requirements apply to the acting user).
+	if err := permissions.CheckAutomationPermissions(h.api, userID, &f); err != nil {
+		msg, code, detail := permissions.HandlePermissionError(h.api, err, userID, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
+	}
+
+	// When a sysadmin edits on behalf of the creator, the configuration must
+	// also remain admissible for the creator at runtime.
+	if userID != existing.CreatedBy {
+		if err := permissions.CheckAutomationPermissions(h.api, existing.CreatedBy, &f); err != nil {
+			msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
+			httputil.WriteErrorJSON(w, code, msg, detail)
+			return
+		}
 	}
 
 	if err := permissions.CheckGuardrailChannelPermissions(h.api, existing.CreatedBy, &f); err != nil {
