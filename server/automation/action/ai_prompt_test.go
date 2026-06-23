@@ -419,11 +419,21 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 // map keeps the stored (namespaced) form since the bridge accepts either.
 func TestAIPromptAction_Execute_ToolHooksGuardrailsNamespaced(t *testing.T) {
 	api := newTestAPI()
+	// external__search_posts shares the bare name "search_posts" with the
+	// Mattermost catalog but originates from an external MCP server. It must not
+	// receive a guardrail hook — eligibility is gated on the bridge-resolved
+	// ServerOrigin, not on stripping the namespace prefix.
+	externalSearch := bridgeclient.BridgeToolInfo{
+		Name:         "external__search_posts",
+		BareName:     "search_posts",
+		ServerOrigin: "https://external.example.com",
+	}
 	bc := &mockBridgeClient{
 		agentResponse: "ok",
 		agentTools: []bridgeclient.BridgeToolInfo{
 			mmNamespacedTool("search_posts"),
 			mmNamespacedTool("add_user_to_channel"),
+			externalSearch,
 		},
 	}
 	a := NewAIPromptAction(api, bc, "")
@@ -434,7 +444,7 @@ func TestAIPromptAction_Execute_ToolHooksGuardrailsNamespaced(t *testing.T) {
 			Prompt:       "q",
 			ProviderType: "agent",
 			ProviderID:   "ai-bot",
-			AllowedTools: []string{"mattermost__search_posts", "mattermost__add_user_to_channel"},
+			AllowedTools: []string{"mattermost__search_posts", "mattermost__add_user_to_channel", "external__search_posts"},
 			Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{
 				ChannelID: mmmodel.NewId(),
 				TeamID:    mmmodel.NewId(),
@@ -457,6 +467,9 @@ func TestAIPromptAction_Execute_ToolHooksGuardrailsNamespaced(t *testing.T) {
 
 	auc := bc.lastReq.ToolHooks["mattermost__add_user_to_channel"]
 	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", auc.BeforeCallback)
+
+	_, hasExternal := bc.lastReq.ToolHooks["external__search_posts"]
+	assert.False(t, hasExternal, "external tool with a colliding bare name must not get a guardrail hook")
 }
 
 func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T) {

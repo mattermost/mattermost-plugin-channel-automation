@@ -41,7 +41,7 @@ func mmEmbeddedTool(name string) bridgeclient.BridgeToolInfo {
 // BareName.
 func mmNamespacedEmbeddedTool(bareName string) bridgeclient.BridgeToolInfo {
 	return bridgeclient.BridgeToolInfo{
-		Name:         "mattermost" + mcpToolNameSeparator + bareName,
+		Name:         "mattermost__" + bareName,
 		BareName:     bareName,
 		ServerOrigin: EmbeddedMattermostMCPOrigin,
 	}
