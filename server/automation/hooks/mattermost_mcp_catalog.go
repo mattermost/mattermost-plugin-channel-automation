@@ -2,12 +2,29 @@ package hooks
 
 import (
 	"maps"
+	"strings"
 )
 
 // EmbeddedMattermostMCPOrigin identifies tools served by the Mattermost
 // agents plugin's embedded MCP server. Mirrors mcp.EmbeddedClientKey from
 // github.com/mattermost/mattermost-plugin-agents.
 const EmbeddedMattermostMCPOrigin = "embedded://mattermost"
+
+// mcpToolNameSeparator joins a server slug to a tool's bare name in a
+// namespaced runtime tool name (e.g. "mattermost__search_posts"). Mirrors
+// llm.MCPToolNameSeparator from github.com/mattermost/mattermost-plugin-agents.
+const mcpToolNameSeparator = "__"
+
+// BareToolName strips the server namespace prefix from a runtime tool name,
+// returning the bare tool name (e.g. "mattermost__search_posts" ->
+// "search_posts"). Names without a separator are returned unchanged, so bare
+// names from older agents releases pass through untouched.
+func BareToolName(name string) string {
+	if _, bare, ok := strings.Cut(name, mcpToolNameSeparator); ok {
+		return bare
+	}
+	return name
+}
 
 // BeforeFunc validates tool arguments before the resolver runs.
 type BeforeFunc func(ctx HookCtx, args map[string]any) error

@@ -132,7 +132,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
 		for _, t := range cfg.AllowedTools {
-			entry, ok := hooks.LookupMattermostMCPTool(t)
+			// Tools may be stored namespaced (server__tool) or bare; the catalog
+			// is keyed by bare names. Keep the stored form as the hook key since
+			// the bridge accepts either.
+			entry, ok := hooks.LookupMattermostMCPTool(hooks.BareToolName(t))
 			if !ok || entry.Before == nil {
 				continue
 			}

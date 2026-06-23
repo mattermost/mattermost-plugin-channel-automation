@@ -79,6 +79,13 @@ Channel guardrails (guardrails.channel_ids on an ai_prompt) constrain a fixed se
 Mattermost MCP tools. The exact tool names below are matched against tool discovery output;
 any other tool name (including external MCP tools) passes through unchanged when guardrails are set.
 
+TOOL NAME FORMS: Tool discovery may return a Mattermost tool either by its bare name
+(e.g. "search_posts") or namespaced with its MCP server slug (e.g. "mattermost__search_posts").
+The names listed in this section are the bare names; a discovered tool is the same constrained
+tool whether it appears bare or as "mattermost__<name>". Either form is accepted in allowed_tools
+and guardrails apply to both, so when classifying a discovered tool, compare it against the bare
+names below after stripping any "mattermost__" prefix.
+
 Channel-scoped — restricted to guardrails.channel_ids. Tools differ in how they're
 constrained:
 
@@ -128,7 +135,7 @@ this automation."
 
 ACTION SELECTION: For each step in the automation, choose the right action type:
 - send_message: for posting text to channels.
-- ai_prompt with allowed_tools: for anything else — any step that needs to read data, modify state, or interact with Mattermost beyond posting text. Discover tools via the AI bridge GET .../agents/{id}/tools (or list_tools); each allowed_tools entry is the tool name string from discovery (e.g. "search_posts").
+- ai_prompt with allowed_tools: for anything else — any step that needs to read data, modify state, or interact with Mattermost beyond posting text. Discover tools via the AI bridge GET .../agents/{id}/tools (or list_tools); each allowed_tools entry is the tool name string from discovery exactly as returned (e.g. "search_posts", which discovery may also return namespaced as "mattermost__search_posts" — either form is accepted).
 If a step cannot be accomplished with send_message, it MUST be an ai_prompt action with the appropriate tools.
 
 TOOL SUFFICIENCY CHECK (THIS IS VERY IMPORTANT): Before presenting the summary, think through the automation's task

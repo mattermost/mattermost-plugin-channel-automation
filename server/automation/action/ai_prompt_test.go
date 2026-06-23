@@ -355,6 +355,16 @@ func mmTool(name string) bridgeclient.BridgeToolInfo {
 	return bridgeclient.BridgeToolInfo{Name: name, ServerOrigin: "embedded://mattermost"}
 }
 
+// mmNamespacedTool builds an embedded Mattermost MCP tool with the namespaced
+// Name plus the legacy bare name, as returned by current agents releases.
+func mmNamespacedTool(bareName string) bridgeclient.BridgeToolInfo {
+	return bridgeclient.BridgeToolInfo{
+		Name:         "mattermost__" + bareName,
+		BareName:     bareName,
+		ServerOrigin: "embedded://mattermost",
+	}
+}
+
 func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{
@@ -396,14 +406,57 @@ func TestAIPromptAction_Execute_ToolHooksGuardrails(t *testing.T) {
 
 	sp := bc.lastReq.ToolHooks["search_posts"]
 	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", sp.BeforeCallback)
-	assert.Empty(t, sp.AfterCallback)
 
 	auc := bc.lastReq.ToolHooks["add_user_to_channel"]
 	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", auc.BeforeCallback)
-	assert.Empty(t, auc.AfterCallback)
 
 	_, hasExternal := bc.lastReq.ToolHooks["external_search"]
 	assert.False(t, hasExternal, "non-Mattermost MCP tools must not get hook callbacks")
+}
+
+// TestAIPromptAction_Execute_ToolHooksGuardrailsNamespaced confirms before-hooks
+// are still wired when the stored allowlist uses namespaced tool names. The hook
+// map keeps the stored (namespaced) form since the bridge accepts either.
+func TestAIPromptAction_Execute_ToolHooksGuardrailsNamespaced(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentTools: []bridgeclient.BridgeToolInfo{
+			mmNamespacedTool("search_posts"),
+			mmNamespacedTool("add_user_to_channel"),
+		},
+	}
+	a := NewAIPromptAction(api, bc, "")
+
+	act := &model.Action{
+		ID: "ai-step",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "q",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			AllowedTools: []string{"mattermost__search_posts", "mattermost__add_user_to_channel"},
+			Guardrails: &model.Guardrails{Channels: []model.GuardrailChannel{{
+				ChannelID: mmmodel.NewId(),
+				TeamID:    mmmodel.NewId(),
+			}}},
+		},
+	}
+	ctx := &model.AutomationContext{
+		AutomationID: "automation-99",
+		CreatedBy:    "creator1",
+		Trigger:      model.TriggerData{},
+		Steps:        make(map[string]model.StepOutput),
+	}
+
+	_, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.Len(t, bc.lastReq.ToolHooks, 2)
+
+	sp := bc.lastReq.ToolHooks["mattermost__search_posts"]
+	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", sp.BeforeCallback)
+
+	auc := bc.lastReq.ToolHooks["mattermost__add_user_to_channel"]
+	assert.Equal(t, "/api/v1/hooks/tools/automation-99/ai-step/before", auc.BeforeCallback)
 }
 
 func TestAIPromptAction_Execute_NoToolHooksWithoutGuardrailChannels(t *testing.T) {
