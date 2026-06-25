@@ -132,7 +132,12 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
 		for _, t := range cfg.AllowedTools {
-			entry, ok := hooks.LookupMattermostMCPTool(t)
+			// The catalog is keyed by bare Mattermost tool names. Tools may be
+			// stored bare (legacy) or namespaced as "mattermost__<tool>"; strip
+			// only that embedded-server prefix so external tools (e.g.
+			// "external__search_posts") aren't misread as Mattermost tools. Keep
+			// the stored form as the hook key since the bridge accepts either.
+			entry, ok := hooks.LookupMattermostMCPTool(strings.TrimPrefix(t, "mattermost__"))
 			if !ok || entry.Before == nil {
 				continue
 			}

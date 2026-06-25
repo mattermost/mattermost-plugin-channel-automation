@@ -36,6 +36,17 @@ func mmEmbeddedTool(name string) bridgeclient.BridgeToolInfo {
 	return bridgeclient.BridgeToolInfo{Name: name, ServerOrigin: EmbeddedMattermostMCPOrigin}
 }
 
+// mmNamespacedEmbeddedTool builds an embedded Mattermost MCP tool as returned
+// by current agents releases: a namespaced Name plus the legacy bare name in
+// BareName.
+func mmNamespacedEmbeddedTool(bareName string) bridgeclient.BridgeToolInfo {
+	return bridgeclient.BridgeToolInfo{
+		Name:         "mattermost__" + bareName,
+		BareName:     bareName,
+		ServerOrigin: EmbeddedMattermostMCPOrigin,
+	}
+}
+
 func automationWithTools(tools []string, guardrails *model.Guardrails) *model.Automation {
 	return &model.Automation{
 		Actions: []model.Action{
@@ -76,6 +87,50 @@ func TestValidateAllowedTools_GetUserChannels_RejectedWithGuardrails(t *testing.
 	err := ValidateAllowedTools(f, "user1", bridge)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get_user_channels is not permitted when channel guardrails are configured")
+}
+
+// TestValidateAllowedTools_NamespacedName_StoredNamespaced accepts a stored
+// allowlist entry that matches the namespaced BridgeToolInfo.Name.
+func TestValidateAllowedTools_NamespacedName_StoredNamespaced(t *testing.T) {
+	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmNamespacedEmbeddedTool("search_posts")}}
+	f := automationWithTools([]string{"mattermost__search_posts"}, nil)
+
+	require.NoError(t, ValidateAllowedTools(f, "user1", bridge))
+}
+
+// TestValidateAllowedTools_NamespacedName_StoredBare accepts a stored allowlist
+// entry that matches the legacy BridgeToolInfo.BareName even when the bridge
+// reports the namespaced Name.
+func TestValidateAllowedTools_NamespacedName_StoredBare(t *testing.T) {
+	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmNamespacedEmbeddedTool("search_posts")}}
+	f := automationWithTools([]string{"search_posts"}, nil)
+
+	require.NoError(t, ValidateAllowedTools(f, "user1", bridge))
+}
+
+// TestValidateAllowedTools_NamespacedName_GuardrailRejection enforces the
+// get_user_channels guardrail rule when the stored entry is namespaced.
+func TestValidateAllowedTools_NamespacedName_GuardrailRejection(t *testing.T) {
+	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmNamespacedEmbeddedTool("get_user_channels")}}
+	guardrails := &model.Guardrails{Channels: []model.GuardrailChannel{
+		{ChannelID: mmmodel.NewId(), TeamID: mmmodel.NewId()},
+	}}
+	f := automationWithTools([]string{"mattermost__get_user_channels"}, guardrails)
+
+	err := ValidateAllowedTools(f, "user1", bridge)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "get_user_channels is not permitted when channel guardrails are configured")
+}
+
+// TestValidateAllowedTools_NamespacedName_NotInCatalog rejects a namespaced
+// embedded tool whose bare name is not in the supported catalog.
+func TestValidateAllowedTools_NamespacedName_NotInCatalog(t *testing.T) {
+	bridge := &stubLister{tools: []bridgeclient.BridgeToolInfo{mmNamespacedEmbeddedTool("unknown_tool")}}
+	f := automationWithTools([]string{"mattermost__unknown_tool"}, nil)
+
+	err := ValidateAllowedTools(f, "user1", bridge)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not in the supported catalog")
 }
 
 // TestValidateAllowedTools_AgentNoTools_VerifiesAccess covers the gap fixed

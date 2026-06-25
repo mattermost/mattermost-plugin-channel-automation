@@ -69,7 +69,16 @@ func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsL
 			}
 			available = make(map[string]bridgeclient.BridgeToolInfo, len(tools))
 			for _, t := range tools {
+				// Index by both the namespaced Name and the legacy BareName so a
+				// stored allowlist entry matching either form resolves. BareName
+				// is absent on older agents releases, which already return bare
+				// names in Name. Bare names can collide across MCP servers;
+				// last-write-wins is acceptable since the bridge resolves an
+				// ambiguous bare allowlist entry at completion time.
 				available[t.Name] = t
+				if t.BareName != "" && t.BareName != t.Name {
+					available[t.BareName] = t
+				}
 			}
 			cache[agentID] = available
 		}
@@ -87,14 +96,21 @@ func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsL
 			if info.ServerOrigin != EmbeddedMattermostMCPOrigin {
 				continue
 			}
-			known, allowed := IsAllowedMattermostMCPTool(name)
+			// The catalog is keyed by bare tool names, so compare against the
+			// resolved tool's bare name. Old agents releases omit BareName but
+			// already return bare names in Name, so fall back to it.
+			bare := info.BareName
+			if bare == "" {
+				bare = info.Name
+			}
+			known, allowed := IsAllowedMattermostMCPTool(bare)
 			if !known {
 				return fmt.Errorf("action %d: Mattermost MCP tool %q is not in the supported catalog", i, name)
 			}
 			if !allowed {
 				return fmt.Errorf("action %d: Mattermost MCP tool %q is not permitted in automations", i, name)
 			}
-			if hasGuardrails && name == "get_user_channels" {
+			if hasGuardrails && bare == "get_user_channels" {
 				return fmt.Errorf("action %d: get_user_channels is not permitted when channel guardrails are configured", i)
 			}
 		}
