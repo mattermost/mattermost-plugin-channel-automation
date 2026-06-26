@@ -490,6 +490,30 @@ func TestMessageHasBeenPosted_ProcessesNormalPost(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
+func TestMessageHasBeenPosted_ProcessesAIGeneratedPost(t *testing.T) {
+	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeMessagePosted)
+
+	f := &model.Automation{
+		ID:      "f1",
+		Name:    "Test Automation",
+		Enabled: true,
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", SendMessage: &model.SendMessageActionConfig{ChannelID: "ch1", Body: "hello"}}},
+	}
+	require.NoError(t, p.automationStore.Save(f))
+
+	// Posts that come through the MCP server carry ai_generated_by; they
+	// should still trigger an auto reply.
+	post := &mmmodel.Post{Id: "post1", UserId: "user1", ChannelId: "ch1", Message: "hello"}
+	post.AddProp("ai_generated_by", "some-bot-id")
+	p.MessageHasBeenPosted(nil, post)
+
+	require.Eventually(t, func() bool {
+		item, _ := wqStore.ClaimNext()
+		return item != nil
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
 func TestChannelHasBeenCreated_ProcessesPublicChannel(t *testing.T) {
 	p, wqStore := setupPluginForHookTest(t, model.TriggerTypeChannelCreated)
 
