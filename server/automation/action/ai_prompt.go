@@ -137,7 +137,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 			// only that embedded-server prefix so external tools (e.g.
 			// "external__search_posts") aren't misread as Mattermost tools. Keep
 			// the stored form as the hook key since the bridge accepts either.
-			entry, ok := hooks.LookupMattermostMCPTool(strings.TrimPrefix(t, "mattermost__"))
+			entry, ok := hooks.LookupMattermostMCPTool(strings.TrimPrefix(t, hooks.MattermostMCPToolPrefix))
 			if !ok || entry.Before == nil {
 				continue
 			}

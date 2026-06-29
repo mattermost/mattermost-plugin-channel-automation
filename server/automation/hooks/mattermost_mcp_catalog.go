@@ -9,6 +9,10 @@ import (
 // github.com/mattermost/mattermost-plugin-agents.
 const EmbeddedMattermostMCPOrigin = "embedded://mattermost"
 
+// MattermostMCPToolPrefix is the namespace prefix the agents bridge applies to
+// embedded Mattermost MCP tools (e.g. "mattermost__read_channel").
+const MattermostMCPToolPrefix = "mattermost__"
+
 // BeforeFunc validates tool arguments before the resolver runs.
 type BeforeFunc func(ctx HookCtx, args map[string]any) error
 
