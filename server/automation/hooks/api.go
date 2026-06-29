@@ -170,8 +170,8 @@ func (h *APIHandler) callerCanTriggerAutomation(callerID string, f *model.Automa
 	return handler.CallerCanTrigger(h.api, &f.Trigger, callerID)
 }
 
-// loadGuardrailAutomation loads the automation, guardrails, and ai_prompt request_as for the
-// given action when channel guardrails are configured.
+// loadGuardrailAutomation returns the automation and its ai_prompt config for
+// the given action when channel guardrails are configured.
 func (h *APIHandler) loadGuardrailAutomation(automationID, actionID string) (*model.Automation, *model.AIPromptActionConfig, bool) {
 	f, err := h.store.Get(automationID)
 	if err != nil || f == nil {
@@ -286,7 +286,12 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !actionAllowsTool(ai.AllowedTools, req.ToolName) {
+	// The embedded MCP server invokes hooks with bare names, but normalize once
+	// up front so every check below sees the same bare, catalog-keyed name even
+	// if a namespaced name is ever sent. Error messages keep the original form.
+	bareToolName := strings.TrimPrefix(req.ToolName, MattermostMCPToolPrefix)
+
+	if !actionAllowsTool(ai.AllowedTools, bareToolName) {
 		h.api.LogWarn("hooks: tool not in action allowed_tools",
 			"automation_id", f.ID,
 			"action_id", actionID,
@@ -298,7 +303,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, catOK := LookupMattermostMCPTool(req.ToolName)
+	entry, catOK := LookupMattermostMCPTool(bareToolName)
 	if !catOK {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{
 			Error: fmt.Sprintf("tool %q is not a known Mattermost MCP server tool; channel guardrails reject unrecognized tools",

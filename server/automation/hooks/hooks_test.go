@@ -543,6 +543,23 @@ func TestHooks_Before_DisallowedCatalogToolRejected(t *testing.T) {
 	assert.Contains(t, resp.Error, "not permitted in automations")
 }
 
+// A namespaced tool_name resolves against the bare-keyed catalog and runs its hook.
+func TestHooks_Before_NamespacedToolNameResolvesCatalog(t *testing.T) {
+	f := guardrailAutomation()
+	f.Actions[0].AIPrompt.AllowedTools = []string{"mattermost__read_channel"}
+	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
+	api := &plugintest.API{}
+	r := testRouter(t, store, api)
+
+	code, resp := postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "mattermost__read_channel",
+		Args:     argsJSON(t, map[string]any{"channel_id": chAllow}),
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Empty(t, resp.Error)
+}
+
 // A namespaced allowed_tools entry authorizes the bare tool name the bridge sends.
 func TestHooks_Before_NamespacedAllowedToolMatchesBareHookName(t *testing.T) {
 	f := guardrailAutomation()
