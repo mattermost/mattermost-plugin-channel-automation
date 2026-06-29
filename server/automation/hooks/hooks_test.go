@@ -543,8 +543,10 @@ func TestHooks_Before_DisallowedCatalogToolRejected(t *testing.T) {
 	assert.Contains(t, resp.Error, "not permitted in automations")
 }
 
-// A namespaced tool_name resolves against the bare-keyed catalog and runs its hook.
-func TestHooks_Before_NamespacedToolNameResolvesCatalog(t *testing.T) {
+// A namespaced tool_name resolves against the bare-keyed catalog AND runs its
+// before-hook: the allowed channel passes while a non-guardrail channel is
+// rejected by read_channel's hook (which only happens if the hook executes).
+func TestHooks_Before_NamespacedToolNameResolvesCatalogAndRunsHook(t *testing.T) {
 	f := guardrailAutomation()
 	f.Actions[0].AIPrompt.AllowedTools = []string{"mattermost__read_channel"}
 	store := &mockAutomationStore{automations: map[string]*model.Automation{"auto1": f}}
@@ -558,6 +560,17 @@ func TestHooks_Before_NamespacedToolNameResolvesCatalog(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, code)
 	assert.Empty(t, resp.Error)
+
+	// A channel outside the guardrails must be rejected by read_channel's
+	// before-hook; this fails if the namespaced name skipped entry.Before.
+	code, resp = postBefore(t, r, "auto1", "ai1", mcptool.BeforeHookRequest{
+		ToolName: "mattermost__read_channel",
+		Args:     argsJSON(t, map[string]any{"channel_id": chDeny}),
+		UserID:   "user1",
+	})
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, resp.Error, "not permitted")
+	assert.Contains(t, resp.Error, chDeny)
 }
 
 // A namespaced allowed_tools entry authorizes the bare tool name the bridge sends.

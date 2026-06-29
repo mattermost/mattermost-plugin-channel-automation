@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"maps"
+	"strings"
 )
 
 // EmbeddedMattermostMCPOrigin identifies tools served by the Mattermost
@@ -97,18 +98,30 @@ var mattermostMCPServerTools = map[string]MattermostMCPTool{
 	"delete_automation":           {Allowed: false},
 }
 
-// LookupMattermostMCPTool returns the catalog entry for the given tool name.
-// The second return value is false when the tool is not in the catalog.
+// BareMattermostMCPToolName strips the embedded Mattermost MCP namespace prefix
+// (mattermost__) if present, returning the bare name the catalog is keyed by.
+// This is the single place that knows how to normalize a tool name to its
+// catalog key; non-Mattermost names are returned unchanged. Callers should pass
+// tool names through the catalog accessors below rather than stripping inline.
+func BareMattermostMCPToolName(name string) string {
+	return strings.TrimPrefix(name, MattermostMCPToolPrefix)
+}
+
+// LookupMattermostMCPTool returns the catalog entry for the given tool name,
+// accepting either the bare ("read_channel") or namespaced
+// ("mattermost__read_channel") form. The second return value is false when the
+// tool is not in the catalog.
 func LookupMattermostMCPTool(name string) (MattermostMCPTool, bool) {
-	entry, ok := mattermostMCPServerTools[name]
+	entry, ok := mattermostMCPServerTools[BareMattermostMCPToolName(name)]
 	return entry, ok
 }
 
-// IsAllowedMattermostMCPTool reports whether the given tool name is in the
-// catalog (known) and whether automations may include it in allowed_tools
-// (allowed). Tools known with Allowed=false are explicitly rejected.
+// IsAllowedMattermostMCPTool reports whether the given tool name (bare or
+// namespaced) is in the catalog (known) and whether automations may include it
+// in allowed_tools (allowed). Tools known with Allowed=false are explicitly
+// rejected.
 func IsAllowedMattermostMCPTool(name string) (known, allowed bool) {
-	entry, ok := mattermostMCPServerTools[name]
+	entry, ok := mattermostMCPServerTools[BareMattermostMCPToolName(name)]
 	if !ok {
 		return false, false
 	}

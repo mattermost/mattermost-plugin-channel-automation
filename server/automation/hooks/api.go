@@ -191,12 +191,12 @@ func (h *APIHandler) loadGuardrailAutomation(automationID, actionID string) (*mo
 }
 
 // actionAllowsTool reports whether toolName is in allowed_tools, comparing both
-// sides with the mattermost__ prefix stripped so bare and namespaced forms match
-// while external tools sharing a bare name do not.
+// sides by their bare catalog name so bare and namespaced forms match while
+// external tools sharing a bare name do not.
 func actionAllowsTool(allowedTools []string, toolName string) bool {
-	want := strings.TrimPrefix(toolName, MattermostMCPToolPrefix)
+	want := BareMattermostMCPToolName(toolName)
 	for _, t := range allowedTools {
-		if strings.TrimPrefix(t, MattermostMCPToolPrefix) == want {
+		if BareMattermostMCPToolName(t) == want {
 			return true
 		}
 	}
@@ -286,12 +286,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The embedded MCP server invokes hooks with bare names, but normalize once
-	// up front so every check below sees the same bare, catalog-keyed name even
-	// if a namespaced name is ever sent. Error messages keep the original form.
-	bareToolName := strings.TrimPrefix(req.ToolName, MattermostMCPToolPrefix)
-
-	if !actionAllowsTool(ai.AllowedTools, bareToolName) {
+	if !actionAllowsTool(ai.AllowedTools, req.ToolName) {
 		h.api.LogWarn("hooks: tool not in action allowed_tools",
 			"automation_id", f.ID,
 			"action_id", actionID,
@@ -303,7 +298,7 @@ func (h *APIHandler) handleBefore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, catOK := LookupMattermostMCPTool(bareToolName)
+	entry, catOK := LookupMattermostMCPTool(req.ToolName)
 	if !catOK {
 		writeJSON(w, http.StatusOK, mcptool.BeforeHookResponse{
 			Error: fmt.Sprintf("tool %q is not a known Mattermost MCP server tool; channel guardrails reject unrecognized tools",
