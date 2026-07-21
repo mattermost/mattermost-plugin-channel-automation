@@ -21,13 +21,20 @@ type BeforeFunc func(ctx HookCtx, args map[string]any) error
 // this catalog stays the single source of truth for what's known and what's
 // permitted.
 //
+// CreatorOnly marks tools that may only be used when request_as is "creator".
+// These either borrow write authority from the acting user (add_user_to_channel,
+// create_channel) or cannot be constrained by channel guardrails (search_users,
+// list_agents). Under request_as=triggerer they would let a lower-privileged
+// creator act with a higher-privileged triggerer's permissions.
+//
 // Before is an optional pre-call guardrail hook. The ai_prompt action only
 // registers a callback URL with the bridge for tools that have a Before
 // implementation. The HTTP handler still fails closed if it's called for a
 // tool without a Before implementation, as defense in depth.
 type MattermostMCPTool struct {
-	Allowed bool
-	Before  BeforeFunc
+	Allowed     bool
+	CreatorOnly bool
+	Before      BeforeFunc
 }
 
 // mattermostMCPServerTools is the exhaustive set of tools registered by the
@@ -68,10 +75,10 @@ var mattermostMCPServerTools = map[string]MattermostMCPTool{
 
 	// Channels (mcpserver/tools/channels.go — getChannelTools)
 	"read_channel":        {Allowed: true, Before: beforeReadChannel},
-	"create_channel":      {Allowed: true, Before: beforeCreateChannel},
+	"create_channel":      {Allowed: true, CreatorOnly: true, Before: beforeCreateChannel},
 	"get_channel_info":    {Allowed: true, Before: beforeGetChannelInfo},
 	"get_channel_members": {Allowed: true, Before: beforeGetChannelMembers},
-	"add_user_to_channel": {Allowed: true, Before: beforeAddUserToChannel},
+	"add_user_to_channel": {Allowed: true, CreatorOnly: true, Before: beforeAddUserToChannel},
 	"get_user_channels":   {Allowed: true, Before: beforeGetUserChannels},
 
 	// Teams (mcpserver/tools/teams.go — getTeamTools)
@@ -80,10 +87,10 @@ var mattermostMCPServerTools = map[string]MattermostMCPTool{
 
 	// Search (mcpserver/tools/search.go — getSearchTools)
 	"search_posts": {Allowed: true, Before: beforeSearchPosts},
-	"search_users": {Allowed: true},
+	"search_users": {Allowed: true, CreatorOnly: true},
 
 	// Agents (mcpserver/tools/agents.go — getAgentTools)
-	"list_agents": {Allowed: true},
+	"list_agents": {Allowed: true, CreatorOnly: true},
 
 	// Automations (mcpserver/tools/automations.go — getAutomationTools)
 	"list_automations":            {Allowed: false},
@@ -109,6 +116,13 @@ func IsAllowedMattermostMCPTool(name string) (known, allowed bool) {
 		return false, false
 	}
 	return true, entry.Allowed
+}
+
+// IsCreatorOnlyMattermostMCPTool reports whether the given tool name is in the
+// catalog and marked CreatorOnly. Unknown tools return false.
+func IsCreatorOnlyMattermostMCPTool(name string) bool {
+	entry, ok := mattermostMCPServerTools[name]
+	return ok && entry.CreatorOnly
 }
 
 // MattermostMCPTools returns a copy of the catalog suitable for iteration in

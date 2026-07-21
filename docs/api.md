@@ -189,7 +189,9 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 400    | `action <i>: membership_changed automations must set request_as to "creator" ...`                           |
+| 400    | `action <i>: <trigger> automations must set request_as to "creator" ...` (membership_changed, user_joined_team, or channel_created) |
+| 400    | `action <i>: tool "<name>" requires request_as "creator" ...` (creator-only tool under triggerer)           |
+| 400    | `bot accounts cannot create or own automations with ai_prompt actions`                                      |
 | 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to create automation`                                                                               |
@@ -271,7 +273,9 @@ The updated automation object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
-| 400    | `action <i>: membership_changed automations must set request_as to "creator" ...`                           |
+| 400    | `action <i>: <trigger> automations must set request_as to "creator" ...` (membership_changed, user_joined_team, or channel_created) |
+| 400    | `action <i>: tool "<name>" requires request_as "creator" ...` (creator-only tool under triggerer)           |
+| 400    | `bot accounts cannot create or own automations with ai_prompt actions`                                      |
 | 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 404    | `automation not found`                                                                                      |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
@@ -557,7 +561,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional, agent only)_ Allowlist of tool names the agent may use without approval. Entries may use the namespaced runtime name (`server__tool`) or the legacy bare name; either is accepted. Only valid when `provider_type` is `"agent"` (services reject `allowed_tools` at the bridge). Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
-| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. For `membership_changed` triggers `"creator"` is required: `"triggerer"` or an unset value is rejected at create/update time, and legacy automations still using `"triggerer"` fail at execution until updated. |
+| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. For `membership_changed`, `user_joined_team`, and `channel_created` triggers `"creator"` is required: `"triggerer"` or an unset value is rejected at create/update time, and legacy automations still using `"triggerer"` fail at execution until updated. Creator-only tools (`add_user_to_channel`, `create_channel`, `search_users`, `list_agents`) also require `"creator"`. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
@@ -629,10 +633,14 @@ For `message_posted` triggers, file attachments from the triggering post are for
 
 By default, the completion request is attributed to the user who triggered the automation (`{{.Trigger.User.Id}}`). When the trigger has no associated user (e.g. `schedule`), the request falls back to the automation creator (`{{.CreatedBy}}`). The optional `request_as` config field lets the automation switch attribution to the automation creator unconditionally:
 
-- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
+- `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator. Only valid for `message_posted` and `schedule` (schedule always falls back).
 - `"creator"` — always use the automation creator, even when a triggering user is available.
 
-**`membership_changed` triggers require `"creator"`.** The triggerer for this trigger is by definition the user who just joined or left the channel, so attributing the request to them would let the automation act with that user's permissions and surface the result to the other channel members. A `membership_changed` automation whose `ai_prompt` action uses `"triggerer"` (or leaves `request_as` unset, which defaults to `"triggerer"`) is **rejected at create/update time** with HTTP 400 — `"creator"` must be set explicitly. Any automation stored before this rule that still uses `"triggerer"` **fails at execution time** with a clear error (rather than silently running as a different user) until it is updated. The editor sets and locks the `request_as` selector to `"creator"` for this trigger.
+**Creator-locked triggers require `"creator"`.** For `membership_changed`, `user_joined_team`, and `channel_created`, the triggerer is an incidental subject of the event (joiner, leaver, or channel creator). Attributing the request to them would let the automation act with that user's permissions. Automations of these types whose `ai_prompt` uses `"triggerer"` (or leaves `request_as` unset) are **rejected at create/update time** with HTTP 400 — `"creator"` must be set explicitly. Legacy automations still using `"triggerer"` **fail at execution time** with a clear error until updated. The editor locks the `request_as` selector to `"creator"` for these triggers.
+
+**An `ai_prompt` never runs as a bot.** After resolving the final user (creator or triggerer), the action looks up that user and fails closed if they are a bot (or if the lookup fails). Separately, bot accounts are **rejected at create/update** from owning automations that contain an `ai_prompt` action. Bot-authored posts are also dropped before `message_posted` dispatch (identity check via `IsBot`, in addition to the `from_bot` prop).
+
+**Creator-only tools require `"creator"`.** The embedded Mattermost tools `add_user_to_channel`, `create_channel`, `search_users`, and `list_agents` either borrow write authority from the acting user or cannot be constrained by channel guardrails. Including any of them in `allowed_tools` while `request_as` is `"triggerer"` (or unset) is rejected at create/update and fails at execution. External (non-embedded) MCP tools are not covered by this denylist.
 
 The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 

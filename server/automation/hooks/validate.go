@@ -3,6 +3,7 @@ package hooks
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/mattermost/mattermost-plugin-agents/public/bridgeclient"
 
@@ -112,6 +113,33 @@ func ValidateAllowedTools(f *model.Automation, userID string, bridge AgentToolsL
 			}
 			if hasGuardrails && bare == "get_user_channels" {
 				return fmt.Errorf("action %d: get_user_channels is not permitted when channel guardrails are configured", i)
+			}
+		}
+	}
+	return nil
+}
+
+// ValidateCreatorOnlyToolsForTriggerer rejects ai_prompt actions that include
+// CreatorOnly tools while request_as is not "creator". After creator-locked
+// triggers are enforced, the only remaining triggerer-capable case is
+// message_posted (and any other non-locked trigger that carries a user); schedule
+// and creator-locked triggers always resolve to the creator and are allowed.
+func ValidateCreatorOnlyToolsForTriggerer(f *model.Automation) error {
+	if f == nil {
+		return nil
+	}
+	for i := range f.Actions {
+		ai := f.Actions[i].AIPrompt
+		if ai == nil || len(ai.AllowedTools) == 0 {
+			continue
+		}
+		if ai.RequestAs == model.AIPromptRequestAsCreator {
+			continue
+		}
+		for _, name := range ai.AllowedTools {
+			bare := strings.TrimPrefix(name, "mattermost__")
+			if IsCreatorOnlyMattermostMCPTool(bare) {
+				return fmt.Errorf("action %d: tool %q requires request_as %q (it borrows write authority or cannot be constrained by channel guardrails)", i, name, model.AIPromptRequestAsCreator)
 			}
 		}
 	}

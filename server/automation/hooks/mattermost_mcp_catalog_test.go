@@ -55,3 +55,13 @@ func TestIsAllowedMattermostMCPTool_UnknownTool(t *testing.T) {
 	assert.False(t, known)
 	assert.False(t, allowed)
 }
+
+func TestIsCreatorOnlyMattermostMCPTool(t *testing.T) {
+	creatorOnly := []string{"add_user_to_channel", "create_channel", "search_users", "list_agents"}
+	for _, name := range creatorOnly {
+		assert.True(t, IsCreatorOnlyMattermostMCPTool(name), "%q should be creator-only", name)
+	}
+	assert.False(t, IsCreatorOnlyMattermostMCPTool("search_posts"))
+	assert.False(t, IsCreatorOnlyMattermostMCPTool("mattermost__search_users"), "namespaced form is stripped by callers, not this helper")
+	assert.False(t, IsCreatorOnlyMattermostMCPTool("not_a_real_tool"))
+}
