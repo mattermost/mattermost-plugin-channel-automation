@@ -71,6 +71,22 @@ func ValidateSendMessageChannel(automation *Automation) error {
 	return nil
 }
 
+func ValidateMembershipChangedRequestAs(automation *Automation) error {
+	if automation == nil || automation.Trigger.MembershipChanged == nil {
+		return nil
+	}
+	for i := range automation.Actions {
+		ai := automation.Actions[i].AIPrompt
+		if ai == nil {
+			continue
+		}
+		if ai.RequestAs != AIPromptRequestAsCreator {
+			return fmt.Errorf("action %d: membership_changed automations must set request_as to %q (the triggerer is the user whose membership just changed, so the AI cannot run with their permissions)", i, AIPromptRequestAsCreator)
+		}
+	}
+	return nil
+}
+
 // isTriggerChannelTemplate returns true if s is a Go template expression that
 // resolves to a channel ID sourced from the trigger. The whole value must be a
 // single template expression (leading/trailing whitespace aside) and must

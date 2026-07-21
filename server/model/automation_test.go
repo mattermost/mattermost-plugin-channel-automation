@@ -286,3 +286,51 @@ func TestAutomationUpdate_JSON_DistinguishesAbsentFromFalse(t *testing.T) {
 		assert.True(t, *u.Enabled)
 	})
 }
+
+func TestValidateMembershipChangedRequestAs(t *testing.T) {
+	t.Run("rejects triggerer", func(t *testing.T) {
+		f := &Automation{
+			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a1", AIPrompt: &AIPromptActionConfig{RequestAs: AIPromptRequestAsTriggerer}}},
+		}
+		err := ValidateMembershipChangedRequestAs(f)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "request_as")
+	})
+
+	t.Run("rejects empty (defaults to triggerer)", func(t *testing.T) {
+		f := &Automation{
+			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a1", AIPrompt: &AIPromptActionConfig{RequestAs: ""}}},
+		}
+		require.Error(t, ValidateMembershipChangedRequestAs(f))
+	})
+
+	t.Run("allows explicit creator", func(t *testing.T) {
+		f := &Automation{
+			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a1", AIPrompt: &AIPromptActionConfig{RequestAs: AIPromptRequestAsCreator}}},
+		}
+		require.NoError(t, ValidateMembershipChangedRequestAs(f))
+	})
+
+	t.Run("ignores send_message actions", func(t *testing.T) {
+		f := &Automation{
+			Trigger: Trigger{MembershipChanged: &MembershipChangedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a1", SendMessage: &SendMessageActionConfig{ChannelID: "ch1", Body: "hi"}}},
+		}
+		require.NoError(t, ValidateMembershipChangedRequestAs(f))
+	})
+
+	t.Run("ignores non-membership triggers", func(t *testing.T) {
+		f := &Automation{
+			Trigger: Trigger{MessagePosted: &MessagePostedConfig{ChannelID: "ch1"}},
+			Actions: []Action{{ID: "a1", AIPrompt: &AIPromptActionConfig{RequestAs: AIPromptRequestAsTriggerer}}},
+		}
+		require.NoError(t, ValidateMembershipChangedRequestAs(f))
+	})
+
+	t.Run("nil automation is safe", func(t *testing.T) {
+		require.NoError(t, ValidateMembershipChangedRequestAs(nil))
+	})
+}

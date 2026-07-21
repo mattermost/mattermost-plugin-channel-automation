@@ -149,6 +149,13 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// membership_changed automations are locked to request_as=creator; reject
+	// triggerer/default so the restriction is explicit rather than silent.
+	if err := model.ValidateMembershipChangedRequestAs(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
 	if err := permissions.CheckAutomationPermissions(h.api, f.CreatedBy, &f); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
@@ -295,6 +302,13 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := model.ValidateSendMessageChannel(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	// membership_changed automations are locked to request_as=creator; reject
+	// triggerer/default so the restriction is explicit rather than silent.
+	if err := model.ValidateMembershipChangedRequestAs(&f); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}

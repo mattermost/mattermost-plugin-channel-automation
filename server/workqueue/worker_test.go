@@ -636,6 +636,114 @@ func TestWorkerPool_CreatorPermissionCheckTransientError(t *testing.T) {
 	assert.True(t, f.Enabled)
 }
 
+func TestWorkerPool_GuardrailsBecameRequired_Disables(t *testing.T) {
+	act := &testAction{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", "creator1").Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", "creator1", mock.Anything).Return(true)
+	// A private channel that has since gained a second member.
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypePrivate}, nil)
+	api.On("GetChannelMember", "ch1", "creator1").Return(&mmmodel.ChannelMember{}, nil)
+	api.On("GetChannelStats", "ch1").Return(&mmmodel.ChannelStats{MemberCount: 2}, nil)
+
+	registry := automation.NewRegistry()
+	registry.RegisterAction(act)
+	executor := automation.NewExecutor(registry)
+	automationStore := newTestAutomationStore()
+
+	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = automationStore.Save(&model.Automation{
+		ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "creator1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+			Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1",
+			AllowedTools: []string{"search_posts"},
+		}}},
+	})
+
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// Action must never run when the context became sensitive without guardrails.
+	assert.Equal(t, 0, act.getExecCount())
+
+	// Automation should be disabled — it now requires guardrails but has none.
+	f, _ := automationStore.Get("f1")
+	require.NotNil(t, f)
+	assert.False(t, f.Enabled)
+}
+
+func TestWorkerPool_GuardrailsCheckTransientError(t *testing.T) {
+	act := &testAction{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", "creator1").Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", "creator1", mock.Anything).Return(true)
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypePrivate}, nil)
+	api.On("GetChannelMember", "ch1", "creator1").Return(&mmmodel.ChannelMember{}, nil)
+	// GetChannelStats returns a 500 — transient infrastructure error.
+	api.On("GetChannelStats", "ch1").Return(nil, mmmodel.NewAppError("GetChannelStats", "app.channel.get_stats.app_error", nil, "", 500))
+
+	registry := automation.NewRegistry()
+	registry.RegisterAction(act)
+	executor := automation.NewExecutor(registry)
+	automationStore := newTestAutomationStore()
+
+	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = automationStore.Save(&model.Automation{
+		ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "creator1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+			Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1",
+			AllowedTools: []string{"search_posts"},
+		}}},
+	})
+
+	item := &model.WorkItem{ID: "w1", AutomationID: "f1", AutomationName: "Automation 1"}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// Action must not run while the sensitivity of the context is unverifiable.
+	assert.Equal(t, 0, act.getExecCount())
+
+	// Automation should remain enabled — this is a transient error.
+	f, _ := automationStore.Get("f1")
+	require.NotNil(t, f)
+	assert.True(t, f.Enabled)
+}
+
 // fakeFailureNotifier records all NotifyFailure calls for assertions.
 type fakeFailureNotifier struct {
 	mu    sync.Mutex
