@@ -92,6 +92,30 @@ func IsCreatorLockedTrigger(automation *Automation) bool {
 	return ok
 }
 
+// ResolvesToTriggerer reports whether an ai_prompt with the given trigger type
+// and request_as could run as a user other than the automation creator. This is
+// the single source of truth for that question:
+//   - request_as "creator" always resolves to the creator.
+//   - schedule triggers have no triggering user, so they resolve to the creator.
+//   - creator-locked triggers (membership_changed, user_joined_team,
+//     channel_created) are pinned to the creator.
+//
+// Only the remaining trigger types (currently message_posted) carry a distinct
+// triggering user the AI can run as. Callers that must forbid borrowing a
+// foreign identity (e.g. creator-only tools) gate on this rule.
+func ResolvesToTriggerer(triggerType, requestAs string) bool {
+	if requestAs == AIPromptRequestAsCreator {
+		return false
+	}
+	if triggerType == TriggerTypeSchedule {
+		return false
+	}
+	if _, locked := CreatorLockedTriggerTypes[triggerType]; locked {
+		return false
+	}
+	return true
+}
+
 // ValidateCreatorLockedRequestAs rejects automations whose trigger is
 // creator-locked and whose ai_prompt actions do not explicitly set request_as
 // to "creator". An empty request_as means "triggerer" and is therefore also

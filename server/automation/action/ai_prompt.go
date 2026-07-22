@@ -120,14 +120,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	}
 
 	// Creator-only tools (writes / unguardable enumeration) may not run under
-	// the triggerer's identity — they require request_as=creator explicitly.
-	if cfg.RequestAs != model.AIPromptRequestAsCreator {
-		for _, t := range cfg.AllowedTools {
-			bare := strings.TrimPrefix(t, "mattermost__")
-			if hooks.IsCreatorOnlyMattermostMCPTool(bare) {
-				return nil, fmt.Errorf("tool %q requires request_as %q (it borrows write authority or cannot be constrained by channel guardrails)", t, model.AIPromptRequestAsCreator)
-			}
-		}
+	// the triggerer's identity. The creator-vs-triggerer rule is shared with the
+	// create/update-time check via model.ResolvesToTriggerer.
+	if err := hooks.CheckCreatorOnlyTools(ctx.TriggerType, cfg.RequestAs, cfg.AllowedTools); err != nil {
+		return nil, err
 	}
 
 	a.api.LogDebug("AI prompt action: rendered prompt",

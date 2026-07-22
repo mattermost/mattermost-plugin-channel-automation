@@ -357,4 +357,20 @@ func TestValidateCreatorOnlyToolsForTriggerer(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "list_agents")
 	})
+
+	t.Run("allows creator-only tool for schedule trigger under triggerer", func(t *testing.T) {
+		// Schedule triggers have no triggering user, so request_as always
+		// resolves to the creator and creator-only tools must be permitted.
+		f := &model.Automation{
+			Trigger: model.Trigger{Schedule: &model.ScheduleConfig{ChannelID: "ch1"}},
+			Actions: []model.Action{{
+				ID: "a1",
+				AIPrompt: &model.AIPromptActionConfig{
+					RequestAs:    "triggerer",
+					AllowedTools: []string{"search_users"},
+				},
+			}},
+		}
+		require.NoError(t, ValidateCreatorOnlyToolsForTriggerer(f))
+	})
 }

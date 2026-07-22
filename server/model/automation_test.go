@@ -345,3 +345,30 @@ func TestValidateCreatorLockedRequestAs(t *testing.T) {
 		require.NoError(t, ValidateCreatorLockedRequestAs(nil))
 	})
 }
+
+func TestResolvesToTriggerer(t *testing.T) {
+	tests := []struct {
+		triggerType string
+		requestAs   string
+		want        bool
+	}{
+		// request_as=creator always resolves to the creator.
+		{TriggerTypeMessagePosted, AIPromptRequestAsCreator, false},
+		{TriggerTypeSchedule, AIPromptRequestAsCreator, false},
+		// message_posted carries a distinct triggering user.
+		{TriggerTypeMessagePosted, AIPromptRequestAsTriggerer, true},
+		{TriggerTypeMessagePosted, "", true},
+		// schedule has no triggering user.
+		{TriggerTypeSchedule, AIPromptRequestAsTriggerer, false},
+		{TriggerTypeSchedule, "", false},
+		// creator-locked triggers are pinned to the creator.
+		{TriggerTypeMembershipChanged, AIPromptRequestAsTriggerer, false},
+		{TriggerTypeUserJoinedTeam, "", false},
+		{TriggerTypeChannelCreated, AIPromptRequestAsTriggerer, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.triggerType+"/"+tt.requestAs, func(t *testing.T) {
+			assert.Equal(t, tt.want, ResolvesToTriggerer(tt.triggerType, tt.requestAs))
+		})
+	}
+}

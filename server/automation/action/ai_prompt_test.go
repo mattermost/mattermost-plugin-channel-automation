@@ -1334,6 +1334,39 @@ func TestAIPromptAction_Execute_CreatorOnlyToolsRequireCreator(t *testing.T) {
 	assert.Empty(t, bc.lastReq.UserID)
 }
 
+// TestAIPromptAction_Execute_CreatorOnlyToolsAllowedForSchedule verifies a
+// schedule trigger (which has no triggering user and always resolves to the
+// creator) may use creator-only tools even when request_as is not "creator".
+func TestAIPromptAction_Execute_CreatorOnlyToolsAllowedForSchedule(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentTools:    []bridgeclient.BridgeToolInfo{mmTool("search_users")},
+	}
+	a := NewAIPromptAction(api, bc, "")
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "hello",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			RequestAs:    "triggerer",
+			AllowedTools: []string{"search_users"},
+		},
+	}
+	ctx := &model.AutomationContext{
+		CreatedBy:   "automation-creator-id",
+		TriggerType: model.TriggerTypeSchedule,
+		Trigger:     model.TriggerData{},
+		Steps:       make(map[string]model.StepOutput),
+	}
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "automation-creator-id", bc.lastReq.UserID)
+}
+
 func TestAIPromptAction_Execute_UnsupportedProviderType(t *testing.T) {
 	api := newTestAPI()
 	bc := &mockBridgeClient{}
