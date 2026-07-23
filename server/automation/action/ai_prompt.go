@@ -122,7 +122,7 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 	// Creator-only tools (writes / unguardable enumeration) may not run under
 	// the triggerer's identity. The creator-vs-triggerer rule is shared with the
 	// create/update-time check via model.ResolvesToTriggerer.
-	if err := hooks.CheckCreatorOnlyTools(ctx.TriggerType, cfg.RequestAs, cfg.AllowedTools); err != nil {
+	if err = hooks.CheckCreatorOnlyTools(ctx.TriggerType, cfg.RequestAs, cfg.AllowedTools); err != nil {
 		return nil, err
 	}
 

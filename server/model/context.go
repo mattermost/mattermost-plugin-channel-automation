@@ -9,8 +9,8 @@ import (
 
 // AutomationContext is the runtime context built up during automation execution.
 type AutomationContext struct {
-	AutomationID string                `json:"automation_id"`
-	CreatedBy    string                `json:"created_by"`
+	AutomationID string `json:"automation_id"`
+	CreatedBy    string `json:"created_by"`
 	// TriggerType is the automation's configured trigger type
 	// (e.g. "message_posted"). Set by the executor; not serialized.
 	TriggerType string                `json:"-"`
