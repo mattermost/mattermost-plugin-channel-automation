@@ -189,6 +189,7 @@ The created automation object with all server-assigned fields populated.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
+| 400    | `action <i>: membership_changed automations must set request_as to "creator" ...`                           |
 | 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
 | 500    | `failed to create automation`                                                                               |
@@ -270,6 +271,7 @@ The updated automation object.
 | 400    | `action <i>: ai_prompt with provider_type "agent" requires provider_id`                                     |
 | 400    | `action <i>: allowed_tools is only supported with provider_type "agent"`                                    |
 | 400    | `action <i>: guardrails is only supported with provider_type "agent"`                                       |
+| 400    | `action <i>: membership_changed automations must set request_as to "creator" ...`                           |
 | 403    | Permission denied — see [Authentication](#authentication) for trigger-specific messages           |
 | 404    | `automation not found`                                                                                      |
 | 409    | `channel has reached the maximum of <N> automation(s)`                                                      |
@@ -555,7 +557,7 @@ Exactly one type-specific config key should be set alongside `id`:
 | `provider_id`      | string                          | ID of the agent or service to use                                                                                       |
 | `allowed_tools`    | string[]                        | _(optional, agent only)_ Allowlist of tool names the agent may use without approval. Entries may use the namespaced runtime name (`server__tool`) or the legacy bare name; either is accepted. Only valid when `provider_type` is `"agent"` (services reject `allowed_tools` at the bridge). Each entry must be available to the action's agent. Embedded Mattermost MCP tools must be in the supported catalog with `Allowed=true`; unknown embedded tools and disallowed catalog entries (`create_post`, `dm`, `group_message`, and the `*_automation` management tools) are rejected. |
 | `guardrails`       | [Guardrails](#guardrails)       | _(optional, agent only)_ When set with non-empty `channel_ids` and non-empty `allowed_tools`, registers MCP tool hooks so tool args/results are constrained to those channels. Only valid when `provider_type` is `"agent"`. |
-| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. |
+| `request_as`       | string                          | _(optional)_ Selects which user the AI completion request is attributed to. One of `"triggerer"` (default — the user who triggered the automation, falling back to the automation creator) or `"creator"` (always the automation creator). Any other value is rejected at create/update time. For `membership_changed` triggers `"creator"` is required: `"triggerer"` or an unset value is rejected at create/update time, and legacy automations still using `"triggerer"` fail at execution until updated. |
 
 Requires the AI plugin (`mattermost-plugin-agents`) to be installed and active.
 
@@ -570,6 +572,8 @@ Hook handlers maintain an explicit catalog of **production** Mattermost built-in
 As an additional defense-in-depth check, the before-hook handler also rejects any callback whose tool is **not present in the action's `allowed_tools`**, before running the catalog or channel-guardrail checks. The agents bridge only registers callbacks for allowlisted tools, but the handler does not rely on that: it independently confirms the tool is allowlisted for this `ai_prompt` action. Matching strips the embedded `mattermost__` namespace prefix from both the incoming tool name and each `allowed_tools` entry, so a stored entry in either form (`read_channel` or `mattermost__read_channel`) authorizes the same tool, while an external tool sharing a bare name (e.g. `external__read_channel`) does not. Rejections return the standard before-hook error shape (`tool "<name>" is not in this automation action's allowed_tools`).
 
 `allowed_tools` is also re-validated at execution time (not just on automation create/update), so catalog updates that demote a tool to disallowed, or agent changes that remove a tool, take effect on already-saved automations without requiring a re-save. The validator additionally rejects `get_user_channels` whenever guardrails are configured for the same `ai_prompt` action.
+
+An `ai_prompt` action with non-empty `allowed_tools` requires `guardrails.channel_ids` whenever the trigger context is sensitive: team-scoped triggers (`channel_created`, `user_joined_team`), or channel-scoped triggers firing in a public channel, a group message, a DM with another (non-bot) user, or a private channel with more than one member. Single-member private channels and DMs with the plugin bot are exempt because no one other than the creator can see tool output. Because that member count can change after creation, this requirement is **re-evaluated at execution time** against the current channel state: if a formerly-exempt context has become sensitive (e.g. a single-member private channel gained a member) and the automation still has no guardrails, the run is aborted before any action executes and the automation is disabled until the creator reviews and re-saves it.
 
 When a hook rejects a tool call (missing or disallowed `channel_id`, or a resolved channel that is not permitted), the error returned to the agent includes the rejected ID and the list of allowed `channel_ids` so the model can self-correct. The list is capped at 10 IDs followed by `(+N more)` to keep the payload bounded.
 
@@ -629,6 +633,8 @@ By default, the completion request is attributed to the user who triggered the a
 
 - `"triggerer"` (or unset, default) — use the triggering user, falling back to the creator.
 - `"creator"` — always use the automation creator, even when a triggering user is available.
+
+**`membership_changed` triggers require `"creator"`.** The triggerer for this trigger is by definition the user who just joined or left the channel, so attributing the request to them would let the automation act with that user's permissions and surface the result to the other channel members. A `membership_changed` automation whose `ai_prompt` action uses `"triggerer"` (or leaves `request_as` unset, which defaults to `"triggerer"`) is **rejected at create/update time** with HTTP 400 — `"creator"` must be set explicitly. Any automation stored before this rule that still uses `"triggerer"` **fails at execution time** with a clear error (rather than silently running as a different user) until it is updated. The editor sets and locks the `request_as` selector to `"creator"` for this trigger.
 
 The set of attributable identities is bounded to these two principals; arbitrary user IDs cannot be configured. The resolved user and its source (`triggerer` or `creator`) are emitted on the plugin's debug log alongside `action_id` and `provider_id`.
 

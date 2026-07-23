@@ -1110,6 +1110,19 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 			},
 			want: "triggering-user-id",
 		},
+		{
+			name:      "membership_changed with explicit creator uses creator",
+			requestAs: "creator",
+			ctx: &model.AutomationContext{
+				CreatedBy: "automation-creator-id",
+				Trigger: model.TriggerData{
+					User:       &model.SafeUser{Id: "triggering-user-id"},
+					Membership: &model.MembershipInfo{Action: "joined"},
+				},
+				Steps: make(map[string]model.StepOutput),
+			},
+			want: "automation-creator-id",
+		},
 	}
 
 	for _, tc := range tests {
@@ -1131,6 +1144,40 @@ func TestAIPromptAction_Execute_RequestAs(t *testing.T) {
 			_, err := a.Execute(act, tc.ctx)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, bc.lastReq.UserID)
+		})
+	}
+}
+
+func TestAIPromptAction_Execute_MembershipChangedRejectsTriggerer(t *testing.T) {
+	for _, requestAs := range []string{"triggerer", ""} {
+		t.Run("request_as="+requestAs, func(t *testing.T) {
+			api := newTestAPI()
+			bc := &mockBridgeClient{agentResponse: "ok"}
+			a := NewAIPromptAction(api, bc, "")
+
+			act := &model.Action{
+				ID: "ai1",
+				AIPrompt: &model.AIPromptActionConfig{
+					Prompt:       "hello",
+					ProviderType: "agent",
+					ProviderID:   "ai-bot",
+					RequestAs:    requestAs,
+				},
+			}
+			ctx := &model.AutomationContext{
+				CreatedBy: "automation-creator-id",
+				Trigger: model.TriggerData{
+					User:       &model.SafeUser{Id: "triggering-user-id"},
+					Membership: &model.MembershipInfo{Action: "joined"},
+				},
+				Steps: make(map[string]model.StepOutput),
+			}
+
+			output, err := a.Execute(act, ctx)
+			require.Error(t, err)
+			assert.Nil(t, output)
+			assert.Contains(t, err.Error(), "membership_changed")
+			assert.Empty(t, bc.lastReq.UserID, "bridge must not be called when validation fails")
 		})
 	}
 }

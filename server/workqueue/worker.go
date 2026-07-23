@@ -233,6 +233,34 @@ func (wp *WorkerPool) runWorker(item *model.WorkItem, sem chan struct{}) {
 		return
 	}
 
+	// Re-verify guardrail requirements against the current channel state. The
+	// sensitivity of a trigger context can change after creation.
+	if grErr := permissions.CheckGuardrailsRequired(wp.api, f); grErr != nil {
+		var appErr *mmmodel.AppError
+		if errors.As(grErr, &appErr) {
+			// Transient API error — fail this execution but leave the automation enabled.
+			wp.api.LogError("Failed to verify automation guardrail requirements",
+				"work_item_id", item.ID,
+				"automation_id", f.ID,
+				"err", grErr.Error(),
+			)
+			if storeErr := wp.store.Fail(item.ID); storeErr != nil {
+				wp.api.LogError("Failed to remove work item after guardrail check error",
+					"work_item_id", item.ID,
+					"err", storeErr.Error(),
+				)
+			}
+			wp.saveExecutionRecord(item, nil, fmt.Errorf("failed to verify guardrail requirements: %s", grErr.Error()), model.NowTimestamp())
+			return
+		}
+
+		// The trigger context became sensitive (e.g. a private channel gained
+		// members) and the automation lacks the now-required guardrails —
+		// disable it to fail closed until the creator reviews and re-saves.
+		wp.disableAutomation(f, item, fmt.Sprintf("automation now requires guardrails.channel_ids but has none: %s", grErr.Error()))
+		return
+	}
+
 	ctx, execErr := wp.executor.Execute(f, item.TriggerData)
 	completedAt := model.NowTimestamp()
 

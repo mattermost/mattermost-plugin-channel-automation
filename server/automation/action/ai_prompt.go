@@ -97,6 +97,10 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 		channelID = ctx.Trigger.Channel.Id
 	}
 
+	if ctx.Trigger.Membership != nil && cfg.RequestAs != model.AIPromptRequestAsCreator {
+		return nil, fmt.Errorf("membership_changed automations must set request_as to %q (found %q); update the automation to continue", model.AIPromptRequestAsCreator, cfg.RequestAs)
+	}
+
 	userID := ctx.CreatedBy
 	userIDSource := model.AIPromptRequestAsCreator
 	if cfg.RequestAs != model.AIPromptRequestAsCreator && ctx.Trigger.User != nil && ctx.Trigger.User.Id != "" {
