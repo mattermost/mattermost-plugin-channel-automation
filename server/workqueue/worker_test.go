@@ -690,6 +690,68 @@ func TestWorkerPool_GuardrailsBecameRequired_Disables(t *testing.T) {
 	assert.False(t, f.Enabled)
 }
 
+func TestWorkerPool_UnguardedExemptForeignActor_Disables(t *testing.T) {
+	act := &testAction{}
+
+	store, _ := setupStore(t)
+	api := &plugintest.API{}
+	api.On("LogInfo", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogWarn", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+	api.On("GetUser", "creator1").Return(&mmmodel.User{DeleteAt: 0}, nil)
+	api.On("HasPermissionTo", "creator1", mock.Anything).Return(true)
+	// Single-member private channel — exempt by context, but the queued event
+	// carries a foreign triggerer, so CheckGuardrailsRequired still rejects it.
+	api.On("GetChannel", "ch1").Return(&mmmodel.Channel{Id: "ch1", Type: mmmodel.ChannelTypePrivate}, nil)
+	api.On("GetChannelMember", "ch1", "creator1").Return(&mmmodel.ChannelMember{}, nil)
+	api.On("GetChannelStats", "ch1").Return(&mmmodel.ChannelStats{MemberCount: 1}, nil)
+
+	registry := automation.NewRegistry()
+	registry.RegisterAction(act)
+	executor := automation.NewExecutor(registry)
+	automationStore := newTestAutomationStore()
+
+	wp := NewWorkerPool(store, executor, automationStore, nil, nil, api, 4)
+	wp.pollInterval = 50 * time.Millisecond
+
+	_ = automationStore.Save(&model.Automation{
+		ID: "f1", Name: "Automation 1", Enabled: true, CreatedBy: "creator1",
+		Trigger: model.Trigger{MessagePosted: &model.MessagePostedConfig{ChannelID: "ch1"}},
+		Actions: []model.Action{{ID: "a1", AIPrompt: &model.AIPromptActionConfig{
+			Prompt: "summarize", ProviderType: "agent", ProviderID: "bot1",
+			RequestAs:    model.AIPromptRequestAsTriggerer,
+			AllowedTools: []string{"search_posts"},
+		}}},
+	})
+
+	// The queued event captured a foreign triggerer before membership fell back
+	// to a single member.
+	item := &model.WorkItem{
+		ID: "w1", AutomationID: "f1", AutomationName: "Automation 1",
+		TriggerData: model.TriggerData{User: &model.SafeUser{Id: "intruder"}},
+	}
+	require.NoError(t, store.Enqueue(item))
+
+	wp.Start()
+	wp.Notify()
+
+	require.Eventually(t, func() bool {
+		got, _ := store.Get("w1")
+		return got == nil
+	}, 5*time.Second, 10*time.Millisecond)
+
+	wp.Stop()
+
+	// The action must not run under the foreign triggerer's identity.
+	assert.Equal(t, 0, act.getExecCount())
+
+	// The automation is disabled — a foreign triggerer is treated the same as a
+	// context that became sensitive: fail closed until the creator re-saves.
+	f, _ := automationStore.Get("f1")
+	require.NotNil(t, f)
+	assert.False(t, f.Enabled)
+}
+
 func TestWorkerPool_GuardrailsCheckTransientError(t *testing.T) {
 	act := &testAction{}
 

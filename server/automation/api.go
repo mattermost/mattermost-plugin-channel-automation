@@ -156,11 +156,6 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := hooks.ValidateCreatorOnlyToolsForTriggerer(&f); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
-		return
-	}
-
 	if err := rejectBotAIPromptCreator(h.api, f.CreatedBy, &f); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
@@ -189,7 +184,16 @@ func (h *APIHandler) handleCreateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := permissions.CheckGuardrailsRequired(h.api, &f); err != nil {
+	// Runs after ValidateAllowedTools so a blocked or unavailable tool is
+	// reported as such rather than as a request_as problem.
+	if err := hooks.ValidateCreatorOnlyToolsForTriggerer(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	// No triggering user exists at configuration time, so the exempt-triggerer
+	// dimension does not apply here.
+	if err := permissions.CheckGuardrailsRequired(h.api, &f, ""); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, f.CreatedBy, f.ID)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return
@@ -323,11 +327,6 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := hooks.ValidateCreatorOnlyToolsForTriggerer(&f); err != nil {
-		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
-		return
-	}
-
 	if err := rejectBotAIPromptCreator(h.api, f.CreatedBy, &f); err != nil {
 		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
 		return
@@ -375,7 +374,16 @@ func (h *APIHandler) handleUpdateAutomation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := permissions.CheckGuardrailsRequired(h.api, &f); err != nil {
+	// Runs after ValidateAllowedTools so a blocked or unavailable tool is
+	// reported as such rather than as a request_as problem.
+	if err := hooks.ValidateCreatorOnlyToolsForTriggerer(&f); err != nil {
+		httputil.WriteErrorJSON(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+
+	// No triggering user exists at configuration time, so the exempt-triggerer
+	// dimension does not apply here.
+	if err := permissions.CheckGuardrailsRequired(h.api, &f, ""); err != nil {
 		msg, code, detail := permissions.HandlePermissionError(h.api, err, existing.CreatedBy, id)
 		httputil.WriteErrorJSON(w, code, msg, detail)
 		return

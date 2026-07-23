@@ -1308,7 +1308,9 @@ func TestAIPromptAction_Execute_RejectsBotUser(t *testing.T) {
 
 func TestAIPromptAction_Execute_CreatorOnlyToolsRequireCreator(t *testing.T) {
 	api := newTestAPI()
-	bc := &mockBridgeClient{agentResponse: "ok"}
+	// The tool must be available so allowed_tools re-validation passes and the
+	// creator-only gate (which now runs after it) is what rejects the run.
+	bc := &mockBridgeClient{agentResponse: "ok", agentTools: []bridgeclient.BridgeToolInfo{mmTool("search_users")}}
 	a := NewAIPromptAction(api, bc, "")
 
 	act := &model.Action{
@@ -1332,6 +1334,42 @@ func TestAIPromptAction_Execute_CreatorOnlyToolsRequireCreator(t *testing.T) {
 	assert.Nil(t, output)
 	assert.Contains(t, err.Error(), "requires request_as")
 	assert.Empty(t, bc.lastReq.UserID)
+}
+
+// TestAIPromptAction_Execute_UnguardedExternalToolAllowsTriggerer verifies that
+// external / unconstrained tools are unaffected by the creator-only rule and
+// may run as the triggerer without guardrails.
+func TestAIPromptAction_Execute_UnguardedExternalToolAllowsTriggerer(t *testing.T) {
+	api := newTestAPI()
+	bc := &mockBridgeClient{
+		agentResponse: "ok",
+		agentTools: []bridgeclient.BridgeToolInfo{{
+			Name: "external__search", ServerOrigin: "external-mcp",
+		}},
+	}
+	a := NewAIPromptAction(api, bc, "")
+
+	act := &model.Action{
+		ID: "ai1",
+		AIPrompt: &model.AIPromptActionConfig{
+			Prompt:       "search external",
+			ProviderType: "agent",
+			ProviderID:   "ai-bot",
+			RequestAs:    model.AIPromptRequestAsTriggerer,
+			AllowedTools: []string{"external__search"},
+		},
+	}
+	ctx := &model.AutomationContext{
+		CreatedBy:   "automation-creator-id",
+		TriggerType: model.TriggerTypeMessagePosted,
+		Trigger:     model.TriggerData{User: &model.SafeUser{Id: "poster-id"}},
+		Steps:       make(map[string]model.StepOutput),
+	}
+
+	output, err := a.Execute(act, ctx)
+	require.NoError(t, err)
+	require.NotNil(t, output)
+	assert.Equal(t, "poster-id", bc.lastReq.UserID)
 }
 
 // TestAIPromptAction_Execute_CreatorOnlyToolsAllowedForSchedule verifies a

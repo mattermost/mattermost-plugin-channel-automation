@@ -119,13 +119,6 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 		return nil, fmt.Errorf("ai_prompt cannot run as bot user %q", userID)
 	}
 
-	// Creator-only tools (writes / unguardable enumeration) may not run under
-	// the triggerer's identity. The creator-vs-triggerer rule is shared with the
-	// create/update-time check via model.ResolvesToTriggerer.
-	if err = hooks.CheckCreatorOnlyTools(ctx.TriggerType, cfg.RequestAs, cfg.AllowedTools); err != nil {
-		return nil, err
-	}
-
 	a.api.LogDebug("AI prompt action: rendered prompt",
 		"action_id", action.ID,
 		"provider_type", cfg.ProviderType,
@@ -151,6 +144,16 @@ func (a *AIPromptAction) Execute(action *model.Action, ctx *model.AutomationCont
 		}
 		req.AllowedTools = cfg.AllowedTools
 	}
+
+	// Creator-only tools (writes / unguardable enumeration) may not run under
+	// the triggerer's identity. Runs after allowed_tools re-validation so a
+	// blocked or removed tool is reported as such rather than as a request_as
+	// problem. The creator-vs-triggerer rule is shared with the create/update-time
+	// check via model.ResolvesToTriggerer.
+	if err = hooks.CheckCreatorOnlyTools(ctx.TriggerType, cfg.RequestAs, cfg.AllowedTools); err != nil {
+		return nil, err
+	}
+
 	if cfg.Guardrails != nil && len(cfg.Guardrails.Channels) > 0 && len(cfg.AllowedTools) > 0 {
 		toolHooks := make(map[string]bridgeclient.ToolHookConfig, len(cfg.AllowedTools))
 		for _, t := range cfg.AllowedTools {
