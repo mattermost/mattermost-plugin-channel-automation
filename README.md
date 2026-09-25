@@ -1,3 +1,5 @@
+# **DEPRECATED: This plugin is deprecated and development will not continue.**
+
 # Channel Automation Plugin for Mattermost (Beta)
 
 [![Build Status](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/mattermost/mattermost-plugin-channel-automation/actions/workflows/ci.yml)
